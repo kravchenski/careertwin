@@ -156,16 +156,32 @@ class CareerGraph(BaseModel):
         return result
 
     def to_search_text(self) -> str:
-        lines = [self.profile.summary or ""]
-        for exp in self.experience:
-            lines.append(f"{exp.position} at {exp.company}")
-            lines.append(exp.description)
-            for proj in exp.projects:
+        lines = []
+        if self.profile.summary:
+            lines.append("SUMMARY")
+            lines.append(self.profile.summary)
+            lines.append("")
+        if self.experience:
+            lines.append("EXPERIENCE")
+            for exp in self.experience:
+                lines.append(f"{exp.position} at {exp.company}")
+                lines.append(exp.description)
+                for proj in exp.projects:
+                    lines.append(proj.name)
+                    lines.append(proj.description)
+            lines.append("")
+        if self.projects:
+            lines.append("PROJECTS")
+            for proj in self.projects:
                 lines.append(proj.name)
                 lines.append(proj.description)
-        for proj in self.projects:
-            lines.append(proj.name)
-            lines.append(proj.description)
-        for skill in self.skills:
-            lines.append(skill.name)
+            lines.append("")
+        if self.education:
+            lines.append("EDUCATION")
+            for edu in self.education:
+                lines.append(f"{edu.institution} - {edu.degree}")
+            lines.append("")
+        if self.skills:
+            lines.append("SKILLS")
+            lines.append(", ".join(s.name for s in self.skills))
         return "\n".join(lines)

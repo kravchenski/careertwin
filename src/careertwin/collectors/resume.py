@@ -152,6 +152,23 @@ class ResumeParser:
         current_exp: Optional[dict] = None
 
         for line in lines:
+            # Handle pipe-separated format: "Position | Company | 2021 - Present"
+            if "|" in line and self._is_date_range(line):
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) >= 2:
+                    dates = self._parse_date_range(line)
+                    exp: dict = {
+                        "position": parts[0],
+                        "company": parts[1],
+                        "description": "",
+                        "location": "",
+                        "start_date": dates[0] if dates else None,
+                        "end_date": dates[1] if len(dates) > 1 else None,
+                    }
+                    experiences.append(exp)
+                    current_exp = exp
+                    continue
+
             if self._is_date_range(line):
                 if current_exp:
                     dates = self._parse_date_range(line)
