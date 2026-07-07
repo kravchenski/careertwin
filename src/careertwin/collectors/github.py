@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import os
-from datetime import date
 from typing import Optional
 
-from github import Github, Repository, AuthenticatedUser
+from github import Github, Repository
 
 from careertwin.graph.schema import (
     Achievement,
@@ -21,16 +20,18 @@ from careertwin.graph.schema import (
 
 
 class GitHubCollector:
-    """Collects professional data from GitHub."""
+    """Collects professional data from GitHub.
+
+    Uses public API by default. Set GITHUB_TOKEN env var or pass token
+    to access private repos and increase rate limits.
+    """
 
     def __init__(self, token: Optional[str] = None):
         self.token = token or os.getenv("GITHUB_TOKEN")
-        if not self.token:
-            raise ValueError("GITHUB_TOKEN required")
-        self.client = Github(self.token)
+        self.client = Github(self.token) if self.token else Github()
 
-    def collect(self, username: Optional[str] = None) -> CareerGraph:
-        user = self.client.get_user(username) if username else self.client.get_user()
+    def collect(self, username: str) -> CareerGraph:
+        user = self.client.get_user(username)
         profile = self._build_profile(user)
         projects = self._collect_repos(user)
         skills = self._extract_skills(projects)
@@ -39,7 +40,6 @@ class GitHubCollector:
             profile=profile,
             projects=projects,
             skills=skills,
-            evidence=[],
         )
 
     def _build_profile(self, user) -> dict:
@@ -55,7 +55,7 @@ class GitHubCollector:
 
     def _collect_repos(self, user) -> list[Project]:
         projects = []
-        repos = sorted(user.get_repos(), key=lambda r: r.stargazers_count, reverse=True)
+        repos = sorted(user.get_repos(type="public"), key=lambda r: r.stargazers_count, reverse=True)
 
         for repo in repos:
             if repo.fork:
@@ -97,7 +97,7 @@ class GitHubCollector:
         languages = []
         try:
             lang_data = repo.get_languages()
-            for lang, bytes_count in lang_data.items():
+            for lang in lang_data:
                 languages.append(Technology(
                     name=lang,
                     category="language",
