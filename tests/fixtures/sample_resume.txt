@@ -1,0 +1,28 @@
+John Doe
+john@example.com
++1 (555) 123-4567
+San Francisco, CA
+linkedin.com/in/johndoe
+github.com/johndoe
+
+SUMMARY
+Senior Software Engineer with 5+ years of experience building scalable web applications and data pipelines.
+
+EXPERIENCE
+
+Senior Software Engineer | Google | 2021 - Present
+Led development of a real-time data processing pipeline handling 10M events/day.
+Architected microservices using Python and Go, reducing latency by 40%.
+Mentored team of 5 junior engineers.
+
+Software Engineer | Stripe | 2018 - 2021
+Built payment processing APIs serving 100k+ merchants.
+Improved system reliability from 99.5% to 99.99% uptime.
+Implemented automated testing pipeline reducing deployment time by 60%.
+
+EDUCATION
+
+MIT | B.S. Computer Science | 2014 - 2018
+
+SKILLS
+Python, Go, TypeScript, React, PostgreSQL, Redis, Docker, Kubernetes, AWS, GCP, Git

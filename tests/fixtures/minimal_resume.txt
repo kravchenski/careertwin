@@ -1,0 +1,9 @@
+Minimal Resume
+
+EXPERIENCE
+
+Developer | Startup Inc | 2020 - 2022
+Built stuff.
+
+SKILLS
+Python, JavaScript
