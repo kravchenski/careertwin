@@ -42,6 +42,9 @@ select = ["E", "F", "I", "N", "W"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "integration: marks tests that hit live APIs (deselect with '-m \"not integration\"')",
+]
 
 [tool.basedpyright]
 include = ["src"]

@@ -53,7 +53,6 @@ class ATSChecker:
         "education",
         "skills",
         "summary",
-        "contact",
     ]
 
     # Action verbs that ATS and recruiters look for

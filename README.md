@@ -223,8 +223,9 @@ cd careertwin
 # Install dependencies
 uv sync
 
-# Set up environment
-export GITHUB_TOKEN=ghp_xxx  # for GitHub data collection
+# Set up environment (optional — public API used by default)
+cp .env.example .env
+# Edit .env and add your GITHUB_TOKEN for private repos and higher rate limits
 
 # Collect from GitHub
 uv run python main.py collect --github <username>

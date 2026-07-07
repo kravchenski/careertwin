@@ -55,8 +55,6 @@ def main() -> None:
     collect = sub.add_parser("collect", help="Collect career data from sources")
     _ = collect.add_argument("--github", help="GitHub username")
     _ = collect.add_argument("--resume", help="Path to resume file (PDF/DOCX/TXT)")
-    _ = collect.add_argument("--website", help="Personal website URL")
-    _ = collect.add_argument("--linkedin-export", help="LinkedIn data export path (ZIP/CSV)")
 
     check = sub.add_parser("check", help="Run ATS compatibility check")
     _ = check.add_argument("--resume", help="Path to resume file to check")

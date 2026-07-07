@@ -106,7 +106,7 @@ class ResumeParser:
         email = ""
         phone = ""
         location = ""
-        website = ""
+        github = ""
         linkedin = ""
 
         for line in lines[:10]:
@@ -123,12 +123,12 @@ class ResumeParser:
             if "linkedin.com" in line.lower():
                 linkedin = line
             if "github.com" in line.lower():
-                website = line
+                github = line
             if not location and any(w in line.lower() for w in ["city", "remote", "country"]):
                 location = line
         return Profile(
             full_name=name, email=email, phone=phone,
-            location=location, website=website, linkedin=linkedin,
+            location=location, github=github, linkedin=linkedin,
         )
 
     def _split_sections(self, lines: list[str]) -> dict[str, list[str]]:
@@ -178,9 +178,9 @@ class ResumeParser:
                     current_exp = exp
                     continue
             if self._is_date_range(line):
-                if current_exp:
-                    dates = self._parse_date_range(line)
-                    current_exp["start_date"] = dates[0]
+                dates = self._parse_date_range(line)
+                if current_exp and current_exp not in experiences:
+                    current_exp["start_date"] = dates[0] if dates else None
                     current_exp["end_date"] = dates[1] if len(dates) > 1 else None
                     experiences.append(current_exp)
                 current_exp = {"company": "", "position": "", "description": "", "location": ""}
@@ -193,7 +193,7 @@ class ResumeParser:
             else:
                 current_exp["description"] += line + "\n"
 
-        if current_exp and current_exp.get("company"):
+        if current_exp and current_exp.get("company") and current_exp not in experiences:
             experiences.append(current_exp)
 
         return [

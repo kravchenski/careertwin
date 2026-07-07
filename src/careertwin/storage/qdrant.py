@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Optional
 
@@ -16,11 +17,16 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from careertwin.graph.schema import CareerGraph, Experience, Project, Skill
+from careertwin.graph.schema import CareerGraph
 
 
 COLLECTION_NAME = "career_graph"
-VECTOR_DIM = 1536  # will be overridden by embedding model
+VECTOR_DIM = 1536
+
+
+def _stable_id(item_id: str) -> int:
+    """Deterministic int ID from a string, stable across processes."""
+    return int(hashlib.sha256(item_id.encode()).hexdigest(), 16) % (2**63)
 
 
 class CareerVectorStore:
@@ -48,7 +54,7 @@ class CareerVectorStore:
             emb = embeddings.get(text)
             if emb:
                 points.append(PointStruct(
-                    id=hash(exp.id) % (2**63),
+                    id=_stable_id(exp.id),
                     vector=emb,
                     payload={
                         "type": "experience",
@@ -65,7 +71,7 @@ class CareerVectorStore:
             emb = embeddings.get(text)
             if emb:
                 points.append(PointStruct(
-                    id=hash(proj.id) % (2**63),
+                    id=_stable_id(proj.id),
                     vector=emb,
                     payload={
                         "type": "project",
@@ -82,7 +88,7 @@ class CareerVectorStore:
             emb = embeddings.get(text)
             if emb:
                 points.append(PointStruct(
-                    id=hash(skill.id) % (2**63),
+                    id=_stable_id(skill.id),
                     vector=emb,
                     payload={
                         "type": "skill",
