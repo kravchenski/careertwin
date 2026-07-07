@@ -247,7 +247,7 @@ Return JSON: {"score": number, "summary": "...", "issues": [...]}
                 buf = io.BytesIO()
                 images[0].save(buf, format="PNG")
                 return buf.getvalue()
-        except ImportError:
+        except Exception:
             pass
         return None
 
