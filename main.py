@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from careertwin.agents.orchestrator import CareerTwinOrchestrator
@@ -24,12 +23,13 @@ def main():
     check = sub.add_parser("check", help="Run ATS compatibility check")
     check.add_argument("--resume", help="Path to resume file to check")
 
-    info = sub.add_parser("info", help="Show collected career data")
+    sub.add_parser("info", help="Show collected career data")
 
     args = parser.parse_args()
     orchestrator = CareerTwinOrchestrator()
+    command: str = args.command or ""
 
-    if args.command == "collect":
+    if command == "collect":
         graph = orchestrator.run_collection(
             github=args.github,
             resume_path=args.resume,
@@ -38,9 +38,10 @@ def main():
         output.write_text(json.dumps(json.loads(graph.model_dump_json()), indent=2))
         print(f"\nCareer graph saved to {output}")
 
-    elif args.command == "check":
+    elif command == "check":
         if args.resume:
             from careertwin.collectors.resume import ResumeParser
+
             parser = ResumeParser()
             graph = parser.parse(args.resume)
             orchestrator.graph = graph
@@ -48,7 +49,7 @@ def main():
         report = orchestrator.check_ats()
         print(report.summary())
 
-    elif args.command == "info":
+    elif command == "info":
         graph = orchestrator.graph
         print(f"Name: {graph.profile.full_name}")
         print(f"Experiences: {len(graph.experience)}")
