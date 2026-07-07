@@ -173,11 +173,11 @@ Sources analyzed: Dribbble, Behance, Canva, Resume.io, Overleaf templates.
 - [x] ATS compatibility checker
 
 ### Phase 2 — Intelligence
-- [ ] Auto Resume Builder (per-job adaptation)
-- [ ] Cover Letter Generator
-- [ ] Job matching agent
-- [ ] Skill gap analysis
-- [ ] Career trajectory recommendations
+- [x] Auto Resume Builder (per-job adaptation)
+- [x] Cover Letter Generator
+- [x] Job matching agent
+- [x] Skill gap analysis
+- [x] Career trajectory recommendations
 
 ### Phase 3 — Visual Quality
 - [ ] PDF rendering pipeline
