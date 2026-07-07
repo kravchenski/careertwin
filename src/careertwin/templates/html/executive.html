@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Georgia', 'Times New Roman', serif; font-size: 10.5pt; color: #1a202c; line-height: 1.6; }
+  .header { text-align: center; border-bottom: 3px double #1a202c; padding-bottom: 12px; margin-bottom: 16px; }
+  .header h1 { font-size: 28pt; font-weight: 700; margin-bottom: 4px; letter-spacing: 3px; text-transform: uppercase; }
+  .header .title { font-size: 12pt; color: #4a5568; font-style: italic; margin-bottom: 8px; }
+  .contact { font-size: 9.5pt; color: #718096; letter-spacing: 1px; }
+  .contact span { margin: 0 10px; }
+  .section { margin-bottom: 14px; }
+  .section h2 { font-size: 12pt; text-transform: uppercase; letter-spacing: 3px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 10px; color: #2d3748; }
+  .summary { font-style: italic; color: #4a5568; line-height: 1.7; }
+  .exp-item { margin-bottom: 12px; }
+  .exp-header { display: flex; justify-content: space-between; }
+  .exp-header .role { font-weight: 700; font-size: 11pt; }
+  .exp-header .dates { font-style: italic; color: #718096; }
+  .exp-company { font-style: italic; color: #4a5568; margin-bottom: 4px; font-size: 10pt; }
+  .exp-desc li { margin-bottom: 3px; margin-left: 18px; font-size: 10pt; }
+  .skills-text { font-size: 10pt; line-height: 1.7; }
+  .edu-item { margin-bottom: 6px; }
+  .edu-item .degree { font-weight: 700; }
+  .edu-item .school { font-style: italic; color: #718096; }
+  .projects-list { margin-top: 6px; }
+  .project-item { margin-bottom: 6px; }
+  .project-item .name { font-weight: 700; }
+  .project-item .desc { font-size: 10pt; color: #4a5568; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ full_name }}</h1>
+    {% if headline %}<div class="title">{{ headline }}</div>{% endif %}
+    <div class="contact">
+      {% if email %}<span>{{ email }}</span>{% endif %}
+      {% if phone %}<span>| {{ phone }}</span>{% endif %}
+      {% if location %}<span>| {{ location }}</span>{% endif %}
+      {% if linkedin %}<span>| {{ linkedin }}</span>{% endif %}
+      {% if github %}<span>| {{ github }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if summary %}
+  <div class="section">
+    <h2>Executive Summary</h2>
+    <p class="summary">{{ summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if experience %}
+  <div class="section">
+    <h2>Leadership Experience</h2>
+    {% for exp in experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="role">{{ exp.position }}</span>
+        <span class="dates">{% if exp.start_date %}{{ exp.start_date }}{% if exp.end_date %} – {{ exp.end_date }}{% else %} – Present{% endif %}{% endif %}</span>
+      </div>
+      <div class="exp-company">{{ exp.company }}{% if exp.location %}, {{ exp.location }}{% endif %}</div>
+      {% if exp.description %}
+      <div>
+        {% for line in exp.description.split('\n') %}{% if line.strip() %}<li>{{ line.strip() }}</li>{% endif %}{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if education %}
+  <div class="section">
+    <h2>Education</h2>
+    {% for edu in education %}
+    <div class="edu-item">
+      <span class="degree">{{ edu.degree }}</span>{% if edu.field %} in {{ edu.field }}{% endif %}
+      <div class="school">{{ edu.institution }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if skills %}
+  <div class="section">
+    <h2>Core Competencies</h2>
+    <p class="skills-text">{{ skills | map(attribute='name') | join(' · ') }}</p>
+  </div>
+  {% endif %}
+
+  {% if projects %}
+  <div class="section">
+    <h2>Key Projects</h2>
+    {% for proj in projects %}
+    <div class="project-item">
+      <span class="name">{{ proj.name }}</span>
+      {% if proj.description %} — <span class="desc">{{ proj.description }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</body>
+</html>

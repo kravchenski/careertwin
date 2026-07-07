@@ -14,6 +14,12 @@ from careertwin.agents.resume_builder import JobDescription, ResumeBuilder
 from careertwin.agents.skill_gap import SkillGapAnalyzer
 from careertwin.collectors.resume import ResumeParser
 from careertwin.graph.schema import CareerGraph
+from careertwin.rendering import PdfRenderer, RenderConfig
+from careertwin.rendering.design_dna import DesignDNAEngine
+from careertwin.rendering.repair import RepairAgent
+from careertwin.rendering.trends import DesignTrendScraper
+from careertwin.templates import list_templates
+from careertwin.vision import VisionQAAgent
 
 
 def _handle_collect(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
@@ -147,6 +153,103 @@ def _handle_trajectory(args: argparse.Namespace, orchestrator: CareerTwinOrchest
                 print(f"      Skills needed: {', '.join(step.skills_needed)}")
 
 
+def _handle_render(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
+    renderer = PdfRenderer()
+    config = RenderConfig(
+        template=args.template or "modern",
+        output_path=args.output or "resume.pdf",
+    )
+
+    result = renderer.render(orchestrator.graph, config)
+    print(f"\nPDF rendered: {result.pdf_path}")
+    print(f"Template: {result.template}")
+    print(f"Pages: {result.page_count}")
+    if result.html_path:
+        print(f"HTML preview: {result.html_path}")
+
+
+def _handle_qa(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
+    qa = VisionQAAgent()
+
+    if args.pdf:
+        report = qa.check_pdf(args.pdf)
+    elif args.html:
+        report = qa.check_html(args.html)
+    else:
+        renderer = PdfRenderer()
+        config = RenderConfig(template=args.template or "modern")
+        result = renderer.render(orchestrator.graph, config)
+        report = qa.check_pdf(result.pdf_path)
+
+    print(report.to_text())
+
+
+def _handle_repair(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
+    agent = RepairAgent()
+    config = RenderConfig(
+        template=args.template or "modern",
+        output_path=args.output or "resume.pdf",
+    )
+
+    print("Running repair loop...")
+    result = agent.repair(orchestrator.graph, config)
+
+    print(f"\nIterations: {result.iterations}")
+    print(f"Score: {result.original_score:.0f} → {result.final_score:.0f}")
+    print(f"Improved: {'Yes' if result.improved else 'No'}")
+
+    if result.actions:
+        print("\nActions taken:")
+        for action in result.actions:
+            status = "OK" if action.success else "SKIP"
+            print(f"  [{status}] {action.fix_applied}")
+
+    if result.report:
+        print(f"\nFinal report:\n{result.report.to_text()}")
+
+
+def _handle_trends(args: argparse.Namespace) -> None:
+    scraper = DesignTrendScraper()
+    trends = scraper.get_trends()
+
+    print(f"\nDesign Trends ({len(trends)}):\n")
+    for trend in trends:
+        print(f"  {trend.name} (popularity: {trend.popularity:.0%})")
+        print(f"    Colors: {', '.join(trend.colors)}")
+        print(f"    Fonts: {', '.join(trend.fonts)}")
+        print(f"    Tags: {', '.join(trend.style_tags)}")
+        print()
+
+
+def _handle_templates() -> None:
+    templates = list_templates()
+    print(f"\nAvailable Templates ({len(templates)}):\n")
+    for t in templates:
+        print(f"  - {t}")
+
+
+def _handle_dna(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
+    engine = DesignDNAEngine()
+    renderer = PdfRenderer()
+
+    html = renderer.render_to_html(orchestrator.graph, args.template or "modern")
+    dna = engine.analyze_html(html)
+
+    print(f"\nDesign DNA for template '{args.template or 'modern'}':\n")
+    print(f"  Style: {dna.style}")
+    print(f"  Layout: {dna.layout}")
+    print(f"  Spacing: {dna.spacing}")
+    print(f"  Section style: {dna.section_style}")
+    print(f"  Tag style: {dna.tag_style}")
+    print(f"  Colors: {', '.join(dna.colors[:5])}")
+    print(f"  Fonts: {', '.join(dna.fonts[:3])}")
+
+    if dna.scores:
+        print("\n  Scores:")
+        for key, val in dna.scores.items():
+            print(f"    {key}: {val:.0f}/100")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="CareerTwin AI — Career Operating System")
     sub = parser.add_subparsers(dest="command")
@@ -182,6 +285,26 @@ def main() -> None:
 
     _ = sub.add_parser("trajectory", help="Get career trajectory recommendations")
 
+    render = sub.add_parser("render", help="Render resume to PDF")
+    _ = render.add_argument("--template", "-t", help="Template name (modern, classic, minimal)")
+    _ = render.add_argument("--output", "-o", help="Output PDF path")
+
+    qa = sub.add_parser("qa", help="Run visual QA check on resume")
+    _ = qa.add_argument("--pdf", help="Path to PDF file to check")
+    _ = qa.add_argument("--html", help="Path to HTML file to check")
+    _ = qa.add_argument("--template", "-t", help="Template to render and check")
+
+    repair = sub.add_parser("repair", help="Auto-repair resume issues")
+    _ = repair.add_argument("--template", "-t", help="Template name")
+    _ = repair.add_argument("--output", "-o", help="Output PDF path")
+
+    _ = sub.add_parser("trends", help="Show design trends")
+
+    _ = sub.add_parser("templates", help="List available templates")
+
+    dna = sub.add_parser("dna", help="Analyze design DNA of a template")
+    _ = dna.add_argument("--template", "-t", help="Template to analyze")
+
     args = parser.parse_args()
     command: str = args.command or ""
 
@@ -212,6 +335,18 @@ def main() -> None:
         _handle_gaps(args, orchestrator)
     elif command == "trajectory":
         _handle_trajectory(args, orchestrator)
+    elif command == "render":
+        _handle_render(args, orchestrator)
+    elif command == "qa":
+        _handle_qa(args, orchestrator)
+    elif command == "repair":
+        _handle_repair(args, orchestrator)
+    elif command == "trends":
+        _handle_trends(args)
+    elif command == "templates":
+        _handle_templates()
+    elif command == "dna":
+        _handle_dna(args, orchestrator)
     else:
         parser.print_help()
 

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 24mm 22mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', 'Arial', sans-serif; font-size: 10pt; color: #333; line-height: 1.5; }
+  .header { margin-bottom: 18px; }
+  .header h1 { font-size: 20pt; font-weight: 300; letter-spacing: 2px; margin-bottom: 4px; }
+  .contact { font-size: 9pt; color: #888; letter-spacing: 0.5px; }
+  .contact span { margin-right: 10px; }
+  .section { margin-bottom: 14px; }
+  .section h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 6px; }
+  .exp-item { margin-bottom: 10px; }
+  .exp-header { display: flex; justify-content: space-between; }
+  .exp-header .role { font-weight: 500; }
+  .exp-header .dates { color: #999; font-size: 9pt; }
+  .exp-company { color: #666; font-size: 9.5pt; margin-bottom: 2px; }
+  .exp-desc li { margin-bottom: 1px; margin-left: 12px; font-size: 9.5pt; color: #444; }
+  .skills-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .skill-tag { border: 1px solid #ddd; padding: 1px 6px; border-radius: 2px; font-size: 8.5pt; color: #555; }
+  .edu-item { margin-bottom: 3px; font-size: 9.5pt; }
+  .edu-item .degree { font-weight: 500; }
+  .project-item { margin-bottom: 3px; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ full_name }}</h1>
+    <div class="contact">
+      {% if email %}<span>{{ email }}</span>{% endif %}
+      {% if phone %}<span>{{ phone }}</span>{% endif %}
+      {% if location %}<span>{{ location }}</span>{% endif %}
+      {% if github %}<span>{{ github }}</span>{% endif %}
+      {% if linkedin %}<span>{{ linkedin }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if summary %}
+  <div class="section">
+    <h2>About</h2>
+    <p>{{ summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if experience %}
+  <div class="section">
+    <h2>Experience</h2>
+    {% for exp in experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="role">{{ exp.position }}</span>
+        <span class="dates">{% if exp.start_date %}{{ exp.start_date }}{% if exp.end_date %} – {{ exp.end_date }}{% else %} – Present{% endif %}{% endif %}</span>
+      </div>
+      <div class="exp-company">{{ exp.company }}</div>
+      {% if exp.description %}
+      <div>
+        {% for line in exp.description.split('\n') %}{% if line.strip() %}<li>{{ line.strip() }}</li>{% endif %}{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if skills %}
+  <div class="section">
+    <h2>Skills</h2>
+    <div class="skills-list">
+      {% for skill in skills %}
+      <span class="skill-tag">{{ skill.name }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if education %}
+  <div class="section">
+    <h2>Education</h2>
+    {% for edu in education %}
+    <div class="edu-item">
+      <span class="degree">{{ edu.degree }}</span>{% if edu.field %} in {{ edu.field }}{% endif %} — {{ edu.institution }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if projects %}
+  <div class="section">
+    <h2>Projects</h2>
+    {% for proj in projects %}
+    <div class="project-item">
+      <strong>{{ proj.name }}</strong>{% if proj.description %}: {{ proj.description }}{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</body>
+</html>
