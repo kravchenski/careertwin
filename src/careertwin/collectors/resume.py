@@ -38,36 +38,71 @@ class ResumeParser:
         return self._parse_text_content(text, str(path))
 
     def _extract_pdf_text(self, path: Path) -> str:
+        texts: list[tuple[str, str]] = []
+        try:
+            from pdfminer.high_level import extract_text
+            miner_text = extract_text(str(path))
+            if miner_text:
+                texts.append(("pdfminer", miner_text))
+        except Exception:
+            pass
         try:
             from pypdf import PdfReader
             reader = PdfReader(str(path))
-            text = ""
+            raw = ""
             for page in reader.pages:
-                text += page.extract_text() + "\n"
-            return self._clean_pypdf_text(text)
+                raw += (page.extract_text() or "") + "\n"
+            cleaned = self._clean_pypdf_text(raw)
+            if cleaned:
+                texts.append(("pypdf", cleaned))
         except Exception:
-            from pdfminer.high_level import extract_text
-            return extract_text(str(path))
+            pass
+        if not texts:
+            raise ValueError(f"Could not extract text from {path}")
+        # Prefer pdfminer for multi-column PDFs, otherwise pick the longest
+        for name, text in texts:
+            if name == "pdfminer":
+                return text
+        return max(texts, key=lambda t: len(t[1]))[1]
 
     def _clean_pypdf_text(self, text: str) -> str:
-        text = re.sub(r"([a-zA-Z])\s([a-zA-Z])\s", r"\1\2 ", text)
-        text = re.sub(r"([a-zA-Z])\s([a-zA-Z])$", r"\1\2", text, flags=re.MULTILINE)
+        text = re.sub(r"(\w)\s(\w)\s(\w)\s", r"\1\2\3 ", text)
+        text = re.sub(r"(\w)\s(\w)\s", r"\1\2 ", text)
+        text = re.sub(r"(\w)\s(\w)$", r"\1\2", text, flags=re.MULTILINE)
         text = re.sub(r"(\w)\s{2,}(\w)", r"\1 \2", text)
         return text
 
     def _preprocess_text(self, text: str) -> str:
+        # Fix merged words from pdfminer (e.g. "MaksimKrauchyk" -> "Maksim Krauchyk")
+        text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+        text = re.sub(r"([A-Z])([A-Z][a-z])", r"\1 \2", text)
+
         section_headers = [
             "SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS", "PROJECTS",
             "CONTACT", "PROFILE", "LANGUAGES", "CERTIFICATIONS", "AWARDS",
             "COURSES", "CONTRIBUTIONS", "SELECTED PROJECTS", "FREELANCE EXPERIENCE",
-            "HACKATHONS", "SKILLS PROFILE",
+            "HACKATHONS", "SKILLS PROFILE", "AI PLATFORM FIT",
         ]
         for header in section_headers:
             text = re.sub(rf"(\w)({header})", r"\1\n\2", text)
             text = re.sub(rf"({header})(\w)", r"\1\n\2", text)
-        text = re.sub(r"([a-z])([A-Z][a-z])", r"\1\n\2", text)
         text = re.sub(r"([.!?:])([A-Z])", r"\1\n\2", text)
         text = re.sub(r"(\d{4}\s*[-–—]\s*(?:\d{4}|Present|current))", r"\n\1", text)
+
+        # Add line breaks before email, phone, and URLs
+        text = re.sub(r"(\+?\d{9,})", r"\n\1", text)
+        text = re.sub(r"([\w.+-]+@[\w.-]+\.\w{2,})", r"\n\1", text)
+        text = re.sub(r"(github\.com/)", r"\n\1", text)
+        text = re.sub(r"(linkedin\.com/)", r"\n\1", text)
+
+        # Add line breaks before "(Commercial Client)" and "(Telegram)" patterns
+        text = re.sub(r"(\([^)]+\))\s*([A-Z])", r"\1\n\2", text)
+
+        # Add line breaks before known section markers
+        text = re.sub(r"(Designed, developed)", r"\n\1", text)
+        text = re.sub(r"(Developed a)", r"\n\1", text)
+        text = re.sub(r"(Managed the)", r"\n\1", text)
+
         return text
 
     def _parse_docx(self, path: Path) -> CareerGraph:
@@ -93,6 +128,8 @@ class ResumeParser:
         experience = self._extract_experience(sections)
         education = self._extract_education(sections)
         skills = self._extract_skills(sections)
+        if len(skills) < 3:
+            skills = self._extract_skills_from_text(text) or skills
         return CareerGraph(
             profile=profile,
             experience=experience,
@@ -109,23 +146,83 @@ class ResumeParser:
         github = ""
         linkedin = ""
 
-        for line in lines[:10]:
-            if not name and not any(c in line for c in ["@", "http", "•", "|"]):
-                if len(line.split()) <= 4 and not line[0].isdigit():
-                    name = line
-                    continue
-            email_match = re.search(r"[\w.-]+@[\w.-]+\.\w+", line)
-            if email_match:
-                email = email_match.group()
-            phone_match = re.search(r"[\+]?[\d\s\-\(\)]{7,}", line)
-            if phone_match and not phone:
-                phone = phone_match.group().strip()
-            if "linkedin.com" in line.lower():
-                linkedin = line
-            if "github.com" in line.lower():
-                github = line
-            if not location and any(w in line.lower() for w in ["city", "remote", "country"]):
-                location = line
+        # Join first few lines for easier parsing
+        text = " ".join(lines[:15])
+
+        # Extract email (look for @ ... .domain pattern, not phone numbers)
+        email_match = re.search(r"[a-zA-Z][\w.+-]+@[\w.-]+\.\w{2,}", text)
+        if email_match:
+            email = email_match.group()
+
+        # Extract phone (international format with +)
+        phone_match = re.search(r"\+\d[\d\s\-\(\)]{6,}", text)
+        if phone_match:
+            phone = re.sub(r"\s", "", phone_match.group()).strip()
+
+        # Extract LinkedIn - check all lines
+        for line in lines:
+            linkedin_match = re.search(r"linkedin\.com/in/([\w-]+)", line)
+            if linkedin_match:
+                linkedin = f"https://www.linkedin.com/in/{linkedin_match.group(1)}"
+                break
+
+        # Extract GitHub - check all lines
+        for line in lines:
+            github_match = re.search(
+                r"(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_-]+)(?:/|$|\s)",
+                line, flags=re.IGNORECASE,
+            )
+            if github_match:
+                github = f"https://github.com/{github_match.group(1)}"
+                break
+
+        # Extract name (first 2-4 word line that looks like a name)
+        for line in lines[:8]:
+            line = line.strip()
+            if not line or "@" in line or "http" in line or "|" in line:
+                continue
+            if any(h in line.upper() for h in [
+                "SKILLS", "PROFILE", "EXPERIENCE", "EDUCATION",
+                "PROJECTS", "PYTHON", "JAVASCRIPT", "LANGUAGES",
+                "COURSES", "CONTRIBUTIONS", "HACKATHONS",
+            ]):
+                continue
+            words = line.split()
+            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words if w):
+                name = line
+                break
+
+        # Fallback: extract name from the beginning of first line
+        if not name and lines:
+            first_line = lines[0]
+            name_match = re.match(r"^([A-Z][a-z]+\s+[A-Z][a-z]+)", first_line)
+            if name_match:
+                name = name_match.group(1)
+
+        # Extract location - look for "City, Country" in first line
+        if lines:
+            first_line = lines[0]
+            # Try to find "City, Country" pattern - must be preceded by name or start of line
+            location_match = re.search(
+                r"(?:^|\s)([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,}),\s+([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,})",
+                first_line,
+            )
+            if location_match:
+                loc = location_match.group().strip()
+                if len(loc) < 40:
+                    location = loc
+
+        return Profile(
+            full_name=name,
+            email=email or None,
+            phone=phone or None,
+            location=location or None,
+            github=github or None,
+            linkedin=linkedin or None,
+        )
+        if location_match:
+            location = location_match.group()
+
         return Profile(
             full_name=name,
             email=email or None,
@@ -137,30 +234,57 @@ class ResumeParser:
 
     def _split_sections(self, lines: list[str]) -> dict[str, list[str]]:
         section_headers = [
-            "experience", "work", "employment", "career",
+            "experience", "work", "employment", "career", "freelance experience",
             "education", "academic",
-            "skills", "technologies", "tech stack",
-            "projects", "portfolio",
+            "skills", "technologies", "tech stack", "skills profile",
+            "projects", "portfolio", "selected projects",
             "certifications", "awards", "summary", "about",
+            "languages", "courses", "contributions", "hackathons",
+            "ai platform fit",
         ]
         sections: dict[str, list[str]] = {"other": []}
         current = "other"
         for line in lines:
             lower = line.lower().rstrip(":")
-            if any(h in lower for h in section_headers) and len(line) < 50:
-                current = lower.split(":")[0].strip()
-                sections[current] = []
-            else:
+            # Check if line contains a section header (even if mixed with other text)
+            matched = False
+            for header in section_headers:
+                if header in lower:
+                    # If the header is at the start or the line is short, treat as section header
+                    idx = lower.find(header)
+                    if idx == 0 or len(line) < 60:
+                        current = header
+                        if current not in sections:
+                            sections[current] = []
+                        # If there's text after the header on the same line, add it
+                        rest = line[idx + len(header):].strip()
+                        if rest:
+                            sections[current].append(rest)
+                        matched = True
+                        break
+                    else:
+                        # Header is in the middle of a longer line - split it
+                        before = line[:idx].strip()
+                        after = line[idx + len(header):].strip()
+                        if before:
+                            sections[current].append(before)
+                        current = header
+                        if current not in sections:
+                            sections[current] = []
+                        if after:
+                            sections[current].append(after)
+                        matched = True
+                        break
+            if not matched:
                 sections[current].append(line)
         return sections
 
     def _extract_experience(self, sections: dict[str, list[str]]) -> list[Experience]:
-        exp_keys = ["experience", "work", "employment", "career"]
+        exp_keys = ["experience", "work", "employment", "career", "freelance experience"]
         lines = []
         for key in exp_keys:
             if key in sections:
-                lines = sections[key]
-                break
+                lines.extend(sections[key])
         if not lines:
             return []
 
@@ -230,19 +354,29 @@ class ResumeParser:
         return educations
 
     def _extract_skills(self, sections: dict[str, list[str]]) -> list[Skill]:
-        skill_keys = ["skills", "technologies", "tech stack", "tools"]
+        skill_keys = [
+            "skills", "technologies", "tech stack", "tools",
+            "skills profile", "ai platform fit",
+        ]
         raw = []
         for key in skill_keys:
             if key in sections:
-                raw = sections[key]
+                raw.extend(sections[key])
                 break
         skills = []
         seen: set[str] = set()
         for line in raw:
+            # Handle "Languages:" and "AI/Data:" prefixes
+            line = re.sub(
+                r"^(?:Languages|AI/Data|Technologies|Tools|Frameworks):\s*",
+                "", line, flags=re.IGNORECASE,
+            )
             items = re.split(r"[•,|/]", line)
             for item in items:
                 name = item.strip()
-                if name and name.lower() not in seen:
+                # Clean up common extraction artifacts
+                name = re.sub(r"\s+", " ", name)
+                if name and len(name) > 1 and name.lower() not in seen:
                     seen.add(name.lower())
                     category = self._classify_skill(name)
                     skills.append(Skill(
@@ -257,18 +391,44 @@ class ResumeParser:
     def _classify_skill(self, name: str) -> SkillCategory:
         languages = {
             "python", "javascript", "typescript", "java", "c++", "c#",
-            "go", "rust", "ruby", "php", "swift", "kotlin",
+            "go", "rust", "ruby", "php", "swift", "kotlin", "sql", "graphql",
         }
         frameworks = {
             "react", "vue", "angular", "django", "flask", "fastapi",
-            "spring", "rails", "nextjs", "nuxt",
+            "spring", "rails", "nextjs", "nuxt", "langchain", "langgraph",
         }
-        lower = name.lower()
+        lower = name.lower().strip()
         if lower in languages:
             return SkillCategory.LANGUAGE
         if lower in frameworks:
             return SkillCategory.FRAMEWORK
         return SkillCategory.TOOL
+
+    def _extract_skills_from_text(self, text: str) -> list[Skill]:
+        known_skills = [
+            "python", "javascript", "typescript", "java", "go", "rust", "ruby", "php",
+            "react", "vue", "angular", "django", "flask", "fastapi", "spring",
+            "docker", "kubernetes", "aws", "gcp", "azure", "postgresql", "mysql",
+            "redis", "mongodb", "graphql", "rest", "sql", "git", "ci/cd",
+            "langchain", "langgraph", "aiogram",
+            "openai", "anthropic", "llm", "rag",
+        ]
+        lower = text.lower()
+        skills = []
+        seen: set[str] = set()
+        for skill in known_skills:
+            if skill in lower and skill not in seen:
+                seen.add(skill)
+                category = self._classify_skill(skill)
+                skills.append(Skill(
+                    name=skill.title() if skill.islower() else skill,
+                    category=category,
+                    evidence=[Evidence(
+                        source=SourceType.RESUME,
+                        description="Extracted from text",
+                    )],
+                ))
+        return skills
 
     def _is_date_range(self, line: str) -> bool:
         patterns = [
