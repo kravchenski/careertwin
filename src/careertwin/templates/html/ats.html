@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; line-height: 1.4; }
+  .header { margin-bottom: 12px; }
+  .header h1 { font-size: 18pt; margin-bottom: 2px; }
+  .contact { font-size: 9pt; color: #333; margin-bottom: 4px; }
+  .section { margin-bottom: 10px; }
+  .section h2 { font-size: 11pt; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 6px; }
+  .exp-item { margin-bottom: 8px; }
+  .exp-header { margin-bottom: 2px; }
+  .exp-header .role { font-weight: bold; }
+  .exp-company { font-size: 9.5pt; color: #333; }
+  .exp-desc li { font-size: 9.5pt; margin-bottom: 2px; margin-left: 16px; }
+  .edu-item { margin-bottom: 4px; }
+  .skills-list { font-size: 9.5pt; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ full_name }}</h1>
+    <div class="contact">
+      {% if email %}{{ email }}{% endif %}
+      {% if phone %} | {{ phone }}{% endif %}
+      {% if location %} | {{ location }}{% endif %}
+      {% if linkedin %} | {{ linkedin }}{% endif %}
+      {% if github %} | {{ github }}{% endif %}
+    </div>
+  </div>
+
+  {% if summary %}
+  <div class="section">
+    <h2>Summary</h2>
+    <p>{{ summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if experience %}
+  <div class="section">
+    <h2>Experience</h2>
+    {% for exp in experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="role">{{ exp.position }}</span>
+        <span>{% if exp.start_date %}{{ exp.start_date }}{% endif %}{% if exp.end_date %} - {{ exp.end_date }}{% endif %}</span>
+      </div>
+      <div class="exp-company">{{ exp.company }}{% if exp.location %}, {{ exp.location }}{% endif %}</div>
+      {% if exp.description %}
+      <ul>
+        {% for line in exp.description.split('\n') %}{% if line.strip() %}<li>{{ line.strip() }}</li>{% endif %}{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if projects %}
+  <div class="section">
+    <h2>Projects</h2>
+    {% for proj in projects %}
+    <div style="margin-bottom:4px;">
+      <strong>{{ proj.name }}</strong>
+      {% if proj.description %}: {{ proj.description }}{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if education %}
+  <div class="section">
+    <h2>Education</h2>
+    {% for edu in education %}
+    <div class="edu-item">
+      <strong>{{ edu.degree }}</strong>{% if edu.field %} in {{ edu.field }}{% endif %} - {{ edu.institution }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if skills %}
+  <div class="section">
+    <h2>Skills</h2>
+    <div class="skills-list">
+      {% for skill in skills %}{{ skill.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

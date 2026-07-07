@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 10pt; color: #1a1a2e; line-height: 1.45; }
+  .header { text-align: center; border-bottom: 2px solid #0f3460; padding-bottom: 10px; margin-bottom: 14px; }
+  .header h1 { font-size: 22pt; color: #0f3460; margin-bottom: 2px; letter-spacing: 0.5px; }
+  .header .title { font-size: 11pt; color: #16213e; margin-bottom: 6px; }
+  .contact { font-size: 9pt; color: #555; }
+  .contact span { margin: 0 6px; }
+  .section { margin-bottom: 12px; }
+  .section h2 { font-size: 11pt; color: #0f3460; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-bottom: 6px; }
+  .exp-item { margin-bottom: 8px; }
+  .exp-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .exp-header .role { font-weight: 600; font-size: 10.5pt; }
+  .exp-header .dates { font-size: 9pt; color: #777; }
+  .exp-company { font-size: 9.5pt; color: #444; margin-bottom: 3px; }
+  .exp-desc { font-size: 9.5pt; color: #333; }
+  .exp-desc li { margin-bottom: 2px; margin-left: 14px; }
+  .skills-list { display: flex; flex-wrap: wrap; gap: 5px; }
+  .skill-tag { background: #e8f0fe; color: #0f3460; padding: 2px 8px; border-radius: 3px; font-size: 9pt; }
+  .edu-item { margin-bottom: 4px; }
+  .edu-item .degree { font-weight: 600; }
+  .edu-item .school { color: #555; font-size: 9.5pt; }
+  .projects-list { margin-top: 4px; }
+  .project-item { margin-bottom: 4px; }
+  .project-item .name { font-weight: 600; }
+  .project-item .desc { font-size: 9.5pt; color: #444; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ full_name }}</h1>
+    {% if headline %}<div class="title">{{ headline }}</div>{% endif %}
+    <div class="contact">
+      {% if email %}<span>{{ email }}</span>{% endif %}
+      {% if phone %}<span>{{ phone }}</span>{% endif %}
+      {% if location %}<span>{{ location }}</span>{% endif %}
+      {% if linkedin %}<span>{{ linkedin }}</span>{% endif %}
+      {% if github %}<span>{{ github }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if summary %}
+  <div class="section">
+    <h2>Summary</h2>
+    <p>{{ summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if experience %}
+  <div class="section">
+    <h2>Experience</h2>
+    {% for exp in experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="role">{{ exp.position }}</span>
+        <span class="dates">{% if exp.start_date %}{{ exp.start_date }}{% if exp.end_date %} – {{ exp.end_date }}{% else %} – Present{% endif %}{% endif %}</span>
+      </div>
+      <div class="exp-company">{{ exp.company }}{% if exp.location %} · {{ exp.location }}{% endif %}</div>
+      {% if exp.description %}
+      <div class="exp-desc">
+        {% for line in exp.description.split('\n') %}{% if line.strip() %}<li>{{ line.strip() }}</li>{% endif %}{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if projects %}
+  <div class="section">
+    <h2>Projects</h2>
+    {% for proj in projects %}
+    <div class="project-item">
+      <span class="name">{{ proj.name }}</span>
+      {% if proj.description %} — <span class="desc">{{ proj.description }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if education %}
+  <div class="section">
+    <h2>Education</h2>
+    {% for edu in education %}
+    <div class="edu-item">
+      <span class="degree">{{ edu.degree }}</span>{% if edu.field %} in {{ edu.field }}{% endif %}
+      <div class="school">{{ edu.institution }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if skills %}
+  <div class="section">
+    <h2>Skills</h2>
+    <div class="skills-list">
+      {% for skill in skills %}
+      <span class="skill-tag">{{ skill.name }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>
