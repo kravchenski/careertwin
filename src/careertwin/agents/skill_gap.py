@@ -58,7 +58,10 @@ class SkillGapAnalyzer:
                 current_skills.add(tech.name.lower())
 
         required = self._extract_required_skills(job_description)
-        preferred = self._extract_preferred_skills(job_description)
+        preferred = [
+            s for s in self._extract_preferred_skills(job_description)
+            if s not in required
+        ]
 
         gaps = []
         for skill in required:
@@ -96,12 +99,17 @@ class SkillGapAnalyzer:
 
     def _extract_required_skills(self, text: str) -> list[str]:
         known = list(self.SKILL_RESOURCES.keys())
-        found = []
         lower = text.lower()
+        tokens = {w.strip(".,;:()[]{}<>/\\").lower() for w in text.split()}
+        found: list[str] = []
 
         for skill in known:
-            if skill in lower:
-                found.append(skill)
+            if " " in skill:
+                if skill in lower:
+                    found.append(skill)
+            else:
+                if skill in tokens:
+                    found.append(skill)
 
         return found
 

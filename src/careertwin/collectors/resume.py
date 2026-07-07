@@ -38,7 +38,7 @@ class ResumeParser:
         return self._parse_text_content(text, str(path))
 
     def _extract_pdf_text(self, path: Path) -> str:
-        texts: list[str] = []
+        texts: list[tuple[str, str]] = []
         try:
             from pdfminer.high_level import extract_text
             miner_text = extract_text(str(path))
@@ -51,7 +51,7 @@ class ResumeParser:
             reader = PdfReader(str(path))
             raw = ""
             for page in reader.pages:
-                raw += page.extract_text() + "\n"
+                raw += (page.extract_text() or "") + "\n"
             cleaned = self._clean_pypdf_text(raw)
             if cleaned:
                 texts.append(("pypdf", cleaned))
@@ -59,11 +59,11 @@ class ResumeParser:
             pass
         if not texts:
             raise ValueError(f"Could not extract text from {path}")
-        # Prefer pdfminer for multi-column PDFs, fall back to longer text
+        # Prefer pdfminer for multi-column PDFs, otherwise pick the longest
         for name, text in texts:
             if name == "pdfminer":
                 return text
-        return texts[0][1]
+        return max(texts, key=lambda t: len(t[1]))[1]
 
     def _clean_pypdf_text(self, text: str) -> str:
         text = re.sub(r"(\w)\s(\w)\s(\w)\s", r"\1\2\3 ", text)
@@ -168,7 +168,10 @@ class ResumeParser:
 
         # Extract GitHub - check all lines
         for line in lines:
-            github_match = re.search(r"github\.com/([a-zA-Z0-9_-]+?)(?:https?|$|\s)", line)
+            github_match = re.search(
+                r"(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_-]+)(?:/|$|\s)",
+                line, flags=re.IGNORECASE,
+            )
             if github_match:
                 github = f"https://github.com/{github_match.group(1)}"
                 break
@@ -407,7 +410,7 @@ class ResumeParser:
             "react", "vue", "angular", "django", "flask", "fastapi", "spring",
             "docker", "kubernetes", "aws", "gcp", "azure", "postgresql", "mysql",
             "redis", "mongodb", "graphql", "rest", "sql", "git", "ci/cd",
-            "langchain", "langgraph", "aiogram", "aiogram",
+            "langchain", "langgraph", "aiogram",
             "openai", "anthropic", "llm", "rag",
         ]
         lower = text.lower()

@@ -69,11 +69,17 @@ class JobMatcher:
             "langchain", "langgraph", "openai", "anthropic",
         ]
 
-        found = []
         lower = text.lower()
+        tokens = {w.strip(".,;:()[]{}<>/\\").lower() for w in text.split()}
+
+        found: list[str] = []
         for skill in known_skills:
-            if skill in lower:
-                found.append(skill)
+            if " " in skill:
+                if skill in lower:
+                    found.append(skill)
+            else:
+                if skill in tokens:
+                    found.append(skill)
 
         return found
 
