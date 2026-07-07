@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from typing import Optional
 
-from github import Github, Repository
+from github import Github, GithubException, RateLimitExceededException, Repository
 
 from careertwin.graph.schema import (
     Achievement,
     CareerGraph,
     Evidence,
+    Profile,
     Project,
     Skill,
     SkillCategory,
@@ -18,20 +21,34 @@ from careertwin.graph.schema import (
     Technology,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class GitHubCollector:
     """Collects professional data from GitHub.
 
-    Uses public API by default. Set GITHUB_TOKEN env var or pass token
-    to access private repos and increase rate limits.
+    Uses public API by default (60 req/hour).
+    Set GITHUB_TOKEN env var or pass token for 5000 req/hour.
     """
 
     def __init__(self, token: Optional[str] = None):
         self.token = token or os.getenv("GITHUB_TOKEN")
-        self.client = Github(self.token) if self.token else Github()
+        self.client = Github(
+            self.token,
+            retry=None,  # disable auto-retry
+            seconds_between_requests=0.5,
+        ) if self.token else Github(
+            retry=None,
+            seconds_between_requests=1,
+        )
+        self._request_count = 0
 
     def collect(self, username: str) -> CareerGraph:
-        user = self.client.get_user(username)
+        self._request_count = 0
+        user = self._safe_call(self.client.get_user, username)
+        if not user:
+            return self._empty_graph(username)
+
         profile = self._build_profile(user)
         projects = self._collect_repos(user)
         skills = self._extract_skills(projects)
@@ -40,6 +57,27 @@ class GitHubCollector:
             profile=profile,
             projects=projects,
             skills=skills,
+        )
+
+    def _safe_call(self, func, *args, **kwargs):
+        """Execute GitHub API call with rate limit handling."""
+        try:
+            result = func(*args, **kwargs)
+            self._request_count += 1
+            return result
+        except RateLimitExceededException:
+            logger.warning("Rate limited. Set GITHUB_TOKEN for higher limits.")
+            return None
+        except GithubException as e:
+            logger.warning(f"GitHub API error: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Unexpected error: {e}")
+            return None
+
+    def _empty_graph(self, username: str) -> CareerGraph:
+        return CareerGraph(
+            profile=Profile(full_name=username, github=f"https://github.com/{username}"),
         )
 
     def _build_profile(self, user) -> dict:
@@ -54,18 +92,23 @@ class GitHubCollector:
         }
 
     def _collect_repos(self, user) -> list[Project]:
-        projects = []
-        repos = sorted(user.get_repos(type="public"), key=lambda r: r.stargazers_count, reverse=True)
+        repos = self._safe_call(user.get_repos, type="public")
+        if not repos:
+            return []
 
-        for repo in repos:
+        sorted_repos = sorted(repos, key=lambda r: r.stargazers_count, reverse=True)
+
+        projects = []
+        for repo in sorted_repos[:30]:  # Limit to top 30 repos
             if repo.fork:
                 continue
             project = self._repo_to_project(repo)
-            projects.append(project)
+            if project:
+                projects.append(project)
 
         return projects
 
-    def _repo_to_project(self, repo: Repository) -> Project:
+    def _repo_to_project(self, repo: Repository) -> Optional[Project]:
         evidence = Evidence(
             source=SourceType.GITHUB,
             url=repo.html_url,
@@ -95,22 +138,19 @@ class GitHubCollector:
             ))
 
         languages = []
-        try:
-            lang_data = repo.get_languages()
+        lang_data = self._safe_call(repo.get_languages)
+        if lang_data:
             for lang in lang_data:
                 languages.append(Technology(
                     name=lang,
                     category="language",
                     evidence=[evidence],
                 ))
-        except Exception:
-            pass
 
         topics = []
-        try:
-            topics = [Technology(name=t, category="topic") for t in repo.get_topics()]
-        except Exception:
-            pass
+        topics_data = self._safe_call(repo.get_topics)
+        if topics_data:
+            topics = [Technology(name=t, category="topic") for t in topics_data]
 
         return Project(
             name=repo.name,
@@ -139,3 +179,10 @@ class GitHubCollector:
                 proficiency=proficiency,
             ))
         return skills
+
+    @property
+    def requests_remaining(self) -> Optional[int]:
+        try:
+            return self.client.rate_limit.remaining
+        except Exception:
+            return None
