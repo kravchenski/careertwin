@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Demo files
+demo.py
+demo/
+career_graph.json
