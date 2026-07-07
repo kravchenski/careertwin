@@ -162,15 +162,15 @@ Sources analyzed: Dribbble, Behance, Canva, Resume.io, Overleaf templates.
 
 ## Roadmap
 
-### Phase 1 — Foundation
-- [ ] GitHub data collector
-- [ ] LinkedIn data collector  
-- [ ] Personal website parser
-- [ ] CV/resume parser
-- [ ] Career Knowledge Graph schema
-- [ ] Qdrant vector store integration
-- [ ] LangGraph agent orchestration
-- [ ] ATS compatibility checker
+### Phase 1 — Foundation ✅
+- [x] GitHub data collector
+- [x] LinkedIn data collector  
+- [x] Personal website parser
+- [x] CV/resume parser
+- [x] Career Knowledge Graph schema
+- [x] Qdrant vector store integration
+- [x] LangGraph agent orchestration
+- [x] ATS compatibility checker
 
 ### Phase 2 — Intelligence
 - [ ] Auto Resume Builder (per-job adaptation)
@@ -201,10 +201,14 @@ Sources analyzed: Dribbble, Behance, Canva, Resume.io, Overleaf templates.
 | Component | Technology |
 |---|---|
 | Language | Python 3.14+ |
+| Data Models | Pydantic v2 |
 | Agent Framework | LangGraph |
 | Vector Database | Qdrant |
-| Vision Models | Qwen-VL, LLaVA, InternVL |
-| PDF Processing | pdf2image, reportlab |
+| HTTP Client | httpx |
+| Web Scraping | BeautifulSoup4 + lxml |
+| PDF Parsing | pdfminer.six |
+| DOCX Parsing | python-docx |
+| GitHub API | PyGithub |
 | Package Manager | uv |
 
 ---
@@ -220,11 +224,19 @@ cd careertwin
 uv sync
 
 # Set up environment
-cp .env.example .env
-# Add your API keys
+export GITHUB_TOKEN=ghp_xxx  # for GitHub data collection
 
-# Run
-uv run python main.py
+# Collect from GitHub
+uv run python main.py collect --github <username>
+
+# Parse an existing resume
+uv run python main.py collect --resume path/to/resume.pdf
+
+# Check ATS compatibility
+uv run python main.py check --resume path/to/resume.pdf
+
+# View collected data
+uv run python main.py info
 ```
 
 ---
