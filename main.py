@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from careertwin.agents.orchestrator import CareerTwinOrchestrator
-from careertwin.graph.schema import CareerGraph
+from careertwin.collectors.resume import ResumeParser
 
 
 def main():
@@ -40,8 +40,6 @@ def main():
 
     elif command == "check":
         if args.resume:
-            from careertwin.collectors.resume import ResumeParser
-
             parser = ResumeParser()
             graph = parser.parse(args.resume)
             orchestrator.graph = graph
