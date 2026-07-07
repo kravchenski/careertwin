@@ -15,13 +15,13 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     collect = sub.add_parser("collect", help="Collect career data from sources")
-    collect.add_argument("--github", help="GitHub username")
-    collect.add_argument("--resume", help="Path to resume file (PDF/DOCX/TXT)")
-    collect.add_argument("--website", help="Personal website URL")
-    collect.add_argument("--linkedin-export", help="LinkedIn data export path (ZIP/CSV)")
+    _ = collect.add_argument("--github", help="GitHub username")
+    _ = collect.add_argument("--resume", help="Path to resume file (PDF/DOCX/TXT)")
+    _ = collect.add_argument("--website", help="Personal website URL")
+    _ = collect.add_argument("--linkedin-export", help="LinkedIn data export path (ZIP/CSV)")
 
     check = sub.add_parser("check", help="Run ATS compatibility check")
-    check.add_argument("--resume", help="Path to resume file to check")
+    _ = check.add_argument("--resume", help="Path to resume file to check")
 
     sub.add_parser("info", help="Show collected career data")
 
