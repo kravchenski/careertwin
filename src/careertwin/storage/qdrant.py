@@ -12,13 +12,11 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
-    PointIdsList,
     PointStruct,
     VectorParams,
 )
 
 from careertwin.graph.schema import CareerGraph
-
 
 COLLECTION_NAME = "career_graph"
 VECTOR_DIM = 1536
@@ -120,7 +118,9 @@ class CareerVectorStore:
             for hit in results
         ]
 
-    def search_by_type(self, query_embedding: list[float], doc_type: str, top_k: int = 5) -> list[dict]:
+    def search_by_type(
+        self, query_embedding: list[float], doc_type: str, top_k: int = 5
+    ) -> list[dict]:
         results = self.client.search(
             collection_name=COLLECTION_NAME,
             query_vector=query_embedding,
@@ -140,8 +140,6 @@ class CareerVectorStore:
             for hit in results
         ]
 
-    def delete_all(self):
-        self.client.delete(
-            collection_name=COLLECTION_NAME,
-            points_selector=PointIdsList(points=[]),
-        )
+    def delete_all(self) -> None:
+        self.client.delete_collection(collection_name=COLLECTION_NAME)
+        self._ensure_collection()

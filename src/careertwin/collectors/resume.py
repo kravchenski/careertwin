@@ -9,12 +9,12 @@ from typing import Optional
 from careertwin.graph.schema import (
     CareerGraph,
     Education,
+    Evidence,
     Experience,
     Profile,
     Skill,
     SkillCategory,
     SourceType,
-    Evidence,
 )
 
 
@@ -127,8 +127,12 @@ class ResumeParser:
             if not location and any(w in line.lower() for w in ["city", "remote", "country"]):
                 location = line
         return Profile(
-            full_name=name, email=email, phone=phone,
-            location=location, github=github, linkedin=linkedin,
+            full_name=name,
+            email=email or None,
+            phone=phone or None,
+            location=location or None,
+            github=github or None,
+            linkedin=linkedin or None,
         )
 
     def _split_sections(self, lines: list[str]) -> dict[str, list[str]]:
@@ -243,13 +247,22 @@ class ResumeParser:
                     category = self._classify_skill(name)
                     skills.append(Skill(
                         name=name, category=category,
-                        evidence=[Evidence(source=SourceType.RESUME, description="Parsed from resume")],
+                        evidence=[Evidence(
+                            source=SourceType.RESUME,
+                            description="Parsed from resume",
+                        )],
                     ))
         return skills
 
     def _classify_skill(self, name: str) -> SkillCategory:
-        languages = {"python", "javascript", "typescript", "java", "c++", "c#", "go", "rust", "ruby", "php", "swift", "kotlin"}
-        frameworks = {"react", "vue", "angular", "django", "flask", "fastapi", "spring", "rails", "nextjs", "nuxt"}
+        languages = {
+            "python", "javascript", "typescript", "java", "c++", "c#",
+            "go", "rust", "ruby", "php", "swift", "kotlin",
+        }
+        frameworks = {
+            "react", "vue", "angular", "django", "flask", "fastapi",
+            "spring", "rails", "nextjs", "nuxt",
+        }
         lower = name.lower()
         if lower in languages:
             return SkillCategory.LANGUAGE

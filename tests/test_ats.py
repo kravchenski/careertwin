@@ -1,7 +1,7 @@
 """Tests for ATS compatibility checker."""
 
 from careertwin.ats.checker import ATSChecker, ATSReport
-from careertwin.graph.schema import CareerGraph, Experience, Profile, Skill, SkillCategory
+from careertwin.graph.schema import CareerGraph, Profile
 
 
 class TestATSChecker:

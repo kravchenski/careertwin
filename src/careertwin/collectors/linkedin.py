@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import csv
 import os
+import zipfile
+from io import TextIOWrapper
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -32,20 +36,12 @@ class LinkedInCollector:
 
     def collect_from_export(self, export_path: str) -> CareerGraph:
         """Parse LinkedIn data export (ZIP or CSV files)."""
-        import csv
-        import zipfile
-        from pathlib import Path
-
         path = Path(export_path)
         if path.suffix == ".zip":
             return self._parse_zip_export(path)
         return self._parse_csv_export(path)
 
     def _parse_zip_export(self, zip_path: Path) -> CareerGraph:
-        import csv
-        import zipfile
-        from io import TextIOWrapper
-
         experience = []
         education = []
         skills = []
@@ -79,8 +75,6 @@ class LinkedInCollector:
         )
 
     def _parse_csv_export(self, csv_path: Path) -> CareerGraph:
-        import csv
-
         experience = []
         education = []
         skills = []

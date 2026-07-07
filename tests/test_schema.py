@@ -3,15 +3,10 @@
 from datetime import date
 
 from careertwin.graph.schema import (
-    Achievement,
     CareerGraph,
-    Education,
     Evidence,
     Experience,
     Profile,
-    Project,
-    Skill,
-    SkillCategory,
     SourceType,
     Technology,
 )

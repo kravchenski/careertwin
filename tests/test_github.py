@@ -1,7 +1,6 @@
 """Tests for GitHub collector."""
 
 import os
-from unittest.mock import MagicMock, patch
 
 import pytest
 

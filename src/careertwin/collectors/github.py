@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from typing import Optional
 
 from github import Github, GithubException, RateLimitExceededException, Repository
@@ -83,12 +82,12 @@ class GitHubCollector:
     def _build_profile(self, user) -> dict:
         return {
             "full_name": user.name or user.login,
-            "headline": user.bio or "",
-            "email": user.email or "",
-            "location": user.location or "",
-            "website": user.blog or "",
+            "headline": user.bio or None,
+            "email": user.email or None,
+            "location": user.location or None,
+            "website": user.blog or None,
             "github": user.html_url,
-            "summary": user.bio or "",
+            "summary": user.bio or None,
         }
 
     def _collect_repos(self, user) -> list[Project]:

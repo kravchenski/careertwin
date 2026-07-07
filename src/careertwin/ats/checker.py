@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from careertwin.graph.schema import CareerGraph, Skill
+from careertwin.graph.schema import CareerGraph
 
 
 @dataclass
@@ -117,7 +117,9 @@ class ATSChecker:
                 fix_suggestion="Use spaces instead of tabs",
             ))
 
-    def _check_content(self, graph: CareerGraph, text: str, issues: list[ATSIssue], passed: list[str]):
+    def _check_content(
+        self, graph: CareerGraph, text: str, issues: list[ATSIssue], passed: list[str]
+    ):
         words = text.split()
         word_count = len(words)
 
@@ -139,7 +141,7 @@ class ATSChecker:
             passed.append(f"Good length: {word_count} words")
 
         lines = text.split("\n")
-        long_lines = [l for l in lines if len(l) > 120]
+        long_lines = [line for line in lines if len(line) > 120]
         if long_lines:
             issues.append(ATSIssue(
                 severity="info",
@@ -160,7 +162,7 @@ class ATSChecker:
                 severity="warning",
                 category="keywords",
                 message="Few action verbs found in experience descriptions",
-                fix_suggestion="Start bullet points with strong verbs: Led, Built, Implemented, etc.",
+                fix_suggestion="Start bullet points with strong verbs: Led, Built, Implemented",
             ))
         else:
             passed.append(f"Good action verbs: {', '.join(found_verbs[:5])}")
@@ -177,7 +179,7 @@ class ATSChecker:
             passed.append("Contains quantifiable metrics")
 
     def _check_length(self, text: str, issues: list[ATSIssue], passed: list[str]):
-        lines = [l for l in text.split("\n") if l.strip()]
+        lines = [line for line in text.split("\n") if line.strip()]
         if len(lines) > 80:
             issues.append(ATSIssue(
                 severity="info",

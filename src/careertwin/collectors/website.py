@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
@@ -73,7 +72,9 @@ class WebsiteCollector:
         projects = []
         seen_names: set[str] = set()
 
-        for card in soup.select("[class*='project'], [class*='card'], [data-section='projects'] > *"):
+        for card in soup.select(
+            "[class*='project'], [class*='card'], [data-section='projects'] > *"
+        ):
             name_el = card.find(["h2", "h3", "h4", "a"])
             if not name_el:
                 continue

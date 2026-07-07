@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import os
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Optional, TypedDict
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
 
 from careertwin.ats.checker import ATSChecker, ATSReport
 from careertwin.collectors.github import GitHubCollector
 from careertwin.collectors.linkedin import LinkedInCollector
 from careertwin.collectors.resume import ResumeParser
 from careertwin.collectors.website import WebsiteCollector
-from careertwin.graph.schema import CareerGraph, Experience, Project
+from careertwin.graph.schema import CareerGraph
 
 
 class CareerState(TypedDict):
@@ -74,7 +72,9 @@ def collect_linkedin_export(export_path: str) -> str:
     try:
         collector = LinkedInCollector()
         result = collector.collect_from_export(export_path)
-        return f"Collected {len(result.experience)} experiences, {len(result.education)} education entries from LinkedIn"
+        exp_count = len(result.experience)
+        edu_count = len(result.education)
+        return f"Collected {exp_count} experiences, {edu_count} education entries from LinkedIn"
     except Exception as e:
         return f"LinkedIn collection failed: {e}"
 
@@ -134,7 +134,6 @@ class CareerTwinOrchestrator:
         self.app = workflow.compile()
 
     def _collector_node(self, state: CareerState) -> dict:
-        messages = state["messages"]
         return {
             "messages": [SystemMessage(content="Data collection in progress...")],
         }
@@ -158,7 +157,9 @@ class CareerTwinOrchestrator:
             "messages": [SystemMessage(content=f"Career analysis complete.\n{summary}")]
         }
 
-    def run_collection(self, github: Optional[str] = None, resume_path: Optional[str] = None) -> CareerGraph:
+    def run_collection(
+        self, github: Optional[str] = None, resume_path: Optional[str] = None
+    ) -> CareerGraph:
         if github:
             try:
                 collector = GitHubCollector()
