@@ -23,25 +23,28 @@ def main():
     check = sub.add_parser("check", help="Run ATS compatibility check")
     _ = check.add_argument("--resume", help="Path to resume file to check")
 
-    sub.add_parser("info", help="Show collected career data")
+    _ = sub.add_parser("info", help="Show collected career data")
 
     args = parser.parse_args()
-    orchestrator = CareerTwinOrchestrator()
     command: str = args.command or ""
+    github: str = args.github or ""
+    resume_path: str = args.resume or ""
+
+    orchestrator = CareerTwinOrchestrator()
 
     if command == "collect":
         graph = orchestrator.run_collection(
-            github=args.github,
-            resume_path=args.resume,
+            github=github,
+            resume_path=resume_path,
         )
         output = Path("career_graph.json")
         output.write_text(json.dumps(json.loads(graph.model_dump_json()), indent=2))
         print(f"\nCareer graph saved to {output}")
 
     elif command == "check":
-        if args.resume:
-            parser = ResumeParser()
-            graph = parser.parse(args.resume)
+        if resume_path:
+            cv_parser = ResumeParser()
+            graph = cv_parser.parse(resume_path)
             orchestrator.graph = graph
 
         report = orchestrator.check_ats()
