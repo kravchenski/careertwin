@@ -219,6 +219,7 @@ __marimo__/
 
 # Demo files
 demo.py
+demo_live.py
 demo/
 career_graph.json
 portfolio/
