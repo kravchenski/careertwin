@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.mimocode
+.pytest_cache
+.ruff_cache
+.playwright-mcp
+node_modules
+dist
+.cache
+*.pyc
+__pycache__
+.env
+data/
+*.db
+*.log
