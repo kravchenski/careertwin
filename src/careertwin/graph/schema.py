@@ -33,7 +33,7 @@ class Evidence(BaseModel):
 class Technology(BaseModel):
     id: str = Field(default_factory=_id)
     name: str
-    category: Optional[str] = None  # language, framework, tool, etc.
+    category: Optional[str] = None
     evidence: list[Evidence] = Field(default_factory=list)
 
 
@@ -41,7 +41,7 @@ class Achievement(BaseModel):
     id: str = Field(default_factory=_id)
     title: str
     description: str = ""
-    metric: Optional[str] = None  # e.g. "100k users", "2.4k stars"
+    metric: Optional[str] = None
     evidence: list[Evidence] = Field(default_factory=list)
 
 
@@ -93,7 +93,7 @@ class Skill(BaseModel):
     id: str = Field(default_factory=_id)
     name: str
     category: SkillCategory
-    proficiency: Optional[str] = None  # expert, advanced, intermediate
+    proficiency: Optional[str] = None
     evidence: list[Evidence] = Field(default_factory=list)
 
 
@@ -117,7 +117,7 @@ class CareerGraph(BaseModel):
     experience: list[Experience] = Field(default_factory=list)
     education: list[Education] = Field(default_factory=list)
     skills: list[Skill] = Field(default_factory=list)
-    projects: list[Project] = Field(default_factory=list)  # standalone projects
+    projects: list[Project] = Field(default_factory=list)
     technologies: list[Technology] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
 

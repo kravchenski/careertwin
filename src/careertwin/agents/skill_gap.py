@@ -10,8 +10,8 @@ from careertwin.graph.schema import CareerGraph
 @dataclass
 class SkillGap:
     skill: str
-    importance: str  # critical, important, nice-to-have
-    current_level: str  # none, basic, intermediate, advanced
+    importance: str
+    current_level: str
     recommended_resources: list[str] = field(default_factory=list)
 
 
@@ -21,7 +21,7 @@ class SkillGapReport:
     current_skills: list[str]
     required_skills: list[str]
     gaps: list[SkillGap]
-    overall_readiness: float  # 0-100
+    overall_readiness: float
     recommendations: list[str] = field(default_factory=list)
 
 
