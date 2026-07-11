@@ -9,15 +9,15 @@ from pathlib import Path
 
 @dataclass
 class QAIssue:
-    category: str  # layout, typography, spacing, content, ats
-    severity: str  # critical, warning, info
+    category: str
+    severity: str
     message: str
     suggestion: str = ""
 
 
 @dataclass
 class QAReport:
-    score: float  # 0-100
+    score: float
     issues: list[QAIssue] = field(default_factory=list)
     summary: str = ""
     provider: str = ""
