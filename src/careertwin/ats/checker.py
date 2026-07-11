@@ -10,7 +10,7 @@ from careertwin.graph.schema import CareerGraph
 
 @dataclass
 class ATSIssue:
-    severity: str  # critical, warning, info
+    severity: str
     category: str
     message: str
     fix_suggestion: str
@@ -18,7 +18,7 @@ class ATSIssue:
 
 @dataclass
 class ATSReport:
-    score: int  # 0-100
+    score: int
     issues: list[ATSIssue] = field(default_factory=list)
     passed_checks: list[str] = field(default_factory=list)
 
@@ -40,14 +40,12 @@ class ATSReport:
 class ATSChecker:
     """Checks career documents for ATS compatibility."""
 
-    # Common ATS-unfriendly patterns
     UNSAFE_PATTERNS = [
         (r"[│┃]", "vertical bars (tables)"),
         (r"[●○◆◇■□▲△]", "special characters/icons"),
         (r"\b(?:click here|here|this link)\b", "non-descriptive link text"),
     ]
 
-    # Critical sections an ATS expects
     EXPECTED_SECTIONS = [
         "experience",
         "education",
@@ -55,7 +53,6 @@ class ATSChecker:
         "summary",
     ]
 
-    # Action verbs that ATS and recruiters look for
     STRONG_VERBS = {
         "achieved", "built", "created", "designed", "developed", "drove",
         "established", "implemented", "improved", "increased", "led",

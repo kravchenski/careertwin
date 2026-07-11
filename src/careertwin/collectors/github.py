@@ -34,7 +34,7 @@ class GitHubCollector:
         self.token = token or os.getenv("GITHUB_TOKEN")
         self.client = Github(
             self.token,
-            retry=None,  # disable auto-retry
+            retry=None,
             seconds_between_requests=0.5,
         ) if self.token else Github(
             retry=None,
@@ -98,7 +98,7 @@ class GitHubCollector:
         sorted_repos = sorted(repos, key=lambda r: r.stargazers_count, reverse=True)
 
         projects = []
-        for repo in sorted_repos[:30]:  # Limit to top 30 repos
+        for repo in sorted_repos[:30]:
             if repo.fork:
                 continue
             project = self._repo_to_project(repo)
