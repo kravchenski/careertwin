@@ -10,6 +10,7 @@ from careertwin.agents.career_recommender import CareerRecommender
 from careertwin.agents.cover_letter import CoverLetterGenerator
 from careertwin.agents.job_matcher import JobMatcher
 from careertwin.agents.orchestrator import CareerTwinOrchestrator
+from careertwin.agents.application_package import ApplicationPackageBuilder
 from careertwin.agents.resume_builder import JobDescription, ResumeBuilder
 from careertwin.agents.skill_gap import SkillGapAnalyzer
 from careertwin.collectors.resume import ResumeParser
@@ -75,6 +76,41 @@ def _handle_build(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator
     print(f"\nAdapted resume saved to {output}")
     print(f"Experiences: {len(adapted.experience)}")
     print(f"Skills: {len(adapted.skills)}")
+
+
+def _load_graph_for_args(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> CareerGraph:
+    if getattr(args, "resume", None):
+        parser = ResumeParser()
+        orchestrator.graph = parser.parse(args.resume)
+    return orchestrator.graph
+
+
+def _handle_tailor(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
+    graph = _load_graph_for_args(args, orchestrator)
+    job_text = Path(args.job).read_text() if args.job else args.description or ""
+    job = JobDescription(
+        title=args.title or "Position",
+        company=args.company or "Company",
+        description=job_text,
+    )
+
+    builder = ApplicationPackageBuilder()
+    package = builder.build(
+        graph=graph,
+        job=job,
+        output_dir=args.output_dir or "output/application",
+        template=args.template or "modern",
+        run_qa=not args.skip_qa,
+    )
+
+    print(f"\nApplication package saved to {package.output_dir}")
+    print(f"Match Score: {package.job_match.match_score}/100")
+    print(f"ATS Score: {package.ats_report.score}/100")
+    print(f"Readiness: {package.skill_gap.overall_readiness}%")
+    print(f"Resume PDF: {package.render_result.pdf_path}")
+    print(f"Cover Letter: {package.output_dir / 'cover_letter.txt'}")
+    if package.qa_report:
+        print(f"Visual QA: {package.qa_report.score}/100")
 
 
 def _handle_cover(args: argparse.Namespace, orchestrator: CareerTwinOrchestrator) -> None:
@@ -264,10 +300,21 @@ def main() -> None:
     _ = sub.add_parser("info", help="Show collected career data")
 
     build = sub.add_parser("build", help="Build tailored resume for a job")
+    _ = build.add_argument("--resume", help="Path to resume file (overrides saved graph)")
     _ = build.add_argument("--job", help="Path to job description file")
     _ = build.add_argument("--title", help="Job title")
     _ = build.add_argument("--company", help="Company name")
     _ = build.add_argument("--description", help="Job description text")
+
+    tailor = sub.add_parser("tailor", help="Generate a full application package for one job")
+    _ = tailor.add_argument("--resume", help="Path to resume file (PDF/DOCX/TXT)")
+    _ = tailor.add_argument("--job", help="Path to job description file")
+    _ = tailor.add_argument("--title", help="Job title")
+    _ = tailor.add_argument("--company", help="Company name")
+    _ = tailor.add_argument("--description", help="Job description text")
+    _ = tailor.add_argument("--template", "-t", help="Render template name")
+    _ = tailor.add_argument("--output-dir", help="Directory for generated artifacts")
+    _ = tailor.add_argument("--skip-qa", action="store_true", help="Skip visual QA step")
 
     cover = sub.add_parser("cover", help="Generate cover letter")
     _ = cover.add_argument("--job", help="Path to job description file")
@@ -310,7 +357,6 @@ def main() -> None:
 
     orchestrator = CareerTwinOrchestrator()
 
-    # Auto-load saved career graph if it exists
     graph_path = Path("career_graph.json")
     if graph_path.exists() and command not in ("collect", ""):
         try:
@@ -326,7 +372,10 @@ def main() -> None:
     elif command == "info":
         _handle_info(orchestrator)
     elif command == "build":
+        _load_graph_for_args(args, orchestrator)
         _handle_build(args, orchestrator)
+    elif command == "tailor":
+        _handle_tailor(args, orchestrator)
     elif command == "cover":
         _handle_cover(args, orchestrator)
     elif command == "match":
