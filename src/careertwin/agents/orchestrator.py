@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Optional, TypedDict
 
 from langchain_core.messages import SystemMessage
@@ -11,10 +12,11 @@ from langgraph.graph.message import add_messages
 
 from careertwin.ats.checker import ATSChecker, ATSReport
 from careertwin.collectors.github import GitHubCollector
-from careertwin.collectors.linkedin import LinkedInCollector
 from careertwin.collectors.resume import ResumeParser
 from careertwin.collectors.website import WebsiteCollector
 from careertwin.graph.schema import CareerGraph
+
+logger = logging.getLogger("careertwin.orchestrator")
 
 
 class CareerState(TypedDict):
@@ -64,19 +66,6 @@ def collect_github(username: str) -> str:
         return f"Collected {len(result.projects)} projects, {len(result.skills)} skills from GitHub"
     except Exception as e:
         return f"GitHub collection failed: {e}"
-
-
-@tool
-def collect_linkedin_export(export_path: str) -> str:
-    """Collect data from a LinkedIn data export file (ZIP or CSV)."""
-    try:
-        collector = LinkedInCollector()
-        result = collector.collect_from_export(export_path)
-        exp_count = len(result.experience)
-        edu_count = len(result.education)
-        return f"Collected {exp_count} experiences, {edu_count} education entries from LinkedIn"
-    except Exception as e:
-        return f"LinkedIn collection failed: {e}"
 
 
 @tool
@@ -166,7 +155,7 @@ class CareerTwinOrchestrator:
                 gh_data = collector.collect(github)
                 self.graph = _merge_graphs(self.graph, gh_data)
             except Exception as e:
-                print(f"GitHub collection error: {e}")
+                logger.warning("GitHub collection error: %s", e)
 
         if resume_path:
             try:
@@ -174,11 +163,11 @@ class CareerTwinOrchestrator:
                 cv_data = parser.parse(resume_path)
                 self.graph = _merge_graphs(self.graph, cv_data)
             except Exception as e:
-                print(f"Resume parsing error: {e}")
+                logger.warning("Resume parsing error: %s", e)
 
         text = self.graph.to_search_text()
         report = self.ats_checker.check(self.graph, text)
-        print(report.summary())
+        logger.info("ATS Report:\n%s", report.summary())
 
         return self.graph
 
