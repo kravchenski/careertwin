@@ -1,0 +1,1584 @@
+[
+  {
+    "name": "about-you",
+    "domain": "aboutyou.de",
+    "careers": "https://corporate.aboutyou.de/en/career/jobs",
+    "location": "Hamburg, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "accenture",
+    "domain": "accenture.com",
+    "careers": "https://www.accenture.com/us-en/careers/jobsearch",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "activision",
+    "domain": "activision.com",
+    "careers": "https://careers.activision.com/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "adjust",
+    "domain": "adjust.com",
+    "careers": "https://www.adjust.com/company/careers/jobs/",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "adobe",
+    "domain": "adobe.com",
+    "careers": "https://careers.adobe.com/us/en/search-results",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "adyen",
+    "domain": "adyen.com",
+    "careers": "https://careers.adyen.com/vacancies",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "airbnb",
+    "domain": "airbnb.com",
+    "careers": "https://careers.airbnb.com/positions",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "airbyte",
+    "domain": "airbyte.com",
+    "careers": "https://airbyte.com/company/careers#open-roles",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "aiven",
+    "domain": "aiven.io",
+    "careers": "https://aiven.io/careers",
+    "location": "Helsinki, Finland / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "alan",
+    "domain": "jobs.alan.com",
+    "careers": "https://jobs.alan.com/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "aleph-alpha",
+    "domain": "aleph-alpha.com",
+    "careers": "https://jobs.ashbyhq.com/AlephAlpha",
+    "location": "Heidelberg, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "alibaba",
+    "domain": "alibaba.com",
+    "careers": "https://talent.alibaba.com/campus/position"
+  },
+  {
+    "name": "allegro",
+    "domain": "allegro.pl",
+    "careers": "https://www.allegro.pl/kariera/alle_oferty"
+  },
+  {
+    "name": "amazon",
+    "domain": "amazon.com",
+    "careers": "https://www.amazon.jobs/en/",
+    "github": "https://github.com/aws",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "amazon-web-services",
+    "domain": "aws.amazon.com",
+    "careers": "https://www.amazon.jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "amd",
+    "domain": "amd.com",
+    "careers": "https://careers.amd.com/careers-home/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "american-express",
+    "domain": "americanexpress.com",
+    "careers": "https://careers.americanexpress.com",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "amplitude",
+    "domain": "amplitude.com",
+    "careers": "https://boards.greenhouse.io/amplitude",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "appliedai",
+    "domain": "appliedai.de",
+    "careers": "https://www.appliedai.de/en/company/career/",
+    "location": "Munich, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "arm",
+    "domain": "careers.arm.com",
+    "careers": "https://careers.arm.com/search-jobs",
+    "location": "Cambridge, UK",
+    "region": "EU"
+  },
+  {
+    "name": "asana",
+    "domain": "asana.com",
+    "careers": "https://asana.com/jobs/all",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "asml",
+    "domain": "asml.com",
+    "careers": "https://www.asml.com/en/careers",
+    "location": "Eindhoven, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "atlassian",
+    "domain": "atlassian.com",
+    "careers": "https://www.atlassian.com/company/careers/all-jobs"
+  },
+  {
+    "name": "att",
+    "domain": "att.com",
+    "careers": "https://www.att.jobs/search/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "autodesk",
+    "domain": "autodesk.com",
+    "careers": "https://autodesk.wd1.myworkdayjobs.com/Ext",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "automattic",
+    "domain": "automattic.com",
+    "careers": "https://automattic.com/work-with-us/",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "autoscript",
+    "domain": "autoscript.tv",
+    "careers": "https://autoscript.tv/"
+  },
+  {
+    "name": "aws",
+    "domain": "aws.amazon.com",
+    "careers": "https://www.amazon.jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "axis-communications",
+    "domain": "axis.com",
+    "careers": "https://www.axis.com/careers"
+  },
+  {
+    "name": "babbel",
+    "domain": "jobs.babbel.com",
+    "careers": "https://jobs.babbel.com/?scroll=search",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "backbase",
+    "domain": "backbase.com",
+    "careers": "https://www.backbase.com/careers",
+    "location": "Amsterdam, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "baidu",
+    "domain": "baidu.com",
+    "careers": "https://talent.baidu.com"
+  },
+  {
+    "name": "bambooHR",
+    "domain": "bamboohr.com",
+    "careers": "https://www.bamboohr.com/careers",
+    "ats_platform": "bamboohr"
+  },
+  {
+    "name": "bird",
+    "domain": "bird.com",
+    "careers": "https://bird.com/careers",
+    "location": "Amsterdam, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "blablacar",
+    "domain": "jobs.blablacar.com",
+    "careers": "https://jobs.blablacar.com/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "blinkist",
+    "domain": "blinkist.com",
+    "careers": "https://www.blinkist.com/en/jobs",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "bolt",
+    "domain": "bolt.eu",
+    "careers": "https://bolt.eu/careers/positions/",
+    "location": "Tallinn, Estonia",
+    "region": "EU"
+  },
+  {
+    "name": "booking",
+    "domain": "booking.com",
+    "careers": "https://jobs.booking.com/booking/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "bookingcom",
+    "domain": "jobs.booking.com",
+    "careers": "https://jobs.booking.com/",
+    "location": "Amsterdam, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "Booksy",
+    "domain": "booksy.com",
+    "careers": "https://careers.booksy.com/jobs/",
+    "location": "Remote",
+    "region": "EU"
+  },
+  {
+    "name": "broadcom",
+    "domain": "broadcom.com",
+    "careers": "https://broadcom.wd1.myworkdayjobs.com/External_Career",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "broadridge",
+    "domain": "broadridge.com",
+    "careers": "https://broadridge.wd5.myworkdayjobs.com/Careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "bytedance",
+    "domain": "bytedance.com",
+    "careers": "https://jobs.bytedance.com/en/"
+  },
+  {
+    "name": "cabify",
+    "domain": "cabify.com",
+    "careers": "https://cabify.com/en/jobs",
+    "location": "Madrid, Spain",
+    "region": "EU"
+  },
+  {
+    "name": "canon",
+    "domain": "canon.com",
+    "careers": "https://external-canoncareers.icims.com/"
+  },
+  {
+    "name": "canva",
+    "domain": "canva.com",
+    "careers": "https://www.canva.com/careers/search/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "capgemini",
+    "domain": "capgemini.com",
+    "careers": "https://www.capgemini.com/careers/join-capgemini/job-search/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "catawiki",
+    "domain": "catawiki.com",
+    "careers": "https://catawiki.com/jobs",
+    "location": "Amsterdam, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "celonis",
+    "domain": "celonis.com",
+    "careers": "https://www.celonis.com/careers/jobs/",
+    "location": "Munich, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "cisco",
+    "domain": "cisco.com",
+    "careers": "https://jobs.cisco.com/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "cloudflare",
+    "domain": "cloudflare.com",
+    "careers": "https://boards.greenhouse.io/cloudflare",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "cohere",
+    "domain": "cohere.com",
+    "careers": "https://cohere.com/careers",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "coinbase",
+    "domain": "coinbase.com",
+    "careers": "https://www.coinbase.com/careers/positions",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "comcast",
+    "domain": "comcast.com",
+    "careers": "https://comcast.wd5.myworkdayjobs.com/en-US/Comcast_Careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "confluent",
+    "domain": "confluent.io",
+    "careers": "https://confluent.wd1.myworkdayjobs.com/confluentcareers",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "contentful",
+    "domain": "contentful.com",
+    "careers": "https://www.contentful.com/careers/",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "contentsquare",
+    "domain": "contentsquare.com",
+    "careers": "https://contentsquare.com/careers/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "criteo",
+    "domain": "criteo.com",
+    "careers": "https://www.criteo.com/careers/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "crowdstrike",
+    "domain": "crowdstrike.com",
+    "careers": "https://www.crowdstrike.com/careers/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "d-fine",
+    "domain": "d-fine.com",
+    "careers": "https://www.d-fine.com/en/career/",
+    "location": "Frankfurt, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "darktrace",
+    "domain": "careers.darktrace.com",
+    "careers": "https://careers.darktrace.com/",
+    "location": "Cambridge, UK",
+    "region": "EU"
+  },
+  {
+    "name": "databricks",
+    "domain": "databricks.com",
+    "careers": "https://www.databricks.com/company/careers",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "datacom",
+    "domain": "datacom.com",
+    "careers": "https://datacom.com/nz/en/careers/search",
+    "location": "Auckland, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "datadog",
+    "domain": "datadoghq.com",
+    "careers": "https://www.datadoghq.com/careers/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "dataiku",
+    "domain": "dataiku.com",
+    "careers": "https://www.dataiku.com/company/careers/",
+    "location": "Paris, France / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "dbt-labs",
+    "domain": "getdbt.com",
+    "careers": "https://www.getdbt.com/about-us/careers#roles",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "deepl",
+    "domain": "deepl.com",
+    "careers": "https://jobs.ashbyhq.com/DeepL",
+    "location": "Cologne, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "deepmind",
+    "domain": "deepmind.google",
+    "careers": "https://deepmind.google/careers/",
+    "location": "London, UK",
+    "region": "EU"
+  },
+  {
+    "name": "deezer",
+    "domain": "deezer.com",
+    "careers": "https://www.deezerjobs.com/en/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "delivery-hero",
+    "domain": "careers.deliveryhero.com",
+    "careers": "https://careers.deliveryhero.com/jobs",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "dell",
+    "domain": "dell.com",
+    "careers": "https://www.dell.com/en-us/work/dell-jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "deloitte",
+    "domain": "deloitte.com",
+    "careers": "https://www2.deloitte.com/global/en/careers.html"
+  },
+  {
+    "name": "deloitte-global",
+    "domain": "apply.deloitte.com",
+    "careers": "https://www2.deloitte.com/global/en/careers.html",
+    "location": "Global / Relocation / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "deloitte-ce",
+    "domain": "apply.deloittece.com",
+    "careers": "https://apply.deloittece.com/pl_PL/careers/SearchJobs/",
+    "location": "Poland / Central Europe",
+    "region": "EU"
+  },
+  {
+    "name": "deloitte-india",
+    "domain": "apply.deloitte.com",
+    "careers": "https://www2.deloitte.com/in/en/careers.html",
+    "location": "India",
+    "region": "IN"
+  },
+  {
+    "name": "digitalocean",
+    "domain": "digitalocean.com",
+    "careers": "https://www.digitalocean.com/careers",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "discord",
+    "domain": "discord.com",
+    "careers": "https://discord.com/careers#all-jobs",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "docker",
+    "domain": "docker.com",
+    "careers": "https://www.docker.com/career-openings/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "doctolib",
+    "domain": "careers.doctolib.com",
+    "careers": "https://careers.doctolib.com/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "docusign",
+    "domain": "docusign.com",
+    "careers": "https://careers.docusign.com/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "dropbox",
+    "domain": "dropbox.com",
+    "careers": "https://www.dropbox.com/jobs",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "ebay",
+    "domain": "ebay.com",
+    "careers": "https://jobs.ebayinc.com/us/search-results",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "ecosia",
+    "domain": "ecosia.org",
+    "careers": "https://www.ecosia.org/about/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "einride",
+    "domain": "einride.tech",
+    "careers": "https://careers.einride.tech/",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "elastic",
+    "domain": "elastic.co",
+    "careers": "https://jobs.elastic.co/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "epam",
+    "domain": "epam.com",
+    "careers": "https://careers.epam.com/en/jobs?utm_medium=internal&utm_campaign=ta&utm_source=www.epam.com&utm_term=start-your-search-here&utm_content=job-search"
+  },
+  {
+    "name": "epidemic-sound",
+    "domain": "epidemicsound.com",
+    "careers": "https://jobs.ashbyhq.com/epidemic-sound",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "equinix",
+    "domain": "equinix.com",
+    "careers": "https://careers.equinix.com/homepage",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "euronet",
+    "domain": "euronetworldwide.com",
+    "careers": "https://www.euronet.com/about-euronet/careers/"
+  },
+  {
+    "name": "expedia",
+    "domain": "expedia.com",
+    "careers": "https://expedia.wd108.myworkdayjobs.com/en-US/search",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "ey-global",
+    "domain": "eycareers.ey.com",
+    "careers": "https://www.ey.com/en_gl/careers/job-search",
+    "location": "Global / Relocation / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "ey-india",
+    "domain": "ey.com",
+    "careers": "https://careers.ey.com/ey/search/",
+    "location": "India",
+    "region": "IN"
+  },
+  {
+    "name": "facebook",
+    "domain": "facebook.com",
+    "careers": "https://www.metacareers.com/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "faculty-ai",
+    "domain": "faculty.ai",
+    "careers": "https://faculty.ai/careers",
+    "location": "London, UK",
+    "region": "EU"
+  },
+  {
+    "name": "figma",
+    "domain": "figma.com",
+    "careers": "https://www.figma.com/careers/?#open-roles",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "figured",
+    "domain": "figured.com",
+    "careers": "https://figured.teamtailor.com/jobs",
+    "location": "Auckland, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "fiserv",
+    "domain": "fiserv.com",
+    "careers": "https://careers.fiserv.com/us/en/search-results",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "fiverr",
+    "domain": "fiverr.com",
+    "careers": "https://www.fiverr.com/careers"
+  },
+  {
+    "name": "flexera",
+    "domain": "flexera.com",
+    "careers": "https://flexerasoftware.wd1.myworkdayjobs.com/FlexeraSoftware"
+  },
+  {
+    "name": "flixbus",
+    "domain": "flixbus.com",
+    "careers": "https://flix.careers/flixbus/",
+    "location": "Munich, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "frontify",
+    "domain": "frontify.com",
+    "careers": "https://jobs.lever.co/frontify",
+    "location": "St. Gallen, Switzerland",
+    "region": "EU"
+  },
+  {
+    "name": "futurice",
+    "domain": "futurice.com",
+    "careers": "https://www.futurice.com/careers/open-positions",
+    "location": "Helsinki, Finland",
+    "region": "EU"
+  },
+  {
+    "name": "getyourguide",
+    "domain": "careers.getyourguide.com",
+    "careers": "https://careers.getyourguide.com/",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "giskard",
+    "domain": "giskard.ai",
+    "careers": "https://www.giskard.ai/careers",
+    "location": "Paris, France / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "github",
+    "domain": "github.com",
+    "careers": "https://careers-githubinc.icims.com/jobs/login?loginOnly=1",
+    "github": "https://github.com",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "gitlab",
+    "domain": "gitlab.com",
+    "careers": "https://about.gitlab.com/jobs/"
+  },
+  {
+    "name": "glovo",
+    "domain": "jobs.glovoapp.com",
+    "careers": "https://jobs.glovoapp.com/",
+    "location": "Barcelona, Spain",
+    "region": "EU"
+  },
+  {
+    "name": "google",
+    "domain": "google.com",
+    "careers": "https://www.google.com/about/careers/applications/jobs/results",
+    "github": "https://github.com/google",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "grab",
+    "domain": "grab.com",
+    "careers": "https://grab.careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "grafana-labs",
+    "domain": "grafana.com",
+    "careers": "https://job-boards.greenhouse.io/grafanalabs",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "grant-thornton-global",
+    "domain": "grantthornton.global",
+    "careers": "https://www.grantthornton.global/en/careers/",
+    "location": "Global / Relocation / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "grant-thornton-india",
+    "domain": "grantthornton.in",
+    "careers": "https://www.grantthornton.in/careers/",
+    "location": "India",
+    "region": "IN"
+  },
+  {
+    "name": "graphcore",
+    "domain": "graphcore.ai",
+    "careers": "https://job-boards.greenhouse.io/graphcore/jobs/8315158002",
+    "location": "Bristol, UK",
+    "region": "EU"
+  },
+  {
+    "name": "hashicorp",
+    "domain": "hashicorp.com",
+    "careers": "https://www.ibm.com/careers/search?q=hashicorp",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "hedvig",
+    "domain": "hedvig.com",
+    "careers": "https://www.hedvig.com/se/hedvig/karriar",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "helsing",
+    "domain": "helsing.ai",
+    "careers": "https://helsing.ai/jobs",
+    "location": "Munich, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "hootsuite",
+    "domain": "hootsuite.com",
+    "careers": "https://careers.hootsuite.com/",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "hp",
+    "domain": "hp.com",
+    "careers": "https://jobs.hp.com/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "huawei",
+    "domain": "huawei.com",
+    "careers": "https://career.huawei.com/reccampportal/portal5/index.html"
+  },
+  {
+    "name": "hugging-face",
+    "domain": "huggingface.co",
+    "careers": "https://apply.workable.com/huggingface/",
+    "location": "Paris, France / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "ibm",
+    "domain": "ibm.com",
+    "careers": "https://www.ibm.com/careers/search",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "ice",
+    "domain": "theice.com",
+    "careers": "https://www.ice.com/careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "idealo",
+    "domain": "idealo.de",
+    "careers": "https://jobs.idealo.com/",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "improbable",
+    "domain": "careers.improbable.io",
+    "careers": "https://careers.improbable.io/",
+    "location": "London, UK",
+    "region": "EU"
+  },
+  {
+    "name": "indeed",
+    "domain": "indeed.com",
+    "careers": "https://www.indeed.com/careers",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "intel",
+    "domain": "intel.com",
+    "careers": "https://jobs.intel.com/en/search-jobs",
+    "github": "https://github.com/intel",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "intuit",
+    "domain": "intuit.com",
+    "careers": "https://www.intuit.com/careers/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "keysight",
+    "domain": "keysight.com",
+    "careers": "https://keysight.wd1.myworkdayjobs.com/keysightcareers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "king",
+    "domain": "king.com",
+    "careers": "https://careers.king.com/",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "klarna",
+    "domain": "klarna.com",
+    "careers": "https://jobs.deel.com/job-boards/klarna",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "kpmg-global",
+    "domain": "careers.kpmg.com",
+    "careers": "https://kpmg.com/xx/en/careers.html",
+    "location": "Global / Relocation / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "kpmg-india",
+    "domain": "kpmg.com",
+    "careers": "https://kpmg.com/in/en/careers.html",
+    "location": "India",
+    "region": "IN"
+  },
+  {
+    "name": "leapsome",
+    "domain": "leapsome.com",
+    "careers": "https://www.leapsome.com/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "linkedin",
+    "domain": "linkedin.com",
+    "careers": "https://www.linkedin.com/company/linkedin/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "lunar",
+    "domain": "lunar.app",
+    "careers": "https://jobs.ashbyhq.com/lunar",
+    "location": "Aarhus, Denmark",
+    "region": "EU"
+  },
+  {
+    "name": "lyft",
+    "domain": "lyft.com",
+    "careers": "https://www.lyft.com/careers",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "mambu",
+    "domain": "mambu.com",
+    "careers": "https://mambu.com/en/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "mastercard",
+    "domain": "mastercard.com",
+    "careers": "https://mastercard.wd1.myworkdayjobs.com/CorporateCareers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "merantix",
+    "domain": "merantix.com",
+    "careers": "https://merantix.com/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "meta",
+    "domain": "meta.com",
+    "careers": "https://www.metacareers.com/jobs",
+    "github": "https://github.com/facebook",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "microsoft",
+    "domain": "microsoft.com",
+    "careers": "https://careers.microsoft.com/us/en/search-results",
+    "github": "https://github.com/microsoft",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "mindpeak",
+    "domain": "mindpeak.ai",
+    "careers": "https://mindpeak.ai/careers/",
+    "location": "Hamburg, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "mistral-ai",
+    "domain": "mistral.ai",
+    "careers": "https://jobs.ashbyhq.com/mistral.ai",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "mollie",
+    "domain": "jobs.mollie.com",
+    "careers": "https://jobs.mollie.com/",
+    "location": "Amsterdam, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "monese",
+    "domain": "monese.com",
+    "careers": "https://careers.monese.com/",
+    "location": "London, UK / Tallinn, Estonia",
+    "region": "EU"
+  },
+  {
+    "name": "mongodb",
+    "domain": "mongodb.com",
+    "careers": "https://www.mongodb.com/company/careers/see-jobs",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "monte-carlo-data",
+    "domain": "montecarlodata.com",
+    "careers": "https://jobs.ashbyhq.com/montecarlodata",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "monzo",
+    "domain": "monzo.com",
+    "careers": "https://job-boards.greenhouse.io/monzo",
+    "location": "London, UK",
+    "region": "EU"
+  },
+  {
+    "name": "motorola-solutions",
+    "domain": "motorolasolutions.com",
+    "careers": "https://motorolasolutions.wd1.myworkdayjobs.com/motorolacareers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "n26",
+    "domain": "n26.com",
+    "careers": "https://n26.com/en-eu/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "nasdaq",
+    "domain": "nasdaq.com",
+    "careers": "https://www.nasdaq.com/about/careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "netflix",
+    "domain": "netflix.com",
+    "careers": "https://explore.jobs.netflix.net/careers"
+  },
+  {
+    "name": "nosto",
+    "domain": "nosto.com",
+    "careers": "https://www.nosto.com/careers/",
+    "location": "Helsinki, Finland / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "nvidia",
+    "domain": "nvidia.com",
+    "careers": "https://jobs.nvidia.com/careers",
+    "github": "https://github.com/NVIDIA",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "okta",
+    "domain": "okta.com",
+    "careers": "https://www.okta.com/company/careers/job-listing/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "omio",
+    "domain": "omio.com",
+    "careers": "https://www.omio.com/corporate/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "oracle",
+    "domain": "oracle.com",
+    "careers": "https://www.oracle.com/careers/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "ovhcloud",
+    "domain": "ovhcloud.com",
+    "careers": "https://careers.ovhcloud.com/en/",
+    "location": "Roubaix, France",
+    "region": "EU"
+  },
+  {
+    "name": "palantir",
+    "domain": "palantir.com",
+    "careers": "https://jobs.lever.co/palantir",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "payfit",
+    "domain": "payfit.com",
+    "careers": "https://www.payfit.com/careers/",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "paypal",
+    "domain": "paypal.com",
+    "careers": "https://careers.pypl.com/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "peltarion",
+    "domain": "peltarion.com",
+    "careers": "https://peltarion.com/careers",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "personio",
+    "domain": "personio.com",
+    "careers": "https://www.personio.com/careers/job-offers/",
+    "location": "Munich, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "pinterest",
+    "domain": "pinterest.com",
+    "careers": "https://careers.pinterest.com/search-jobs",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "pipedrive",
+    "domain": "pipedrive.com",
+    "careers": "https://www.pipedrive.com/en/jobs",
+    "location": "Tallinn, Estonia / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "plaid",
+    "domain": "plaid.com",
+    "careers": "https://plaid.com/careers/#search",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "pubmatic",
+    "domain": "pubmatic.com",
+    "careers": "https://pubmatic.com/careers/job-search/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "pushpay",
+    "domain": "pushpay.com",
+    "careers": "https://job-boards.greenhouse.io/pushpay",
+    "location": "Auckland, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "pwc",
+    "domain": "pwc.com",
+    "careers": "https://www.pwc.com/gx/en/careers.html"
+  },
+  {
+    "name": "pwc-global",
+    "domain": "jobs.pwc.com",
+    "careers": "https://www.pwc.com/gx/en/careers.html",
+    "location": "Global / Relocation / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "pwc-india",
+    "domain": "pwc.in",
+    "careers": "https://www.pwc.in/careers.html",
+    "location": "India",
+    "region": "IN"
+  },
+  {
+    "name": "qdrant",
+    "domain": "qdrant.tech",
+    "careers": "https://jobs.ashbyhq.com/qdrant.tech",
+    "location": "Berlin, Germany / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "qualcomm",
+    "domain": "qualcomm.com",
+    "careers": "https://careers.qualcomm.com/careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "quantco",
+    "domain": "quantco.com",
+    "careers": "https://jobs.lever.co/quantco-",
+    "location": "Munich, Germany / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "quantum-metric",
+    "domain": "quantummetric.com",
+    "careers": "https://jobs.lever.co/quantummetric",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "raisin",
+    "domain": "raisin.com",
+    "careers": "https://job-boards.eu.greenhouse.io/raisin",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "raygun",
+    "domain": "raygun.com",
+    "careers": "https://raygun.com/careers",
+    "location": "Wellington, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "reaktor",
+    "domain": "reaktor.com",
+    "careers": "https://www.reaktor.com/careers/all-open-positions",
+    "location": "Helsinki, Finland",
+    "region": "EU"
+  },
+  {
+    "name": "redhat",
+    "domain": "redhat.com",
+    "careers": "https://www.redhat.com/en/jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "revolut",
+    "domain": "revolut.com",
+    "careers": "https://www.revolut.com/careers",
+    "location": "London, UK / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "rippling",
+    "domain": "rippling.com",
+    "careers": "https://www.rippling.com/careers",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "robinhood",
+    "domain": "robinhood.com",
+    "careers": "https://robinhood.com/careers",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "salesforce",
+    "domain": "salesforce.com",
+    "careers": "https://careers.salesforce.com/en/jobs/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "samsung",
+    "domain": "samsung.com",
+    "careers": "https://sec.wd3.myworkdayjobs.com/Samsung_Careers"
+  },
+  {
+    "name": "samsung-electronics",
+    "domain": "samsung.com",
+    "careers": "https://sec.wd3.myworkdayjobs.com/Samsung_Careers"
+  },
+  {
+    "name": "sap",
+    "domain": "sap.com",
+    "careers": "https://jobs.sap.com/search/",
+    "ats_platform": "successfactors"
+  },
+  {
+    "name": "scandit",
+    "domain": "scandit.com",
+    "careers": "https://www.scandit.com/careers/",
+    "location": "Zurich, Switzerland",
+    "region": "EU"
+  },
+  {
+    "name": "scout24",
+    "domain": "scout24.com",
+    "careers": "https://www.scout24.com/en/career",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "seequent",
+    "domain": "seequent.com",
+    "careers": "https://www.seequent.com/about/careers/",
+    "location": "Christchurch, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "sennder",
+    "domain": "sennder.com",
+    "careers": "https://careers.smartrecruiters.com/SennderGmbH",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "servicenow",
+    "domain": "servicenow.com",
+    "careers": "https://careers.servicenow.com/search-jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "sharesies",
+    "domain": "sharesies.nz",
+    "careers": "https://www.sharesies.nz/careers",
+    "location": "Wellington, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "shift-technology",
+    "domain": "shift-technology.com",
+    "careers": "https://www.shift-technology.com/careers#open-roles",
+    "location": "Paris, France",
+    "region": "EU"
+  },
+  {
+    "name": "shopify",
+    "domain": "shopify.com",
+    "careers": "https://www.shopify.com/careers/search"
+  },
+  {
+    "name": "sii-poland",
+    "domain": "sii.pl",
+    "careers": "https://sii.pl/en/career/",
+    "location": "Warsaw, Poland / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "silo-ai",
+    "domain": "silo.ai",
+    "careers": "https://careers.amd.com/careers-home/jobs?keywords=Silo%20AI",
+    "location": "Helsinki, Finland",
+    "region": "EU"
+  },
+  {
+    "name": "sinch",
+    "domain": "sinch.com",
+    "careers": "https://www.sinch.com/careers/",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "slack",
+    "domain": "slack.com",
+    "careers": "https://slack.com/careers",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "snap",
+    "domain": "snap.com",
+    "careers": "https://careers.snap.com/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "snowflake",
+    "domain": "snowflake.com",
+    "careers": "https://www.snowflake.com/careers/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "sony",
+    "domain": "sony.com",
+    "careers": "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers"
+  },
+  {
+    "name": "spotify",
+    "domain": "spotify.com",
+    "careers": "https://www.lifeatspotify.com/jobs",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "stability-ai",
+    "domain": "stability.ai",
+    "careers": "https://stability.ai/careers",
+    "location": "London, UK / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "starling-bank",
+    "domain": "starlingbank.com",
+    "careers": "https://www.starlingbank.com/careers/",
+    "location": "London, UK",
+    "region": "EU"
+  },
+  {
+    "name": "stripe",
+    "domain": "stripe.com",
+    "careers": "https://stripe.com/jobs/search",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "sumup",
+    "domain": "sumup.com",
+    "careers": "https://www.sumup.com/careers/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "supercell",
+    "domain": "supercell.com",
+    "careers": "https://supercell.com/en/careers/",
+    "location": "Helsinki, Finland",
+    "region": "EU"
+  },
+  {
+    "name": "t-mobile",
+    "domain": "t-mobile.com",
+    "careers": "https://t-mobile.wd1.myworkdayjobs.com/tmobile",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "taxfix",
+    "domain": "taxfix.de",
+    "careers": "https://taxfix.de/en/job-openings/",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "tencent",
+    "domain": "tencent.com",
+    "careers": "https://careers.tencent.com/search.html"
+  },
+  {
+    "name": "tesla",
+    "domain": "tesla.com",
+    "careers": "https://www.tesla.com/careers/search",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "texas-instruments",
+    "domain": "ti.com",
+    "careers": "https://careers.ti.com/search-jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "tiktok",
+    "domain": "tiktok.com",
+    "careers": "https://careers.tiktok.com/search"
+  },
+  {
+    "name": "tomtom",
+    "domain": "jobs.tomtom.com",
+    "careers": "https://www.tomtom.com/careers/",
+    "location": "Amsterdam, Netherlands",
+    "region": "EU"
+  },
+  {
+    "name": "trade-me",
+    "domain": "trademe.co.nz",
+    "careers": "https://www.trademe.co.nz/c/job-careers-at-trade-me",
+    "location": "Wellington, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "trade-republic",
+    "domain": "traderepublic.com",
+    "careers": "https://traderepublic.com/careers",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "trivago",
+    "domain": "careers.trivago.com",
+    "careers": "https://careers.trivago.com/",
+    "location": "D\u00fcsseldorf, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "trustpilot",
+    "domain": "jobs.trustpilot.com",
+    "careers": "https://jobs.trustpilot.com/",
+    "location": "Copenhagen, Denmark",
+    "region": "EU"
+  },
+  {
+    "name": "twilio",
+    "domain": "twilio.com",
+    "careers": "https://jobs.twilio.com/careers",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "typeform",
+    "domain": "typeform.com",
+    "careers": "https://www.typeform.com/careers/",
+    "location": "Barcelona, Spain",
+    "region": "EU"
+  },
+  {
+    "name": "uber",
+    "domain": "uber.com",
+    "careers": "https://jobs.uber.com/en/",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "uipath",
+    "domain": "uipath.com",
+    "careers": "https://careers.uipath.com/search-jobs",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "unity-technologies",
+    "domain": "careers.unity.com",
+    "careers": "https://careers.unity.com/search-jobs",
+    "location": "Copenhagen, Denmark / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "Veniton",
+    "domain": "ventionteams.com",
+    "careers": "https://join.ventionteams.com/job-openings",
+    "location": "Remote",
+    "region": "Remote"
+  },
+  {
+    "name": "veriff",
+    "domain": "veriff.com",
+    "careers": "https://www.veriff.com/careers",
+    "location": "Tallinn, Estonia",
+    "region": "EU"
+  },
+  {
+    "name": "verizon",
+    "domain": "verizon.com",
+    "careers": "https://verizon.wd1.myworkdayjobs.com/verizoncareers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "visa",
+    "domain": "visa.com",
+    "careers": "https://usa.visa.com/careers.html",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "vmware",
+    "domain": "vmware.com",
+    "careers": "https://broadcom.wd1.myworkdayjobs.com/External_Career",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "voi-technology",
+    "domain": "voi.com",
+    "careers": "https://careers.voi.com/jobs",
+    "location": "Stockholm, Sweden",
+    "region": "EU"
+  },
+  {
+    "name": "wallapop",
+    "domain": "wallapop.com",
+    "careers": "https://job-boards.eu.greenhouse.io/wallapop",
+    "location": "Barcelona, Spain",
+    "region": "EU"
+  },
+  {
+    "name": "wayve",
+    "domain": "wayve.ai",
+    "careers": "https://wayve.ai/careers/",
+    "location": "London, UK",
+    "region": "EU"
+  },
+  {
+    "name": "weaviate",
+    "domain": "weaviate.io",
+    "careers": "https://weaviate.io/company/careers",
+    "location": "Amsterdam, Netherlands / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "weights--biases",
+    "domain": "wandb.ai",
+    "careers": "https://wandb.ai/site/careers",
+    "location": "Remote (EU-friendly)",
+    "region": "Remote"
+  },
+  {
+    "name": "wise",
+    "domain": "wise.jobs",
+    "careers": "https://www.wise.jobs/",
+    "location": "London, UK / Tallinn, Estonia / Remote",
+    "region": "EU"
+  },
+  {
+    "name": "wisetech",
+    "domain": "wisetechglobal.com",
+    "careers": "https://www.wisetechglobal.com/careers/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "wish",
+    "domain": "wish.com",
+    "careers": "https://www.wish.com/careers"
+  },
+  {
+    "name": "wix",
+    "domain": "wix.com",
+    "careers": "https://www.wix.com/jobs",
+    "ats_platform": "lever"
+  },
+  {
+    "name": "wolt",
+    "domain": "careers.wolt.com",
+    "careers": "https://careers.wolt.com/en",
+    "location": "Helsinki, Finland",
+    "region": "EU"
+  },
+  {
+    "name": "workday",
+    "domain": "workday.com",
+    "careers": "https://www.workday.com/en-us/company/careers.html",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "xero",
+    "domain": "xero.com",
+    "careers": "https://www.xero.com/about/careers/",
+    "location": "Wellington, New Zealand",
+    "region": "NZ"
+  },
+  {
+    "name": "zalando",
+    "domain": "zalando.com",
+    "careers": "https://jobs.zalando.com",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "zendesk",
+    "domain": "zendesk.com",
+    "careers": "https://www.zendesk.com/careers/",
+    "ats_platform": "greenhouse"
+  },
+  {
+    "name": "zeotap",
+    "domain": "zeotap.com",
+    "careers": "https://zeotap.com/careers/",
+    "location": "Berlin, Germany",
+    "region": "EU"
+  },
+  {
+    "name": "zillow",
+    "domain": "zillow.com",
+    "careers": "https://zillow.wd5.myworkdayjobs.com/Zillow_Group_External",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "zoom",
+    "domain": "zoom.us",
+    "careers": "https://zoom.us/en/careers",
+    "ats_platform": "workday"
+  },
+  {
+    "name": "zscaler",
+    "domain": "zscaler.com",
+    "careers": "https://www.zscaler.com/careers",
+    "ats_platform": "workday"
+  }
+]
