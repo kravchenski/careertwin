@@ -242,6 +242,40 @@ uv run python main.py info
 
 ---
 
+## Running with Docker
+
+The fastest way to run the full stack (Angular frontend + FastAPI backend + agent browser) is Docker Compose.
+
+```bash
+# Copy the environment file and add your API keys
+cp .env.example .env
+
+# Build and start both services
+docker compose up --build
+
+# Or use the helper script
+./start.sh --docker
+```
+
+- Frontend:  http://localhost:8080
+- Backend API: http://localhost:8000
+- VNC (agent browser): http://localhost:6080
+
+The Nginx frontend proxies `/api/`, `/api/v1/`, `/outputs/`, and `/screenshots/` to the backend, so the SPA and API share one origin — no CORS or manual proxy config needed.
+
+To run with a local model provider (LM Studio / Ollama), point the matching
+`*_BASE_URL` variables at `host.docker.internal` in your `.env` (already the default).
+
+Stop and remove containers:
+
+```bash
+docker compose down
+```
+
+Persist data (DB, generated outputs) in the `careertwin-data` named volume.
+
+---
+
 ## Contributing
 
 Contributions are welcome. Please open an issue first to discuss what you'd like to change.
