@@ -357,13 +357,7 @@ def main() -> None:
 
     orchestrator = CareerTwinOrchestrator()
 
-    graph_path = Path("career_graph.json")
-    if graph_path.exists() and command not in ("collect", ""):
-        try:
-            data = json.loads(graph_path.read_text())
-            orchestrator.graph = CareerGraph.model_validate(data)
-        except Exception:
-            pass
+    _try_load_saved_graph(orchestrator, command)
 
     if command == "collect":
         _handle_collect(args, orchestrator)
@@ -398,6 +392,16 @@ def main() -> None:
         _handle_dna(args, orchestrator)
     else:
         parser.print_help()
+
+
+def _try_load_saved_graph(orchestrator: CareerTwinOrchestrator, command: str) -> None:
+    graph_path = Path("career_graph.json")
+    if graph_path.exists() and command not in ("collect", ""):
+        try:
+            data = json.loads(graph_path.read_text())
+            orchestrator.graph = CareerGraph.model_validate(data)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
