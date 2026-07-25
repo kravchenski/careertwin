@@ -9,7 +9,7 @@
   {
     "name": "accenture",
     "domain": "accenture.com",
-    "careers": "https://www.accenture.com/us-en/careers/jobsearch",
+    "careers": "https://www.accenture.com/us-en/careers/jobsearch?jt=Early%20Career",
     "ats_platform": "workday"
   },
   {
@@ -28,7 +28,7 @@
   {
     "name": "adobe",
     "domain": "adobe.com",
-    "careers": "https://careers.adobe.com/us/en/search-results",
+    "careers": "https://careers.adobe.com/us/en/search-results?keywords=intern",
     "ats_platform": "workday"
   },
   {
@@ -1434,7 +1434,7 @@
     "region": "EU"
   },
   {
-    "name": "Veniton",
+    "name": "Vention",
     "domain": "ventionteams.com",
     "careers": "https://join.ventionteams.com/job-openings",
     "location": "Remote",

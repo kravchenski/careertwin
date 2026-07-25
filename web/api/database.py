@@ -111,6 +111,38 @@ def _init_db() -> None:
                 status TEXT DEFAULT 'new'
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS discovered_job_apis (
+                company TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request_headers TEXT NOT NULL DEFAULT '{}',
+                post_data TEXT,
+                jobs_path TEXT NOT NULL DEFAULT '[]',
+                requires_session INTEGER NOT NULL DEFAULT 0,
+                fail_count INTEGER NOT NULL DEFAULT 0,
+                discovered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS job_applications (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                company TEXT NOT NULL,
+                position TEXT NOT NULL,
+                domain TEXT DEFAULT '',
+                job_url TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'applied',
+                applied_at TEXT,
+                phone_screen_at TEXT,
+                technical_at TEXT,
+                offer_at TEXT,
+                notes TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
 
 
@@ -279,6 +311,29 @@ class JobApplyRequest(BaseModel):
     @classmethod
     def job_url_must_be_public(cls, v: str) -> str:
         return _validate_public_url(v)
+
+
+_VALID_APPLICATION_STATUSES = frozenset({"applied", "phone_screen", "technical", "offer", "rejected"})
+
+
+class JobApplicationCreate(BaseModel):
+    username: str = Field("default", min_length=1, max_length=64)
+    company: str = Field(..., min_length=1, max_length=200)
+    position: str = Field(..., min_length=1, max_length=200)
+    domain: str = Field("", max_length=200)
+    job_url: str = Field("", max_length=2000)
+
+
+class JobApplicationUpdate(BaseModel):
+    status: str | None = None
+    note: str | None = Field(None, max_length=2000)
+
+    @field_validator("status")
+    @classmethod
+    def status_allowlist(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_APPLICATION_STATUSES:
+            raise ValueError(f"Unknown status: {v!r}")
+        return v
 
 
 class JobCollectRequest(BaseModel):
