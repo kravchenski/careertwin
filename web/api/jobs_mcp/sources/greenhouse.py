@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
 
 
 class GreenhouseSource(BaseSourceAdapter):
@@ -28,12 +28,12 @@ class GreenhouseSource(BaseSourceAdapter):
         results = []
         for j in jobs:
             title = j.get("title", "")
-            is_intern = "intern" in title.lower()
+            is_intern = is_internship_title(title)
             if intern_only and not is_intern:
                 continue
 
             loc = j.get("location", {})
-            location_name = loc.get("name", "") if isinstance(loc, dict) else str(loc)
+            location_name = clean_location(loc.get("name", "") if isinstance(loc, dict) else str(loc))
 
             departments = [d.get("name", "") for d in j.get("departments", []) if isinstance(d, dict)]
 

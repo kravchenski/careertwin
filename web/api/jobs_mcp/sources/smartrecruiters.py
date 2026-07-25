@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
 
 
 class SmartRecruitersSource(BaseSourceAdapter):
@@ -37,7 +37,7 @@ class SmartRecruitersSource(BaseSourceAdapter):
         results = []
         for p in postings:
             title = p.get("name", "")
-            is_intern = "intern" in title.lower()
+            is_intern = is_internship_title(title)
             if intern_only and not is_intern:
                 continue
 
@@ -51,7 +51,7 @@ class SmartRecruitersSource(BaseSourceAdapter):
                 company=company_id,
                 title=title,
                 url=board_url or f"https://smartrecruiters.com/{company_id}/{ref}",
-                location=location_name.strip(", "),
+                location=clean_location(location_name.strip(", ")),
                 description=p.get("JobDescription", {}).get("plainTextDescription", "")[:2000],
                 employment_type=p.get("type", ""),
                 is_intern=is_intern,

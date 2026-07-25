@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
 
 
 class LeverSource(BaseSourceAdapter):
@@ -27,14 +27,14 @@ class LeverSource(BaseSourceAdapter):
         results = []
         for p in postings:
             title = p.get("text", "")
-            is_intern = "intern" in title.lower()
+            is_intern = is_internship_title(title)
             if intern_only and not is_intern:
                 continue
 
             categories = p.get("categories", {})
             department = categories.get("department", "")
             team = categories.get("team", "")
-            location = categories.get("location", "")
+            location = clean_location(categories.get("location", ""))
 
             results.append(JobListing(
                 source=self.source_name,

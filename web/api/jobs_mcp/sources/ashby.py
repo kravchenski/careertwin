@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
 
 
 class AshbySource(BaseSourceAdapter):
@@ -45,7 +45,7 @@ class AshbySource(BaseSourceAdapter):
         results = []
         for j in jobs:
             title = j.get("title", "")
-            is_intern = "intern" in title.lower()
+            is_intern = is_internship_title(title)
             if intern_only and not is_intern:
                 continue
 
@@ -54,7 +54,7 @@ class AshbySource(BaseSourceAdapter):
                 company=company_slug,
                 title=title,
                 url=f"https://jobs.ashbyhq.com/{company_slug}/{j.get('id', '')}",
-                location=j.get("locationName", ""),
+                location=clean_location(j.get("locationName", "")),
                 employment_type=j.get("employmentType", "") or j.get("teamName", ""),
                 is_intern=is_intern,
                 raw=j,

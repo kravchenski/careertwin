@@ -7,7 +7,7 @@ import re
 import aiohttp
 from bs4 import BeautifulSoup
 
-from ..base import BaseSourceAdapter, JobListing
+from ..base import BaseSourceAdapter, JobListing, is_internship_title
 
 
 class WorkdaySource(BaseSourceAdapter):
@@ -73,7 +73,7 @@ class WorkdaySource(BaseSourceAdapter):
         results = []
         for j in jobs:
             title = j.get("title", "")
-            is_intern = "intern" in title.lower()
+            is_intern = is_internship_title(title)
             if intern_only and not is_intern:
                 continue
 

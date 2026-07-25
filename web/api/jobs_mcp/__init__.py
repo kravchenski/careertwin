@@ -13,6 +13,8 @@ from .sources.ashby import AshbySource
 from .sources.smartrecruiters import SmartRecruitersSource
 from .sources.workday import WorkdaySource
 
+from job_api_discovery import get_company_jobs_via_discovery
+
 logger = logging.getLogger(__name__)
 
 ADAPTERS: list[BaseSourceAdapter] = [
@@ -71,6 +73,27 @@ async def search_company_jobs(
     return []
 
 
+async def _search_via_discovered_api(company_name: str, careers_url: str) -> list[JobListing]:
+    """Fallback for companies with no known ATS: try the cache-and-replay
+    jobs-API discovery (see job_api_discovery.py) before giving up on them."""
+    try:
+        raw_jobs = await get_company_jobs_via_discovery(company_name, careers_url)
+    except Exception as e:
+        logger.warning("discovered-api search failed for %s: %s", company_name, e)
+        return []
+    return [
+        JobListing(
+            source="discovered_api",
+            company=company_name,
+            title=j["title"],
+            url=j.get("url", ""),
+            location=j.get("location", ""),
+            description=j.get("description", ""),
+        )
+        for j in raw_jobs
+    ]
+
+
 async def search_all_companies(
     companies: list[dict],
     query: str = "",
@@ -103,7 +126,10 @@ async def search_all_companies(
             if not platform and company.get("url"):
                 platform = detect_ats_from_url(company["url"])
             try:
-                return await search_company_jobs(name, platform, query, limit_per_company, intern_only)
+                jobs = await search_company_jobs(name, platform, query, limit_per_company, intern_only)
+                if not jobs and company.get("url"):
+                    jobs = await _search_via_discovered_api(name, company["url"])
+                return jobs
             finally:
                 completed += 1
                 if on_progress:
