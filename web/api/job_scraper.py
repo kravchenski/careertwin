@@ -215,15 +215,19 @@ def _build_search_query(
     return " ".join(parts)
 
 
+_INTERN_MARKER_RE = re.compile(
+    r"\bintern(s|ship)?\b|\bco-?op\b|\bstudent\b|\bapprentice\b|\btrainee\b|"
+    r"\bgraduate\s+programme?\b|\bentry[\s-]?level\b|\bno experience\b|\bnew grad\b",
+    re.IGNORECASE,
+)
+
+
 def _is_intern_related(title: str, description: str = "") -> bool:
-    """Check if a job is intern-related."""
-    combined = f"{title} {description}".lower()
-    intern_markers = [
-        "intern", "internship", "intern programme", "internship program",
-        "student", "co-op", "coop", "apprentice", "trainee",
-        "graduate programme", "graduate program", "entry level",
-    ]
-    return any(marker in combined for marker in intern_markers)
+    """Check if a job is intern-related or otherwise requires no prior
+    professional experience. Word-boundary matching — a naive substring
+    check on "intern" also fires on "Internal", "International", etc."""
+    combined = f"{title} {description}"
+    return bool(_INTERN_MARKER_RE.search(combined))
 
 
 

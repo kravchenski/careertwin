@@ -35,7 +35,7 @@ from job_scraper import _web_search_jobs, scrape_job_url, _build_search_query, _
 from resume_service import discover_jobs_from_graph, render_markdown_resume_pdf
 from seniority import is_senior_or_mid
 
-MIN_MATCH_SCORE = 30
+MIN_MATCH_SCORE = 80
 
 logger = logging.getLogger("careertwin.api")
 
@@ -354,6 +354,8 @@ async def collect_jobs(req: JobCollectRequest) -> dict[str, Any]:
         if is_senior_or_mid(f"{job.get('title', '')} {description}"):
             continue
 
+        job["is_intern"] = _is_intern_related(job.get("title", ""), description)
+
         try:
             match_text = description
             if len(description) < 50 and job.get("title"):
@@ -373,7 +375,12 @@ async def collect_jobs(req: JobCollectRequest) -> dict[str, Any]:
             job["description"] = job.get("description", "")[:500]
         scored_jobs.append(job)
 
-    scored_jobs = [j for j in scored_jobs if j.get("match_score", 0) >= MIN_MATCH_SCORE]
+    # Internships are exempt from MIN_MATCH_SCORE — see the same carve-out in
+    # jobs_mcp.py's _score_mcp_jobs for why.
+    scored_jobs = [
+        j for j in scored_jobs
+        if j.get("match_score", 0) >= MIN_MATCH_SCORE or j.get("is_intern")
+    ]
     scored_jobs.sort(key=lambda j: j.get("match_score", 0), reverse=True)
     logger.info(
         "Collected %d jobs (query=%s, intern=%s, companies=%s)",
@@ -728,13 +735,19 @@ async def generate_application_status(task_id: str):
 
 @router.get("/v1/jobs/scan/logs")
 async def scan_logs():
-    """SSE endpoint that streams scan log messages in real-time."""
-    from job_scanner import get_scan_log_queue, _scan_log_history
+    """SSE endpoint that streams scan log messages in real-time.
+
+    Deliberately does NOT replay _scan_log_history on connect: the frontend
+    opens this connection right before firing the search request, so
+    replaying history here meant every fresh "Collect" click first dumped
+    the *previous* run's tail-end log lines before the new run's own lines
+    arrived a moment later — producing exactly the duplicated/jumbled log
+    output this was rewritten to fix. New connections only ever see genuinely
+    new entries from here on.
+    """
+    from job_scanner import get_scan_log_queue
 
     async def event_generator():
-        for entry in list(_scan_log_history):
-            yield f"data: {json.dumps(entry)}\n\n"
-
         queue = get_scan_log_queue()
         waited = 0
         while queue is None and waited < 120:
@@ -747,8 +760,17 @@ async def scan_logs():
             return
 
         while True:
+            # The frontend opens this SSE connection right before firing the
+            # search request that actually calls reset_scan_log() — which
+            # swaps in a brand-new queue object. If that swap happens after
+            # we grabbed our reference above, we'd be stuck listening on an
+            # orphaned queue forever. Re-check on every iteration and switch
+            # to the current queue if a reset replaced it.
+            current_queue = get_scan_log_queue()
+            if current_queue is not None and current_queue is not queue:
+                queue = current_queue
             try:
-                entry = await asyncio.wait_for(queue.get(), timeout=30.0)
+                entry = await asyncio.wait_for(queue.get(), timeout=1.0)
                 yield f"data: {json.dumps(entry)}\n\n"
             except asyncio.TimeoutError:
                 yield f": keepalive\n\n"

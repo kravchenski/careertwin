@@ -23,6 +23,17 @@ COMPANIES_FILE = Path(__file__).parent / "companies.json"
 _scan_log_queue: asyncio.Queue | None = None
 _scan_log_history: deque = deque(maxlen=200)
 
+# Serializes company-scan runs so two concurrent /v1/jobs/mcp/search calls
+# (a double-click, a stuck request retried, multiple tabs) can never both be
+# emitting progress into the shared scan-log queue at once — that was the
+# actual cause of counters resetting mid-stream and companies repeating with
+# a lower count than a moment before.
+_scan_lock = asyncio.Lock()
+
+
+def get_scan_lock() -> asyncio.Lock:
+    return _scan_lock
+
 
 def _emit_scan_log(msg: str, level: str = "info"):
     """Push a log message to the SSE queue and history."""
@@ -232,8 +243,17 @@ async def _fetch_markdown_crawl4ai(url: str, wait_for_js: bool = True) -> str:
 
 
 def _parse_markdown_links(markdown: str) -> list[tuple[str, str]]:
-    """Extract all [text](url) links from markdown."""
-    return re.findall(r"\[([^\]]*)\]\(([^)]+)\)", markdown)
+    """Extract all [text](url) links from markdown.
+
+    Markdown also allows an optional quoted title after the URL —
+    [text](url "title") — which the previous greedy `([^)]+)` swallowed
+    whole into the "url" capture, corrupting every link that had one
+    (e.g. a job URL ending up as '...jobId=123 "Job Title Here"').
+    """
+    return [
+        (text, url)
+        for text, url, _title in re.findall(r'\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)', markdown)
+    ]
 
 
 def _is_job_link_from_markdown(text: str, url: str) -> bool:
@@ -710,12 +730,39 @@ def _strip_leading_nav_debris(text: str) -> str:
     return "\n".join(lines[start:]).strip()
 
 
+_DEAD_PAGE_SIGNATURES = (
+    "can't find the page",
+    "cannot find the page",
+    "page not found",
+    "page you requested could not be found",
+    "doesn't exist",
+    "this page doesn't exist",
+)
+
+
+def _looks_like_dead_page(markdown: str) -> bool:
+    """Detect a 404 / removed-listing page rendered as markdown.
+
+    Job links scraped from a company's careers page can go stale between
+    collection and the user expanding the card — the posting gets pulled but
+    the homepage link isn't cleaned up. Without this check, the 404 page's
+    own nav/error copy gets treated as if it were the job description.
+    """
+    lowered = markdown.lower()
+    has_404_marker = bool(re.search(r"\b404\b", lowered))
+    has_dead_phrase = any(sig in lowered for sig in _DEAD_PAGE_SIGNATURES)
+    return has_404_marker and has_dead_phrase
+
+
 async def _fetch_job_description_crawl4ai(url: str, title: str = "") -> dict:
     """Fetch a single job description page using crawl4ai."""
     markdown = await _fetch_markdown_crawl4ai(url, wait_for_js=True)
 
     if not markdown:
         return {"description": "", "skills": []}
+
+    if _looks_like_dead_page(markdown):
+        return {"description": "", "skills": [], "unavailable": True}
 
     title_norm = re.sub(r"[^a-z0-9]", "", title.lower()) if title else ""
     lines = markdown.split("\n")
@@ -782,6 +829,10 @@ async def _fetch_job_description_crawl4ai(url: str, title: str = "") -> dict:
         r"podobné ponuky.*",
         r"megosztás.*",
         r"hasonló állások.*",
+        # Locale-switcher footer widget ("Any questions? Follow us." followed
+        # by a giant country-selector dropdown list) — seen verbatim across
+        # many career sites, not one company's quirk.
+        r"any questions\??\s*follow us\b.*",
     ]
     for pattern in footer_markers:
         description = re.sub(pattern, "", description, flags=re.I | re.S)
