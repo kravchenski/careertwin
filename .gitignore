@@ -217,13 +217,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Demo files
-demo.py
-demo_live.py
-demo/
-career_graph.json
-portfolio/
-
 # Personal data / secrets
 linkedin_profile*.json
 llm_login.py
@@ -237,7 +230,3 @@ web/api/screenshots/
 
 # Claude Code config
 .claude/
-
-# Dead code
-skills/
-.playwright-mcp/
