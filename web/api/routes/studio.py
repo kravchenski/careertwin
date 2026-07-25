@@ -80,3 +80,11 @@ async def studio_state(username: str) -> dict[str, Any]:
     data["profile"] = profile
     data["exists"] = True
     return data
+
+
+@router.delete("/v1/studio/state")
+async def delete_studio_state(username: str) -> dict[str, Any]:
+    with _db_conn() as conn:
+        conn.execute("DELETE FROM studio_sessions WHERE username = ?", (username,))
+        conn.commit()
+    return {"success": True}

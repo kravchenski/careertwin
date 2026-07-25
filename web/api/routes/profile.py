@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -9,7 +10,7 @@ import sqlite3
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Request, UploadFile
 
 from database import (
     UserProfileCreate,
@@ -35,6 +36,14 @@ async def get_profile(username: str) -> dict[str, Any]:
     if row is None:
         return {"exists": False, "username": username}
     return {"exists": True, **_row_to_dict(row)}
+
+
+@router.delete("/v1/profile/{username}")
+async def delete_profile(username: str) -> dict[str, Any]:
+    with _db_conn() as conn:
+        conn.execute("DELETE FROM user_profiles WHERE username = ?", (username,))
+        conn.commit()
+    return {"success": True}
 
 
 @router.post("/v1/profile")
@@ -113,11 +122,32 @@ async def update_profile_fields(username: str, update: UserProfileUpdate) -> dic
 
 @router.post("/v1/profile/upload-resume")
 async def upload_resume(
+    request: Request,
     file: UploadFile = File(...),
     username: str = "default",
 ) -> dict[str, Any]:
-    """Upload a PDF/DOCX/TXT resume, extract profile data, and return it for scoring."""
-    return await _process_resume_upload(file, username)
+    """Upload a PDF/DOCX/TXT resume, extract profile data, and return it for scoring.
+
+    If the client disconnects (e.g. the user picks a different file mid-upload
+    and aborts the request), cancel the in-flight task so we stop waiting on
+    the LLM provider instead of burning tokens/compute on a discarded result.
+    """
+    task = asyncio.ensure_future(_process_resume_upload(file, username))
+
+    async def _watch_disconnect() -> None:
+        while not task.done():
+            if await request.is_disconnected():
+                task.cancel()
+                return
+            await asyncio.sleep(0.5)
+
+    watcher = asyncio.ensure_future(_watch_disconnect())
+    try:
+        return await task
+    except asyncio.CancelledError:
+        return {"success": False, "error": "Upload cancelled"}
+    finally:
+        watcher.cancel()
 
 
 async def _process_resume_upload(file, username: str) -> dict[str, Any]:
@@ -241,22 +271,28 @@ async def _llm_extract_profile(text: str, filename: str) -> tuple[dict[str, Any]
 Return a JSON object:
 {
   "fullName": "Full Name",
+  "title": "Current or most recent professional title, e.g. Senior Backend Engineer",
   "email": "email or empty",
   "phone": "phone or empty",
   "location": "City, Country or empty",
+  "linkedin": "LinkedIn profile URL or empty",
+  "github": "GitHub profile URL or empty",
   "summary": "professional summary or empty",
   "skills": ["skill1", "skill2"],
   "languages": ["English (Native)", "Russian (Fluent)"],
   "experience": [{"position":"Title","company":"Company","description":"What they did","start":"YYYY","end":"YYYY or Present"}],
-  "education": [{"school":"University","degree":"Degree","field":"Field"}],
+  "education": [{"school":"University","degree":"Degree","field":"Field","start":"YYYY","end":"YYYY or Present"}],
   "certificates": [{"name":"Course/Cert Name","issuer":"Organization"}],
   "projects": [{"name":"Project","description":"Brief desc"}]
 }
 
 CRITICAL RULES:
+- Title: use the candidate's most recent job title if stated, exactly as one clean title (e.g. "Backend Engineer"). If no title is stated anywhere, infer ONE concise, realistic, natural-sounding title (e.g. "Senior Backend Engineer") from their most recent experience and skills. NEVER combine multiple roles or specialties into one title with a slash or "and" (e.g. NOT "Backend Developer / AI Engineer", NOT "Python Developer and Data Analyst") — pick the single best-fitting title only. Never leave it empty unless there is truly nothing to infer from.
 - Experience: each job gets its OWN entry. Date ranges go in start/end, NOT in position.
-- Education: ONLY university degrees. Courses/bootcamps → certificates.
-- Skills: ALL technical skills mentioned.
+- Education: ONLY university degrees. Courses/bootcamps → certificates. Include the start/end year if the resume states them.
+- LinkedIn: extract the full profile URL exactly as written (e.g. linkedin.com/in/username), or empty if not present.
+- GitHub: extract the full profile URL exactly as written (e.g. github.com/username), or empty if not present.
+- Skills: ONLY concrete, nameable technologies, tools, languages, frameworks, or platforms (e.g. "Python", "Kubernetes", "PostgreSQL", "React"). Do NOT include vague activities, processes, or responsibilities as skills (e.g. "deployment", "async processing", "collaboration", "problem solving", "communication") — those belong in the job description text, not the skills list.
 - Languages: spoken/written languages with proficiency if stated, e.g. "English (Native)" — NOT programming languages (those go in skills).
 - Return ONLY valid JSON, no markdown, no explanation."""
 
@@ -289,9 +325,12 @@ CRITICAL RULES:
 
             profile = {
                 "fullName": str(result.get("fullName", "")).strip(),
+                "title": str(result.get("title", "")).strip(),
                 "email": str(result.get("email", "")).strip(),
                 "phone": str(result.get("phone", "")).strip(),
                 "location": str(result.get("location", "")).strip(),
+                "linkedin": str(result.get("linkedin", "")).strip(),
+                "github": str(result.get("github", "")).strip(),
                 "summary": str(result.get("summary", "")).strip(),
                 "skills": _normalize_skills(result.get("skills", [])),
                 "languages": _normalize_skills(result.get("languages", [])),
@@ -308,105 +347,6 @@ CRITICAL RULES:
             continue
 
     return None, f"No AI provider available. Set GROQ_API_KEY or OPENAI_API_KEY in .env. Last error: {last_error}"
-
-    from ai import call_ai, parse_json_object
-
-    text_chunk = text[:8000]
-
-    system_prompt = """You are an expert resume/CV parser. Extract structured data from the resume text below.
-
-Return a JSON object with exactly these keys:
-{
-  "fullName": "string - candidate full name",
-  "email": "string - email address or empty",
-  "phone": "string - phone number or empty",
-  "location": "string - city/country or empty",
-  "summary": "string - professional summary/objective or empty",
-  "skills": ["skill1", "skill2"],
-  "experience": [
-    {
-      "position": "Job Title",
-      "company": "Company Name",
-      "description": "What they did (2-4 sentences max)",
-      "start": "YYYY or YYYY-MM",
-      "end": "YYYY or YYYY-MM or Present"
-    }
-  ],
-  "education": [
-    {
-      "school": "Institution Name",
-      "degree": "Degree or program name",
-      "field": "Field of study or empty"
-    }
-  ],
-  "certificates": [
-    {
-      "name": "Certificate/Course name",
-      "issuer": "Issuing organization"
-    }
-  ],
-  "projects": [
-    {
-      "name": "Project name",
-      "description": "Brief description"
-    }
-  ]
-}
-
-Rules:
-- For experience: separate each job/role into its own entry. Put date ranges in start/end fields, NOT in position.
-- For education: ONLY actual university/college degrees. Courses/bootcamps/online certificates go in "certificates".
-- For skills: extract ALL technical skills, programming languages, frameworks, tools mentioned.
-- For certificates: courses, certifications, bootcamps, online completions.
-- For projects: personal/open-source projects mentioned.
-- If a field is not found, use empty string or empty array.
-- Return ONLY the JSON object, no explanation."""
-
-    providers_to_try = ["lmstudio", "groq", "openai", "openrouter"]
-    raw = ""
-    for prov in providers_to_try:
-        try:
-            raw = await call_ai(
-                system_prompt,
-                f"Resume filename: {filename}\n\nResume text:\n{text_chunk}",
-                provider=prov,
-                model="",
-                max_tokens=4000,
-                temperature=0.1,
-            )
-            if raw and len(raw) > 50:
-                break
-        except Exception:
-            continue
-
-    if not raw:
-        return None
-
-    try:
-        result = parse_json_object(raw)
-        if not result:
-            return None
-
-        profile = {
-            "fullName": str(result.get("fullName", "")).strip(),
-            "email": str(result.get("email", "")).strip(),
-            "phone": str(result.get("phone", "")).strip(),
-            "location": str(result.get("location", "")).strip(),
-            "summary": str(result.get("summary", "")).strip(),
-            "skills": _normalize_skills(result.get("skills", [])),
-            "experience": _normalize_experience(result.get("experience", [])),
-            "education": _normalize_education(result.get("education", [])),
-            "certificates": _normalize_certificates(result.get("certificates", [])),
-            "projects": _normalize_projects(result.get("projects", [])),
-        }
-
-        if not profile["fullName"]:
-            return None
-
-        return profile
-    except Exception as e:
-        logger.warning("LLM extraction failed: %s", e)
-        return None
 
 
 def _normalize_skills(skills: Any) -> list[str]:
@@ -453,6 +393,8 @@ def _normalize_education(edu: Any) -> list[dict]:
             "school": school[:200],
             "degree": str(item.get("degree", "")).strip()[:100],
             "field": str(item.get("field", "")).strip()[:100],
+            "start": str(item.get("start", "")).strip()[:20],
+            "end": str(item.get("end", "")).strip()[:20],
         })
     return result[:10]
 
