@@ -187,20 +187,21 @@ Sources analyzed: Dribbble, Behance, Canva, Resume.io, Overleaf templates.
 - [x] Repair Agent loop
 - [x] Multi-template support
 
-### Phase 4 — Platform
-- [ ] Job Search MCP integration
-- [ ] Application tracking workflow
-- [ ] Web dashboard
-- [ ] API for third-party integrations
-- [ ] Multi-language CV support
+### Phase 4 — Platform ✅
+- [x] FastAPI backend with REST API
+- [x] Angular 19 web dashboard
+- [x] Job Search MCP integration (Greenhouse, Lever, Ashby, SmartRecruiters, Workday)
+- [x] Application tracking workflow
+- [x] Multi-language CV support
 
 ---
 
 ## Tech Stack
 
 | Component | Technology |
-|---|---|
-| Language | Python 3.14+ |
+|---|---|---|
+| Backend | Python 3.14+, FastAPI |
+| Frontend | Angular 19, Tailwind CSS v4 |
 | Data Models | Pydantic v2 |
 | Agent Framework | LangGraph |
 | Vector Database | Qdrant |
@@ -209,7 +210,9 @@ Sources analyzed: Dribbble, Behance, Canva, Resume.io, Overleaf templates.
 | PDF Parsing | pdfminer.six |
 | DOCX Parsing | python-docx |
 | GitHub API | PyGithub |
-| Package Manager | uv |
+| MCP Adapters | Greenhouse, Lever, Ashby, SmartRecruiters, Workday |
+| Containerization | Docker Compose |
+| Package Manager | uv (Python), npm (frontend) |
 
 ---
 
@@ -244,7 +247,7 @@ uv run python main.py info
 
 ## Running with Docker
 
-The fastest way to run the full stack (Angular frontend + FastAPI backend + agent browser) is Docker Compose.
+The fastest way to run the full stack (Angular frontend + FastAPI backend + SearXNG) is Docker Compose.
 
 ```bash
 # Copy the environment file and add your API keys
@@ -259,12 +262,22 @@ docker compose up --build
 
 - Frontend:  http://localhost:8080
 - Backend API: http://localhost:8000
-- VNC (agent browser): http://localhost:6080
+- SearXNG:    http://localhost:8888
 
 The Nginx frontend proxies `/api/`, `/api/v1/`, `/outputs/`, and `/screenshots/` to the backend, so the SPA and API share one origin — no CORS or manual proxy config needed.
 
 To run with a local model provider (LM Studio / Ollama), point the matching
 `*_BASE_URL` variables at `host.docker.internal` in your `.env` (already the default).
+
+### Development Mode
+
+For hot-reload development, use the Docker override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up --build
+```
+
+This enables backend hot-reload and exposes port `4200` for the Angular dev server with live reload.
 
 Stop and remove containers:
 
@@ -273,6 +286,41 @@ docker compose down
 ```
 
 Persist data (DB, generated outputs) in the `careertwin-data` named volume.
+
+---
+
+## Project Structure
+
+```
+careertwin/
+├── web/
+│   ├── api/              # FastAPI backend
+│   │   ├── main.py          # Entry point
+│   │   ├── routes/          # API routes (profile, jobs, resume, studio)
+│   │   ├── jobs_mcp/        # MCP job adapters (GH, Lever, Ashby, SR, WD)
+│   │   ├── services/        # Business logic layer
+│   │   └── providers/       # LLM provider abstraction
+│   └── frontend/         # Angular 19 SPA
+│       └── src/app/pages/   # Dashboard, Jobs, Resume, Studio, Profile
+├── src/
+│   └── careertwin/
+│       ├── agents/          # LangGraph agents (orchestrator, matcher, builder)
+│       ├── ats/             # ATS compatibility checker
+│       ├── collectors/      # GitHub, resume, website data collectors
+│       ├── graph/           # Career Knowledge Graph schema
+│       ├── platform/        # AI generation, job search, tracking
+│       ├── rendering/       # PDF renderer, design DNA, repair
+│       ├── storage/         # Qdrant vector store
+│       ├── templates/       # Resume templates
+│       └── vision/          # Vision QA agent
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── docker-compose.yml
+├── docker-compose.override.yml  # Dev mode with hot reload
+├── start.sh                # Local dev launcher
+├── Makefile                # Common dev commands
+└── pyproject.toml
+```
 
 ---
 
