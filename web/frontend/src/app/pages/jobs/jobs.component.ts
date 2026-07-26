@@ -1,12 +1,13 @@
-import { Component, inject, NgZone, OnInit } from "@angular/core";
+import { Component, ElementRef, inject, NgZone, OnInit, ViewChild } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { RouterModule } from "@angular/router";
 import { HttpClient } from "@angular/common/http";
-import { forkJoin, of } from "rxjs";
+import { of, Subscription } from "rxjs";
 import { catchError } from "rxjs/operators";
 import { StudioService, StudioState } from "../../services/studio.service";
 import { ProfileService } from "../../services/profile.service";
+import { ApplicationsService } from "../../services/applications.service";
 
 interface CollectedJob {
   id: string;
@@ -24,6 +25,7 @@ interface CollectedJob {
   score?: number;
   score_reason?: string;
   employment_type?: string;
+  unavailable?: boolean;
 }
 
 interface Company {
@@ -192,7 +194,7 @@ type TabKind = "collect" | "review" | "history";
               <span>&gt;_ Collection Log</span>
               <span class="jc__log-spinner" *ngIf="collecting"></span>
             </div>
-            <pre class="jc__log-body">{{ logText }}</pre>
+            <pre class="jc__log-body" #logBody>{{ logText }}</pre>
           </div>
         </div>
 
@@ -254,7 +256,10 @@ type TabKind = "collect" | "review" | "history";
             </div>
 
             <div class="jc__job-expanded" *ngIf="expandedJobId === job.id">
-              <div class="jc__job-content-row">
+              <p class="jc__job-desc jc__job-desc--unavailable" *ngIf="job.unavailable">
+                This listing appears to be no longer available on {{ job.company }}'s site.
+              </p>
+              <div class="jc__job-content-row" *ngIf="!job.unavailable">
                 <div class="jc__job-desc-wrap">
                   <div *ngIf="job.description && cleanDescription(job.description)" class="jc__job-desc-structured">
                     <div *ngIf="getMetadata(cleanDescription(job.description)).length" class="jc__desc-meta">
@@ -285,7 +290,7 @@ type TabKind = "collect" | "review" | "history";
                 <a class="jc__apply-btn jc__apply-btn--outline" [href]="job.url" target="_blank" rel="noreferrer" (click)="$event.stopPropagation()">View listing</a>
                 <button
                   class="jc__apply-btn"
-                  [disabled]="generatingId === job.id"
+                  [disabled]="generatingId === job.id || job.unavailable"
                   (click)="generateApplication(job); $event.stopPropagation()"
                 >
                   {{ generatingId === job.id ? "Generating..." : "Generate Application" }}
@@ -370,6 +375,14 @@ type TabKind = "collect" | "review" | "history";
               (click)="approveAndApply()"
             >
               {{ approving ? "Filling application..." : "Approve & auto-fill" }}
+            </button>
+            <button
+              *ngIf="approveStatus && !approveError"
+              class="jc__apply-btn jc__apply-btn--approve"
+              [disabled]="markingSubmitted || submitted"
+              (click)="markSubmitted()"
+            >
+              {{ submitted ? "Added to Applications ✓" : (markingSubmitted ? "Saving..." : "I submitted it — track this") }}
             </button>
           </div>
         </div>
@@ -531,7 +544,14 @@ type TabKind = "collect" | "review" | "history";
       font-size: 0.78rem; line-height: 1.65; color: #c4b49e;
       background: rgba(0,0,0,0.3); max-height: 22rem; overflow-y: auto;
       white-space: pre-wrap; word-break: break-word;
+      scrollbar-width: thin; scrollbar-color: rgba(209,161,87,0.35) transparent;
     }
+    .jc__log-body::-webkit-scrollbar { width: 8px; }
+    .jc__log-body::-webkit-scrollbar-track { background: transparent; }
+    .jc__log-body::-webkit-scrollbar-thumb {
+      background: rgba(209,161,87,0.35); border-radius: 999px;
+    }
+    .jc__log-body::-webkit-scrollbar-thumb:hover { background: rgba(209,161,87,0.55); }
 
     .jc__screenshots { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
     .jc__shot img { width: 120px; border-radius: 0.6rem; border: 1px solid rgba(209,161,87,0.15); }
@@ -614,18 +634,19 @@ type TabKind = "collect" | "review" | "history";
     }
     .jc__job-content-row .jc__job-desc-wrap { flex: 1; min-width: 0; margin-top: 0; }
     .jc__job-type-badge {
-      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 0.3rem;
-      font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      display: inline-block; padding: 0.32rem 0.85rem; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
       flex-shrink: 0;
     }
     .jc__job-type-badge--header { align-self: center; }
-    .type-remote { background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.25); color: #6ee7b7; }
-    .type-hybrid { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.25); color: #fcd34d; }
-    .type-onsite, .type-on-site { background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.25); color: #93c5fd; }
+    .type-remote { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.35); color: #6ee7b7; }
+    .type-hybrid { background: rgba(209,161,87,0.1); border: 1px solid rgba(209,161,87,0.4); color: #f5df90; }
+    .type-onsite, .type-on-site { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.35); color: #93c5fd; }
 
     .jc__job-desc-wrap { margin-top: 0.6rem; }
     .jc__job-desc { color: #baa690; margin: 0; line-height: 1.7; font-size: 0.85rem; white-space: pre-wrap; }
     .jc__job-desc--empty { color: #6b5d4d; font-style: italic; }
+    .jc__job-desc--unavailable { color: #e57373; font-style: italic; margin: 0.6rem 0 0; }
     .jc__job-desc-structured { font-size: 0.85rem; color: #baa690; line-height: 1.6; }
     .jc__desc-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.8rem; }
     .jc__desc-meta-tag {
@@ -769,7 +790,10 @@ export class JobsComponent implements OnInit {
   private readonly studio = inject(StudioService);
   private readonly ngZone = inject(NgZone);
   private readonly profileService = inject(ProfileService);
+  private readonly applicationsService = inject(ApplicationsService);
   readonly api = "/api/v1";
+
+  @ViewChild("logBody") logBodyRef?: ElementRef<HTMLElement>;
 
   activeTab: TabKind = "collect";
   state: StudioState | null = null;
@@ -780,8 +804,8 @@ export class JobsComponent implements OnInit {
     query: "",
     location: "any",
     experience_level: "internship",
-    work_type: "internship",
-    posted_within: "week",
+    work_type: "any",
+    posted_within: "any",
     limit: 100,
     intern: true,
     companies: [],
@@ -792,6 +816,8 @@ export class JobsComponent implements OnInit {
   collectPercent = 0;
   logText = "";
   screenshots: string[] = [];
+  private collectSub: Subscription | null = null;
+  private collectSse: EventSource | null = null;
 
   jobs: CollectedJob[] = [];
   generatingId = "";
@@ -800,6 +826,8 @@ export class JobsComponent implements OnInit {
   generatedApplicationJob: CollectedJob | null = null;
   approving = false;
   approveStatus: string | null = null;
+  markingSubmitted = false;
+  submitted = false;
   approveError = false;
   expandedJobId: string | null = null;
 
@@ -1000,13 +1028,17 @@ export class JobsComponent implements OnInit {
     return answers;
   }
 
+  private scrollLogToBottom(): void {
+    setTimeout(() => {
+      const el = this.logBodyRef?.nativeElement;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }
+
   private prefillSearch(): void {
     if (!this.state) return;
     this.searchPayload.experience_level = "internship";
     this.searchPayload.intern = true;
-    if (this.state.preferences?.remoteLocations?.length) {
-      this.searchPayload.location = "remote";
-    }
     // Pre-set city filter from onboarding preferences — only for on-site
     // preferences. Remote work isn't tied to a city, so it stays "all".
     if (this.state.preferences?.onsiteCities?.length) {
@@ -1038,6 +1070,14 @@ export class JobsComponent implements OnInit {
 
   startCollecting(): void {
     if (this.collecting) {
+      // Actually cancel the in-flight run instead of just flipping the
+      // flag — leaving the old request running in the background let a
+      // second click start a real second backend scan that raced the first
+      // one and corrupted the shared progress log.
+      this.collectSub?.unsubscribe();
+      this.collectSse?.close();
+      this.collectSub = null;
+      this.collectSse = null;
       this.collecting = false;
       return;
     }
@@ -1084,16 +1124,16 @@ export class JobsComponent implements OnInit {
     this.logText = useMCP
       ? `Searching ATS platforms for ${this.searchPayload.companies.length} companies (${titles.filter(Boolean).join(", ") || "all roles"})...\n`
       : `Starting collection on ${this.selectedSource === "all" ? "all sources" : this.selectedSource}...\n`;
+    this.scrollLogToBottom();
 
     // Real progress instead of sitting at 0% until the whole batch resolves —
     // the backend streams a log line per company as its search completes.
-    let collectSse: EventSource | null = null;
     if (useMCP) {
-      collectSse = new EventSource(`${this.api}/jobs/scan/logs`);
+      this.collectSse = new EventSource(`${this.api}/jobs/scan/logs`);
       // EventSource callbacks fire outside Angular's zone, so updates here
       // never triggered change detection — the log/progress state was
       // updating in memory but the view never re-rendered.
-      collectSse.onmessage = (event) => {
+      this.collectSse.onmessage = (event) => {
         this.ngZone.run(() => {
           try {
             const entry = JSON.parse(event.data);
@@ -1103,6 +1143,7 @@ export class JobsComponent implements OnInit {
               this.collectPercent = Math.round((Number(match[1]) / Number(match[2])) * 100);
             }
             this.logText += `\n${entry.msg}`;
+            this.scrollLogToBottom();
           } catch {
             // ignore malformed/keepalive SSE frames
           }
@@ -1110,17 +1151,24 @@ export class JobsComponent implements OnInit {
       };
     }
 
-    const requests = titles.map((title) =>
-      this.http.post<any>(endpoint, buildPayload(title)).pipe(catchError(() => of(null)))
-    );
+    // One request for all target titles combined (not one request per
+    // title): the backend's relevance filter already matches a job if its
+    // title contains ANY keyword from the query, so joining titles into one
+    // query string searches for all of them in a single pass. Firing N
+    // parallel requests here used to mean N concurrent full scans of the
+    // same company list, each independently resetting the shared backend
+    // scan-log queue mid-stream — that's what caused the duplicated,
+    // jumbled-looking log lines.
+    const combinedQuery = titles.filter(Boolean).join(" ");
 
-    forkJoin(requests).subscribe((results) => {
-      collectSse?.close();
+    this.collectSub = this.http.post<any>(endpoint, buildPayload(combinedQuery)).pipe(catchError(() => of(null))).subscribe((res) => {
+      this.collectSse?.close();
+      this.collectSse = null;
+      this.collectSub = null;
       let totalFound = 0;
       const sourcesQueried: string[] = [];
       const screenshotsFound: string[] = [];
-      for (const res of results) {
-        if (!res?.jobs) continue;
+      if (res?.jobs) {
         for (const job of res.jobs) {
           if (!this.jobs.find((j) => j.url === job.url)) {
             this.jobs.push({
@@ -1139,6 +1187,7 @@ export class JobsComponent implements OnInit {
       this.collectPercent = 100;
       const src = useMCP ? ` (${Array.from(new Set(sourcesQueried)).join(", ") || "ATS"})` : "";
       this.logText += `\nCollection complete. Found ${totalFound} matching jobs${src}.`;
+      this.scrollLogToBottom();
       if (screenshotsFound.length) this.screenshots = screenshotsFound;
       if (totalFound > 0) this.activeTab = "review";
       this.collecting = false;
@@ -1392,7 +1441,10 @@ export class JobsComponent implements OnInit {
       const jobIdx = this.jobs.findIndex(j => j.id === id);
       this.http.post<any>(`${this.api}/jobs/mcp/fetch-description`, { url: fetchUrl, title: matchedJob.title }).subscribe({
         next: (res: any) => {
-          if (jobIdx >= 0 && res?.description) {
+          if (jobIdx < 0) return;
+          if (res?.unavailable) {
+            this.jobs[jobIdx].unavailable = true;
+          } else if (res?.description) {
             this.jobs[jobIdx].description = res.description;
           }
         },
@@ -1580,6 +1632,25 @@ export class JobsComponent implements OnInit {
     this.approveStatus = null;
     this.approveError = false;
     this.approving = false;
+    this.submitted = false;
+  }
+
+  markSubmitted(): void {
+    if (!this.generatedApplicationJob || this.markingSubmitted || this.submitted) return;
+    const job = this.generatedApplicationJob;
+    this.markingSubmitted = true;
+    const logoUrl = this.getCompanyLogo(job.company || "");
+    const domain = logoUrl.split("/logo/")[1] || "";
+    this.applicationsService.create({
+      username: "default",
+      company: job.company || "Unknown company",
+      position: job.title || "Untitled role",
+      domain,
+      job_url: job.url,
+    }).subscribe((res) => {
+      this.markingSubmitted = false;
+      this.submitted = !!res.success;
+    });
   }
 
   approveAndApply(): void {
@@ -1587,6 +1658,7 @@ export class JobsComponent implements OnInit {
     this.approving = true;
     this.approveStatus = null;
     this.approveError = false;
+    this.submitted = false;
     const job = this.generatedApplicationJob;
 
     this.http.post<any>(`${this.api}/jobs/apply`, {

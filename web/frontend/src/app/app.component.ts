@@ -29,14 +29,14 @@ import gsap from "gsap";
           </a>
 
           <div class="flex items-center gap-3">
-            <a routerLink="/studio" class="btn-primary" *ngIf="!isStudio()">
-              <span>Open Studio</span>
+            <a routerLink="/studio" class="btn-primary" *ngIf="!hasProfile() && !isStudio()">
+              <span>Get Started</span>
               <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M5 12h14M13 5l7 7-7 7"/>
               </svg>
             </a>
 
-            <div class="account" *ngIf="showAccount()">
+            <div class="account" *ngIf="hasProfile()">
               <button
                 class="profile-avatar"
                 type="button"
@@ -193,8 +193,8 @@ export class AppComponent implements AfterViewInit {
       .subscribe((e) => (this.currentUrl = e.urlAfterRedirects));
   }
 
-  showAccount(): boolean {
-    return this.currentUrl.startsWith("/studio") || !!this.studio.load()?.completedAt;
+  hasProfile(): boolean {
+    return !!this.studio.load()?.completedAt;
   }
 
   isStudio(): boolean {
@@ -239,8 +239,12 @@ export class AppComponent implements AfterViewInit {
   resetStudio(): void {
     this.accountOpen = false;
     this.studio.clear();
-    this.profileService.save(this.profileService.emptyProfile());
-    this.router.navigate(["/studio"]);
+    this.profileService.clear();
+    this.studio.deleteBackend().subscribe(() => {
+      this.profileService.deleteBackend().subscribe(() => {
+        this.router.navigate(["/studio"]);
+      });
+    });
   }
 
   ngAfterViewInit() {

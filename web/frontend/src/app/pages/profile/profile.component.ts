@@ -1,12 +1,15 @@
 import { AfterViewInit, Component, inject, OnInit } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
+import { Subscription } from "rxjs";
 import gsap from "gsap";
 import {
   ProfileService,
   UserProfile,
 } from "../../services/profile.service";
 import { resolveProfileName } from "../../utils/profile-name";
+import { normalizeUrl } from "../../utils/url";
+import { StudioService } from "../../services/studio.service";
 
 @Component({
   selector: "ct-profile",
@@ -45,12 +48,12 @@ import { resolveProfileName } from "../../utils/profile-name";
             </div>
           </div>
           <div class="profile-card__actions">
-            <button class="btn-resume" type="button" (click)="openResumeUpload()">
+            <button class="btn-resume" type="button" [disabled]="resumeProcessing" (click)="openResumeUpload()">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/>
                 <path d="M8 15h8v2H8zm0-3h8v2H8z"/>
               </svg>
-              Upload Resume
+              {{ resumeProcessing ? "Processing..." : "Upload Resume" }}
             </button>
             <button *ngIf="!editing" class="edit-btn" type="button" (click)="startEdit()">Edit</button>
             <button *ngIf="editing" class="edit-btn edit-btn--ghost" type="button" (click)="cancelEdit()">Cancel</button>
@@ -199,6 +202,7 @@ import { resolveProfileName } from "../../utils/profile-name";
           to auto-fill your profile and improve job match scoring.
         </p>
         <div class="resume-dropzone"
+             *ngIf="!resumeProcessing"
              (dragover)="$event.preventDefault(); dragOver = true"
              (dragleave)="dragOver = false"
              (drop)="$event.preventDefault(); dragOver = false; onFileDrop($event)"
@@ -215,6 +219,10 @@ import { resolveProfileName } from "../../utils/profile-name";
             Browse files
             <input type="file" accept=".pdf,.docx,.doc,.txt" (change)="onFileSelect($event)" hidden />
           </label>
+        </div>
+        <div class="import-processing" *ngIf="resumeProcessing">
+          <p class="import-status">Processing {{ resumeFileName }}...</p>
+          <button class="edit-btn edit-btn--ghost" type="button" (click)="cancelResumeUpload()">Choose another file</button>
         </div>
         <p class="import-status error" *ngIf="resumeError">{{ resumeError }}</p>
         <p class="import-status success" *ngIf="resumeStatus">{{ resumeStatus }}</p>
@@ -274,6 +282,8 @@ import { resolveProfileName } from "../../utils/profile-name";
       font-weight: 600; cursor: pointer; transition: background 160ms ease;
     }
     .btn-resume:hover { background: rgba(209, 161, 87, 0.2); }
+    .btn-resume:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-resume:disabled:hover { background: rgba(209, 161, 87, 0.12); }
 
     .resume-dropzone {
       border: 2px dashed rgba(236, 212, 171, 0.3);
@@ -296,6 +306,10 @@ import { resolveProfileName } from "../../utils/profile-name";
       transition: background 160ms ease;
     }
     .btn-browse:hover { background: rgba(236, 212, 171, 0.2); }
+    .import-processing {
+      display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+      padding: 1.5rem 0;
+    }
     .import-status.error { color: #e57373; }
     .import-status.success { color: #81c784; }
     .edit-btn {
@@ -434,6 +448,7 @@ import { resolveProfileName } from "../../utils/profile-name";
 })
 export class ProfileComponent implements AfterViewInit, OnInit {
   private readonly profileService = inject(ProfileService);
+  private readonly studio = inject(StudioService);
 
   profile: UserProfile = this.profileService.emptyProfile();
   editing = false;
@@ -454,7 +469,10 @@ export class ProfileComponent implements AfterViewInit, OnInit {
   resumeUploadOpen = false;
   resumeError = "";
   resumeStatus = "";
+  resumeProcessing = false;
+  resumeFileName = "";
   dragOver = false;
+  private resumeUploadSub: Subscription | null = null;
 
   readonly linkFields = [
     { key: "github" as const, label: "GitHub", placeholder: "https://github.com/username" },
@@ -469,7 +487,13 @@ export class ProfileComponent implements AfterViewInit, OnInit {
   }
 
   ngOnInit(): void {
-    this.profile = this.profileService.load();
+    const saved = this.profileService.load();
+    const studioState = this.studio.load();
+    const studioProfile = studioState?.profile;
+    this.profile = saved.fullName ? saved : { ...saved, ...(studioProfile?.fullName ? studioProfile : {}) };
+    this.profile.linkedin ||= studioState?.linkedin || "";
+    this.profile.github ||= studioState?.github || "";
+    this.profile.website ||= studioState?.website || "";
   }
 
   initials(): string {
@@ -571,6 +595,15 @@ export class ProfileComponent implements AfterViewInit, OnInit {
     }
   }
 
+  cancelResumeUpload(): void {
+    this.resumeUploadSub?.unsubscribe();
+    this.resumeUploadSub = null;
+    this.resumeProcessing = false;
+    this.resumeFileName = "";
+    this.resumeError = "";
+    this.resumeStatus = "";
+  }
+
   private uploadResumeFile(file: File): void {
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!["pdf", "docx", "doc", "txt"].includes(ext || "")) {
@@ -578,11 +611,15 @@ export class ProfileComponent implements AfterViewInit, OnInit {
       return;
     }
 
+    this.resumeUploadSub?.unsubscribe();
     this.resumeError = "";
-    this.resumeStatus = `Uploading ${file.name}...`;
+    this.resumeStatus = "";
+    this.resumeFileName = file.name;
+    this.resumeProcessing = true;
 
-    this.profileService.uploadResume(file).subscribe({
+    this.resumeUploadSub = this.profileService.uploadResume(file).subscribe({
       next: (response) => {
+        this.resumeProcessing = false;
         if (response?.success && response?.profile) {
           const p = response.profile;
           const provider = response.provider || "unknown";
@@ -590,9 +627,12 @@ export class ProfileComponent implements AfterViewInit, OnInit {
 
           // Merge basic fields — only fill empty ones
           this.profile.fullName = resolveProfileName(this.profile.fullName) || resolveProfileName(p.fullName) || this.profile.fullName;
+          this.profile.title ||= p.title;
           this.profile.email ||= p.email;
           this.profile.phone ||= p.phone;
           this.profile.location ||= p.location;
+          this.profile.linkedin ||= normalizeUrl(p.linkedin || "");
+          this.profile.github ||= normalizeUrl(p.github || "");
           this.profile.summary ||= p.summary;
 
           // Merge skills — add new, don't duplicate
@@ -644,8 +684,8 @@ export class ProfileComponent implements AfterViewInit, OnInit {
                 school,
                 degree: edu.degree || "",
                 field: edu.field || "",
-                start: "",
-                end: "",
+                start: edu.start || "",
+                end: edu.end || "",
                 description: "",
               });
             }
@@ -683,6 +723,7 @@ export class ProfileComponent implements AfterViewInit, OnInit {
         }
       },
       error: () => {
+        this.resumeProcessing = false;
         this.resumeError = "Upload failed. Please try again.";
         this.resumeStatus = "";
       },
