@@ -58,6 +58,7 @@ export interface StudioPreferences {
 export interface StudioState {
   firstName: string;
   lastName: string;
+  linkedin: string;
   github: string;
   website: string;
   preferences: StudioPreferences;
@@ -103,6 +104,7 @@ export class StudioService {
     return {
       firstName: "",
       lastName: "",
+      linkedin: "",
       github: "",
       website: "",
       preferences: this.emptyPreferences(),
@@ -156,6 +158,7 @@ export class StudioService {
       : (remote.profile || {});
 
     const merged = { ...local };
+    merged.linkedin = remote.linkedin_url || local.linkedin;
     merged.github = remote.github || local.github;
     merged.website = remote.website || local.website;
 
@@ -186,8 +189,19 @@ export class StudioService {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  /** Persist in-progress wizard answers without marking the profile as completed. */
+  saveDraft(state: StudioState): void {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
   clear(): void {
     localStorage.removeItem(STORAGE_KEY);
+  }
+
+  deleteBackend(): Observable<any> {
+    return this.http
+      .delete(`${this.api}/studio/state`, { params: { username: DEFAULT_USERNAME } })
+      .pipe(catchError(() => of({ success: false })));
   }
 
   loadFromBackend(): Observable<StudioState> {
@@ -206,6 +220,7 @@ export class StudioService {
         const state = this.emptyState();
         state.firstName = remote.first_name || "";
         state.lastName = remote.last_name || "";
+        state.linkedin = remote.linkedin_url || "";
         state.github = remote.github || "";
         state.website = remote.website || "";
         state.preferences = { ...state.preferences, ...remotePrefs };
@@ -232,6 +247,7 @@ export class StudioService {
       username: DEFAULT_USERNAME,
       first_name: state.firstName || null,
       last_name: state.lastName || null,
+      linkedin_url: state.linkedin || null,
       github: state.github || null,
       website: state.website || null,
       preferences: state.preferences,

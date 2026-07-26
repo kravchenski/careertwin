@@ -98,6 +98,16 @@ export class ProfileService {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
   }
 
+  clear(): void {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  deleteBackend(username: string = "default"): Observable<any> {
+    return this.http
+      .delete(`${this.api}/profile/${username}`)
+      .pipe(catchError(() => of({ success: false })));
+  }
+
   uploadResume(file: File, username: string = "default"): Observable<any> {
     const formData = new FormData();
     formData.append("file", file);
