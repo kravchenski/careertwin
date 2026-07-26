@@ -10,6 +10,7 @@ import {
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
+import { Subscription } from "rxjs";
 import {
   StudioService,
   StudioState,
@@ -18,8 +19,11 @@ import {
 } from "../../services/studio.service";
 import { ProfileService } from "../../services/profile.service";
 import { resolveProfileName } from "../../utils/profile-name";
+import { normalizeUrl } from "../../utils/url";
+import { IndustryIconComponent } from "../../icons/industry-icon.component";
 
 type StepKind =
+  | "resume"
   | "about"
   | "single"
   | "multi"
@@ -155,7 +159,7 @@ const FLAGS: Record<string, string> = {
 @Component({
   selector: "ct-studio",
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IndustryIconComponent],
   encapsulation: ViewEncapsulation.None,
   template: `
     <div class="s-root page-shell">
@@ -179,6 +183,43 @@ const FLAGS: Record<string, string> = {
         </header>
 
         <section class="s-stage" #stage>
+          <!-- RESUME UPLOAD -->
+          <div class="s-card" *ngIf="current.kind === 'resume'">
+            <span class="s-eyebrow">{{ current.eyebrow }}</span>
+            <h1 class="s-title">{{ current.title }}</h1>
+            <p class="s-sub" *ngIf="current.subtitle">{{ current.subtitle }}</p>
+
+            <div
+              class="s-resume-dropzone"
+              *ngIf="!resumeFileName"
+              [class.s-resume-dropzone--active]="resumeDragOver"
+              (dragover)="$event.preventDefault(); resumeDragOver = true"
+              (dragleave)="resumeDragOver = false"
+              (drop)="$event.preventDefault(); resumeDragOver = false; onResumeDrop($event)"
+            >
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>
+              <p>Drag &amp; drop your resume here</p>
+              <p class="s-resume-hint">or</p>
+              <label class="s-resume-browse">
+                Browse files
+                <input type="file" accept=".pdf,.docx,.doc,.txt" (change)="onResumeSelect($event)" hidden />
+              </label>
+            </div>
+
+            <div class="s-resume-status" *ngIf="resumeFileName">
+              <div class="s-resume-file">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/><path d="M14 2v6h6"/></svg>
+                <span>{{ resumeFileName }}</span>
+              </div>
+              <p class="s-resume-processing" *ngIf="resumeProcessing">Analyzing your resume...</p>
+              <p class="s-resume-done" *ngIf="!resumeProcessing && !resumeError">Resume processed. We pre-filled what we could find.</p>
+              <p class="s-field-error" *ngIf="resumeError">{{ resumeError }}</p>
+              <button type="button" class="s-resume-replace" (click)="resetResume()">Choose another file</button>
+            </div>
+
+            <button type="button" class="s-resume-skip" *ngIf="!resumeFileName" (click)="skipResume()">I'll add it later</button>
+          </div>
+
           <!-- ABOUT YOU -->
           <div class="s-card" *ngIf="current.kind === 'about'">
             <span class="s-eyebrow">{{ current.eyebrow }}</span>
@@ -194,8 +235,13 @@ const FLAGS: Record<string, string> = {
                 <input [(ngModel)]="state.lastName" placeholder="Doe" />
               </label>
               <label class="s-field">
+                <span>LinkedIn <em>(optional)</em></span>
+                <input [(ngModel)]="state.linkedin" (blur)="state.linkedin = normalizeUrl(state.linkedin)" placeholder="https://linkedin.com/in/username" />
+                <small class="s-field-error" *ngIf="linkedinError">{{ linkedinError }}</small>
+              </label>
+              <label class="s-field">
                 <span>GitHub <em>(optional)</em></span>
-                <input [(ngModel)]="state.github" placeholder="https://github.com/username" />
+                <input [(ngModel)]="state.github" (blur)="state.github = normalizeUrl(state.github)" placeholder="https://github.com/username" />
                 <small class="s-field-error" *ngIf="githubError">{{ githubError }}</small>
               </label>
               <label class="s-field">
@@ -246,7 +292,9 @@ const FLAGS: Record<string, string> = {
                 [class.s-choice--active]="hasStr(current.key, opt.value)"
                 (click)="toggleStr(current.key, opt.value)"
               >
-                <span class="s-choice-emoji" *ngIf="opt.emoji">{{ opt.emoji }}</span>
+                <span class="s-choice-emoji" *ngIf="opt.emoji">
+                  <ct-industry-icon [name]="opt.value" [fallback]="opt.emoji"></ct-industry-icon>
+                </span>
                 <span class="s-choice-title">{{ opt.title }}</span>
                 <span class="s-choice-desc" *ngIf="opt.desc">{{ opt.desc }}</span>
               </button>
@@ -449,7 +497,7 @@ const FLAGS: Record<string, string> = {
           </div>
 
           <!-- LOADER -->
-          <div class="s-card s-card--loader" *ngIf="current.kind === 'loader'">
+          <div class="s-card s-card--loader" *ngIf="current.kind === 'loader' && progress < 100">
             <div class="s-loader-orb"></div>
             <h1 class="s-title s-title--center">{{ current.title }}</h1>
             <p class="s-sub s-sub--center" *ngIf="current.subtitle">{{ current.subtitle }}</p>
@@ -461,11 +509,19 @@ const FLAGS: Record<string, string> = {
                 <span class="s-gather-dot"></span>{{ line.text }}
               </li>
             </ul>
-            <p class="s-loader-success" *ngIf="progress === 100">
-              Successfully updated — taking you to your dashboard...
-            </p>
           </div>
         </section>
+
+        <div class="s-success-overlay" *ngIf="progress === 100">
+          <div class="s-success-modal">
+            <div class="s-success-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12.4l2.6 2.6L16 9.4"/></svg>
+            </div>
+            <h2 class="s-success-title">Profile created</h2>
+            <p class="s-success-sub">Your career twin is ready. We are taking you to your dashboard.</p>
+            <button type="button" class="s-foot-btn s-foot-btn--primary s-success-btn" (click)="goToDashboard()">Go to Dashboard</button>
+          </div>
+        </div>
 
         <footer class="s-foot" *ngIf="current.kind !== 'loader'">
           <button class="s-foot-btn s-foot-btn--ghost" type="button" [disabled]="stepIndex === 0" (click)="back()">
@@ -487,8 +543,7 @@ const FLAGS: Record<string, string> = {
               <p>{{ state.profile.title || summaryTitles() }}</p>
               <div class="s-summary-meta">
                 <span *ngIf="state.profile.location">{{ state.profile.location }}</span>
-                <span *ngIf="state.profile.email">{{ state.profile.email }}</span>
-                <span *ngIf="state.preferences.contactEmail">{{ state.preferences.contactEmail }}</span>
+                <span *ngIf="state.preferences.contactEmail || state.profile.email">{{ state.preferences.contactEmail || state.profile.email }}</span>
               </div>
             </div>
             <button class="s-edit-btn" type="button" (click)="retake()">Edit Studio</button>
@@ -572,6 +627,7 @@ export class StudioComponent implements OnInit {
   scanConnecting = false;
   @ViewChild("consoleBody") consoleBody?: ElementRef;
   private scanSse: EventSource | null = null;
+  private redirectTimer: ReturnType<typeof setTimeout> | null = null;
 
   countryQuery = "";
   filteredCountries = COUNTRIES;
@@ -581,23 +637,19 @@ export class StudioComponent implements OnInit {
   titlesWarning = "";
   importError: string | null = null;
   githubError = "";
+  linkedinError = "";
+  resumeFileName = "";
+  resumeProcessing = false;
+  resumeDragOver = false;
+  resumeError = "";
+  private resumeUploadSub: Subscription | null = null;
+  readonly normalizeUrl = normalizeUrl;
   titlesFocused = false;
   filteredTitles: string[] = [];
   cityFocused = false;
   filteredCities: string[] = [];
 
-  private static toInternTitle(title: string): string | null {
-    if (/\b(junior|middle|senior|staff|principal|lead|director|vp|chief|head)\b/i.test(title)) return null;
-    const m = title.match(/^(.*?)\s(Developer|Engineer|Designer|Analyst|Administrator|Architect|Scientist|Specialist|Manager)$/);
-    return m ? `${m[1]} Intern` : null;
-  }
-
-  // The search sends these titles as literal query keywords — "Python Developer"
-  // pulls senior/generic listings, "Python Intern" actually finds internships.
-  // Intern variants are generated from the stack-specific titles below and
-  // placed first so they show up ahead of the generic title when searching.
-  readonly JOB_TITLES: string[] = (() => {
-    const base = [
+  readonly JOB_TITLES: string[] = [
     "Python Developer","Python Automation Engineer","Python Backend Developer","Python Full Stack Developer",
     "JavaScript Developer","TypeScript Developer","React Developer","React Native Developer","Angular Developer","Vue.js Developer","Next.js Developer",
     "Node.js Developer","Node.js Backend Developer","Express.js Developer",
@@ -628,19 +680,8 @@ export class StudioComponent implements OnInit {
     "Citrix Engineer","SAP Developer","ServiceNow Developer","Atlassian Administrator",
     "Technical Lead","Engineering Manager","VP of Engineering","CTO","Chief Architect",
     "Junior Developer","Middle Developer","Senior Developer","Lead Developer","Staff Developer","Principal Developer",
-    "Intern Software Developer","Graduate Software Engineer","Trainee Developer",
-    ];
-    const seen = new Set<string>();
-    const internVariants: string[] = [];
-    for (const t of base) {
-      const intern = StudioComponent.toInternTitle(t);
-      if (intern && !seen.has(intern.toLowerCase())) {
-        seen.add(intern.toLowerCase());
-        internVariants.push(intern);
-      }
-    }
-    return [...internVariants, ...base];
-  })();
+    "MLOps Engineer","Analytics Engineer","Cloud Security Engineer",
+  ];
 
   readonly POPULAR_CITIES: string[] = [
     "Warsaw","Kraków","Wrocław","Gdańsk","Poznań","Łódź","Katowice","Lublin","Szczecin","Bydgoszcz",
@@ -670,6 +711,18 @@ export class StudioComponent implements OnInit {
     "Sydney","Melbourne","Brisbane","Perth","Adelaide","Auckland","Wellington","Christchurch",
     "Cape Town","Johannesburg","Durban","Pretoria","Nairobi","Lagos","Accra","Cairo","Alexandria",
     "Buenos Aires","Santiago","Bogotá","Medellín","Mexico City","Guadalajara","Montevideo","Lima","São Paulo","Rio de Janeiro",
+    "Belo Horizonte","Brasília","Curitiba","Porto Alegre","Recife","Quito","Guayaquil","Caracas","San José","Panama City",
+    "Kyiv","Lviv","Odesa","Kharkiv","Minsk","Riga","Vilnius","Tallinn","Sofia","Bucharest",
+    "Zagreb","Ljubljana","Bratislava","Belgrade","Sarajevo","Skopje","Chisinau","Tbilisi","Yerevan","Baku",
+    "Reykjavik","Luxembourg","Valletta","Nicosia","Dublin","Cork","Galway",
+    "Stockholm","Gothenburg","Malmö","Oslo","Bergen","Trondheim","Copenhagen","Aarhus","Helsinki","Tampere",
+    "Shanghai","Beijing","Shenzhen","Guangzhou","Chengdu","Hangzhou","Nanjing","Wuhan","Xi'an","Osaka",
+    "Nagoya","Fukuoka","Yokohama","Busan","Incheon","Taipei","Kaohsiung","Chiang Mai","Phuket","Penang",
+    "Ho Chi Minh City","Da Nang","Phnom Penh","Yangon","Colombo","Dhaka","Mumbai","Delhi","Bangalore","Hyderabad",
+    "Pune","Chennai","Kolkata","Ahmedabad","Karachi","Lahore","Islamabad","Kathmandu","Almaty","Tashkent",
+    "Muscat","Manama","Kuwait City","Amman","Beirut","Tunis","Casablanca","Rabat","Algiers","Addis Ababa",
+    "Kigali","Kampala","Dar es Salaam","Accra","Abidjan","Dakar","Lusaka","Harare","Maputo","Windhoek",
+    "Canberra","Hobart","Darwin","Gold Coast","Queenstown","Suva",
   ];
 
   readonly regions = REGIONS;
@@ -678,9 +731,16 @@ export class StudioComponent implements OnInit {
 
   readonly steps: Step[] = [
     {
+      key: "resume",
+      kind: "resume",
+      eyebrow: "Step 1 · Your resume",
+      title: "Got a resume? Upload it",
+      subtitle: "We will scan it and pre-fill your profile. No resume yet? Skip this and fill everything in yourself.",
+    },
+    {
       key: "about",
       kind: "about",
-      eyebrow: "Step 1 · About you",
+      eyebrow: "Step 2 · About you",
       title: "Let's build your professional twin",
       subtitle: "Tell us who you are and, optionally, link your work elsewhere online.",
     },
@@ -813,6 +873,7 @@ export class StudioComponent implements OnInit {
       eyebrow: "Almost done",
       title: "Where should employers reach you?",
       subtitle: "Drop your email so we can send your tailored results, and so hiring managers can reply straight to you.",
+      showIf: (s) => !s.profile.email,
     },
     {
       key: "loader",
@@ -875,12 +936,20 @@ export class StudioComponent implements OnInit {
     const k = this.current.key;
     const p = this.state.preferences;
     switch (this.current.kind) {
+      case "resume":
+        return !!this.resumeFileName && !this.resumeProcessing;
       case "about": {
         const gh = this.state.github.trim();
+        const li = this.state.linkedin.trim();
         this.githubError = "";
+        this.linkedinError = "";
         let ok = true;
         if (gh && !/^https?:\/\/(www\.)?github\.com\/.+/.test(gh)) {
           this.githubError = "Enter a valid GitHub URL (e.g. https://github.com/username)";
+          ok = false;
+        }
+        if (li && !/^https?:\/\/(www\.)?linkedin\.com\/.+/.test(li)) {
+          this.linkedinError = "Enter a valid LinkedIn URL (e.g. https://linkedin.com/in/username)";
           ok = false;
         }
         return ok;
@@ -909,6 +978,122 @@ export class StudioComponent implements OnInit {
 
   validEmail(v: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+
+  onResumeSelect(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files?.length) this.uploadResumeFile(input.files[0]);
+  }
+
+  onResumeDrop(event: DragEvent): void {
+    const file = event.dataTransfer?.files?.[0];
+    if (file) this.uploadResumeFile(file);
+  }
+
+  resetResume(): void {
+    this.resumeUploadSub?.unsubscribe();
+    this.resumeUploadSub = null;
+    this.resumeFileName = "";
+    this.resumeProcessing = false;
+    this.resumeError = "";
+  }
+
+  private uploadResumeFile(file: File): void {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!["pdf", "docx", "doc", "txt"].includes(ext || "")) {
+      this.resumeError = "Unsupported file type. Please upload PDF, DOCX, or TXT.";
+      return;
+    }
+    this.resumeUploadSub?.unsubscribe();
+    this.resumeError = "";
+    this.resumeFileName = file.name;
+    this.resumeProcessing = true;
+
+    this.resumeUploadSub = this.profileService.uploadResume(file).subscribe({
+      next: (response) => {
+        this.resumeProcessing = false;
+        if (!response?.success || !response?.profile) {
+          this.resumeError = response?.error || "Could not parse resume. You can still fill in your details manually.";
+          return;
+        }
+
+        const p = response.profile;
+        const profile = this.state.profile;
+        profile.fullName ||= resolveProfileName(p.fullName);
+        profile.title ||= p.title || "";
+        profile.email ||= p.email || "";
+        profile.phone ||= p.phone || "";
+        profile.location ||= p.location || "";
+        profile.linkedin ||= normalizeUrl(p.linkedin || "");
+        profile.github ||= normalizeUrl(p.github || "");
+        this.state.linkedin ||= normalizeUrl(p.linkedin || "");
+        this.state.github ||= normalizeUrl(p.github || "");
+        profile.summary ||= p.summary || "";
+
+        for (const s of (p.skills || [])) {
+          if (!profile.skills.some((x) => x.toLowerCase() === s.toLowerCase())) profile.skills.push(s);
+        }
+        for (const l of (p.languages || [])) {
+          if (!profile.languages.some((x) => x.toLowerCase() === l.toLowerCase())) profile.languages.push(l);
+        }
+        for (const exp of (p.experience || [])) {
+          const role = (exp.position || "").trim();
+          const company = (exp.company || "").trim();
+          if (!role) continue;
+          const exists = profile.experience.some(
+            (e) => e.role.toLowerCase() === role.toLowerCase() && e.company.toLowerCase() === company.toLowerCase(),
+          );
+          if (!exists) {
+            profile.experience.push({
+              id: this.profileService.uid(),
+              role,
+              company,
+              start: exp.start || "",
+              end: exp.end || "",
+              current: (exp.end || "").toLowerCase().includes("present"),
+              description: (exp.description || "").substring(0, 500),
+            });
+          }
+        }
+        for (const edu of (p.education || [])) {
+          const school = (edu.school || "").trim();
+          if (!school) continue;
+          const exists = profile.education.some((e) => e.school.toLowerCase() === school.toLowerCase());
+          if (!exists) {
+            profile.education.push({
+              id: this.profileService.uid(),
+              school,
+              degree: edu.degree || "",
+              field: edu.field || "",
+              start: edu.start || "",
+              end: edu.end || "",
+              description: "",
+            });
+          }
+        }
+        for (const cert of (p.certificates || [])) {
+          const name = (cert.name || "").trim();
+          if (!name) continue;
+          const exists = profile.certificates.some((c) => c.name.toLowerCase() === name.toLowerCase());
+          if (!exists) {
+            profile.certificates.push({ id: this.profileService.uid(), name, issuer: cert.issuer || "", year: "", url: "" });
+          }
+        }
+
+        // Pre-fill first/last name for the next step from the parsed full name.
+        if (profile.fullName && !this.state.firstName && !this.state.lastName) {
+          const [first, ...rest] = profile.fullName.split(/\s+/);
+          this.state.firstName = first || "";
+          this.state.lastName = rest.join(" ");
+        }
+
+        this.studio.saveDraft(this.state);
+      },
+      error: () => {
+        this.resumeProcessing = false;
+        this.resumeError = "Upload failed. You can still fill in your details manually.";
+      },
+    });
   }
 
   getStr(key: string): string {
@@ -1051,8 +1236,13 @@ export class StudioComponent implements OnInit {
       workTypes: WORK_TYPES,
       workMode: WORK_MODE,
     };
-    if (!values?.length) return "—";
+    if (!values?.length) return "-";
     return values.map((v) => map[key]?.find((o) => o.value === v)?.title ?? v).join(", ");
+  }
+
+  skipResume(): void {
+    this.stepIndex++;
+    this.studio.saveDraft(this.state);
   }
 
   next(): void {
@@ -1062,6 +1252,7 @@ export class StudioComponent implements OnInit {
       return;
     }
     this.stepIndex++;
+    this.studio.saveDraft(this.state);
     // The final "loader" step hides its footer, so it can never be advanced
     // via the Continue button. Kick off the gather/submit pipeline here.
     if (this.current.kind === "loader") {
@@ -1072,6 +1263,7 @@ export class StudioComponent implements OnInit {
   back(): void {
     if (this.stepIndex > 0) {
       this.stepIndex--;
+      this.studio.saveDraft(this.state);
     }
   }
 
@@ -1166,6 +1358,12 @@ export class StudioComponent implements OnInit {
       this.state.firstName,
       this.state.lastName,
     );
+    // The "about" step collects github/website on the top-level state, not
+    // on state.profile — carry them over so the Profile page's link fields
+    // are populated instead of staying empty.
+    this.state.profile.linkedin ||= this.state.linkedin;
+    this.state.profile.github ||= this.state.github;
+    this.state.profile.website ||= this.state.website;
 
     this.gatherLog = [
       { text: "Analyzing your profile and preferences", done: false },
@@ -1182,11 +1380,18 @@ export class StudioComponent implements OnInit {
   private complete(): void {
     this.studio.save(this.state);
     this.studio.submit(this.state).subscribe();
+    this.profileService.save(this.state.profile);
     this.disconnectScanSse();
-    setTimeout(() => {
-      this.submitting = false;
-      this.router.navigate(["/dashboard"]);
-    }, 900);
+    this.redirectTimer = setTimeout(() => this.goToDashboard(), 2600);
+  }
+
+  goToDashboard(): void {
+    if (this.redirectTimer) {
+      clearTimeout(this.redirectTimer);
+      this.redirectTimer = null;
+    }
+    this.submitting = false;
+    this.router.navigate(["/dashboard"]);
   }
 
   private connectScanSse(): void {

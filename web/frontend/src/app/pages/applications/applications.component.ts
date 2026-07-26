@@ -1,11 +1,19 @@
-import { AfterViewInit, Component } from "@angular/core";
+import { AfterViewInit, Component, OnInit, inject } from "@angular/core";
 import { CommonModule } from "@angular/common";
+import { FormsModule } from "@angular/forms";
 import gsap from "gsap";
+import { Application, ApplicationStage, ApplicationsService } from "../../services/applications.service";
+
+const NEXT_STAGE: Record<string, string> = {
+  applied: "phone_screen",
+  phone_screen: "technical",
+  technical: "offer",
+};
 
 @Component({
   selector: "ct-applications",
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="applications page-shell">
       <section class="applications__hero surface">
@@ -14,17 +22,21 @@ import gsap from "gsap";
         </div>
       </section>
 
-      <section class="applications__pipeline">
+      <section class="applications__pipeline" *ngIf="applications.length">
         <article class="stage surface" *ngFor="let stage of pipeline">
           <div class="stage__top">
             <span>{{ stage.name }}</span>
             <strong>{{ stage.count }}</strong>
           </div>
           <div class="stage__bar">
-            <div class="stage__fill" [style.width.%]="stage.percentage" [style.background]="stage.color"></div>
+            <div class="stage__fill" [style.width.%]="stage.percentage" [style.background]="stageColor(stage.name)"></div>
           </div>
         </article>
       </section>
+
+      <p class="applications__empty surface" *ngIf="!loading && !applications.length">
+        No applications yet. Once you apply to a job and confirm it was submitted, it will show up here.
+      </p>
 
       <section class="applications__list">
         <article class="application surface" *ngFor="let app of applications">
@@ -32,6 +44,7 @@ import gsap from "gsap";
             <div class="application__identity">
               <div class="application__logo">
                 <img
+                  *ngIf="app.domain"
                   [src]="'https://api.companyenrich.com/logo/' + app.domain"
                   [alt]="app.company + ' logo'"
                   (error)="onLogoError($event)"
@@ -43,7 +56,7 @@ import gsap from "gsap";
                 <p>{{ app.company }}</p>
               </div>
             </div>
-            <span class="application__status" [class]="'application__status--' + app.status">{{ app.statusLabel }}</span>
+            <span class="application__status" [class]="'application__status--' + app.status">{{ app.status_label }}</span>
           </div>
 
           <div class="application__timeline">
@@ -55,16 +68,38 @@ import gsap from "gsap";
             >
               <div class="timeline-step__dot"></div>
               <strong>{{ event.label }}</strong>
-              <span *ngIf="event.date">{{ event.date }}</span>
+              <span *ngIf="event.date">{{ event.date | date: "MMM d" }}</span>
               <div class="timeline-step__line" *ngIf="!last"></div>
             </div>
           </div>
 
-          <div class="application__notes">
+          <div class="application__notes" *ngIf="app.notes.length">
             <div class="note" *ngFor="let note of app.notes">
               <strong>{{ note.content }}</strong>
-              <span>{{ note.date }}</span>
+              <span>{{ note.date | date: "MMM d, HH:mm" }}</span>
             </div>
+          </div>
+
+          <div class="application__actions">
+            <button
+              class="app-action-btn"
+              type="button"
+              *ngIf="nextStage(app.status)"
+              (click)="advance(app)"
+            >Mark as {{ stageLabel(nextStage(app.status)!) }}</button>
+            <button
+              class="app-action-btn app-action-btn--danger"
+              type="button"
+              *ngIf="app.status !== 'rejected'"
+              (click)="reject(app)"
+            >Mark as rejected</button>
+            <input
+              class="app-note-input"
+              type="text"
+              placeholder="Add a note..."
+              [(ngModel)]="noteDraft[app.id]"
+              (keyup.enter)="addNote(app)"
+            />
           </div>
         </article>
       </section>
@@ -99,6 +134,12 @@ import gsap from "gsap";
     .stage,
     .application {
       padding: 1.3rem;
+    }
+
+    .applications__empty {
+      padding: 1.6rem;
+      color: #baa690;
+      text-align: center;
     }
 
     .applications__pipeline {
@@ -197,12 +238,16 @@ import gsap from "gsap";
       color: #fbbf24;
     }
 
-    .application__status--phone-screen {
+    .application__status--phone_screen {
       color: #d1a157;
     }
 
     .application__status--applied {
       color: #c4b49e;
+    }
+
+    .application__status--rejected {
+      color: #e57373;
     }
 
     .application__timeline {
@@ -268,6 +313,7 @@ import gsap from "gsap";
     .application__notes {
       display: grid;
       gap: 0.7rem;
+      margin-bottom: 1rem;
     }
 
     .note {
@@ -282,6 +328,41 @@ import gsap from "gsap";
       color: #baa690;
       white-space: nowrap;
     }
+
+    .application__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    .app-action-btn {
+      border: 1px solid rgba(209, 161, 87, 0.25);
+      border-radius: 999px;
+      background: rgba(209, 161, 87, 0.1);
+      color: #f5df90;
+      padding: 0.5rem 1rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .app-action-btn:hover { background: rgba(209, 161, 87, 0.18); }
+    .app-action-btn--danger { color: #e57373; border-color: rgba(229, 115, 115, 0.25); background: rgba(229, 115, 115, 0.08); }
+    .app-action-btn--danger:hover { background: rgba(229, 115, 115, 0.15); }
+
+    .app-note-input {
+      flex: 1;
+      min-width: 12rem;
+      border: 1px solid rgba(209, 161, 87, 0.2);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #f4e5cd;
+      padding: 0.5rem 1rem;
+      font: inherit;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .app-note-input:focus { border-color: #d1a157; }
 
     @media (max-width: 980px) {
       .applications__pipeline,
@@ -305,50 +386,28 @@ import gsap from "gsap";
     }
   `],
 })
-export class ApplicationsComponent implements AfterViewInit {
-  readonly pipeline = [
-    { name: "Applied", count: 12, percentage: 100, color: "rgba(255,255,255,0.55)" },
-    { name: "Phone screen", count: 6, percentage: 74, color: "#7dd3fc" },
-    { name: "Technical", count: 3, percentage: 42, color: "#fcd34d" },
-    { name: "Offer", count: 1, percentage: 16, color: "#86efac" },
-  ];
+export class ApplicationsComponent implements OnInit, AfterViewInit {
+  private readonly applicationsService = inject(ApplicationsService);
 
-  readonly applications = [
-    {
-      company: "Figma",
-      position: "Design systems engineer",
-      status: "phone-screen",
-      statusLabel: "Phone screen",
-      domain: "figma.com",
-      timeline: [
-        { label: "Applied", date: "Jul 01", completed: true, active: false },
-        { label: "Recruiter chat", date: "Jul 04", completed: true, active: false },
-        { label: "Hiring manager", date: "Jul 08", completed: false, active: true },
-        { label: "Panel", date: "", completed: false, active: false },
-      ],
-      notes: [
-        { content: "Highlight systems adoption metrics, not just component count.", date: "Last edited 2h ago" },
-        { content: "Strong signal: recruiter reacted well to collaboration examples.", date: "Follow-up due tomorrow" },
-      ],
-    },
-    {
-      company: "Stripe",
-      position: "Staff frontend engineer",
-      status: "technical",
-      statusLabel: "Technical loop",
-      domain: "stripe.com",
-      timeline: [
-        { label: "Applied", date: "Jun 27", completed: true, active: false },
-        { label: "Recruiter chat", date: "Jun 30", completed: true, active: false },
-        { label: "Technical", date: "Jul 10", completed: false, active: true },
-        { label: "Offer", date: "", completed: false, active: false },
-      ],
-      notes: [
-        { content: "Prepare examples around developer productivity and platform governance.", date: "Prep block 45 min" },
-        { content: "Resume version B tested better than generic variant.", date: "ATS match 91%" },
-      ],
-    },
-  ];
+  applications: Application[] = [];
+  pipeline: ApplicationStage[] = [];
+  loading = true;
+  noteDraft: Record<string, string> = {};
+
+  private readonly stageColors: Record<string, string> = {
+    Applied: "rgba(255,255,255,0.55)",
+    "Phone screen": "#7dd3fc",
+    Technical: "#fcd34d",
+    Offer: "#86efac",
+  };
+
+  ngOnInit(): void {
+    this.applicationsService.list().subscribe((res) => {
+      this.applications = res.applications || [];
+      this.pipeline = res.pipeline || [];
+      this.loading = false;
+    });
+  }
 
   ngAfterViewInit() {
     gsap.from(".applications .surface", {
@@ -357,6 +416,52 @@ export class ApplicationsComponent implements AfterViewInit {
       duration: 0.55,
       stagger: 0.08,
       ease: "power3.out",
+    });
+  }
+
+  stageColor(name: string): string {
+    return this.stageColors[name] || "#d1a157";
+  }
+
+  nextStage(status: string): string | null {
+    return NEXT_STAGE[status] || null;
+  }
+
+  stageLabel(status: string): string {
+    const map: Record<string, string> = {
+      phone_screen: "Phone screen",
+      technical: "Technical",
+      offer: "Offer",
+    };
+    return map[status] || status;
+  }
+
+  advance(app: Application): void {
+    const next = this.nextStage(app.status);
+    if (!next) return;
+    this.applicationsService.update(app.id, { status: next }).subscribe((res) => {
+      if (res.success && res.application) {
+        this.applications = this.applications.map((a) => (a.id === app.id ? res.application! : a));
+      }
+    });
+  }
+
+  reject(app: Application): void {
+    this.applicationsService.update(app.id, { status: "rejected" }).subscribe((res) => {
+      if (res.success && res.application) {
+        this.applications = this.applications.map((a) => (a.id === app.id ? res.application! : a));
+      }
+    });
+  }
+
+  addNote(app: Application): void {
+    const note = (this.noteDraft[app.id] || "").trim();
+    if (!note) return;
+    this.applicationsService.update(app.id, { note }).subscribe((res) => {
+      if (res.success && res.application) {
+        this.applications = this.applications.map((a) => (a.id === app.id ? res.application! : a));
+        this.noteDraft[app.id] = "";
+      }
     });
   }
 
