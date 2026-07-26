@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-
-import config
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from config import OUTPUT_DIR
-from database import _init_db, _migrate_db
-from routes import profile, resume, jobs, providers, studio, companies, jobs_mcp
+from database import _init_db, _migrate_db, _db_conn
+from routes import profile, resume, jobs, providers, studio, companies, jobs_mcp, applications
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +66,7 @@ app.include_router(providers.router)
 app.include_router(studio.router)
 app.include_router(companies.router)
 app.include_router(jobs_mcp.router)
+app.include_router(applications.router)
 
 
 @app.get("/")
@@ -77,5 +75,12 @@ async def root() -> dict[str, Any]:
 
 
 @app.get("/v1/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict[str, Any]:
+    db_ok = False
+    try:
+        with _db_conn() as conn:
+            conn.execute("SELECT 1")
+            db_ok = True
+    except Exception:
+        pass
+    return {"status": "ok", "database": "connected" if db_ok else "disconnected", "version": "2.0.0"}
