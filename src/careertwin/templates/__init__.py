@@ -12,7 +12,7 @@ TEMPLATES_DIR = Path(__file__).parent / "html"
 class TemplateInfo:
     name: str
     description: str
-    style: str  # modern, classic, minimal, creative, executive, technical
+    style: str
     best_for: list[str] = field(default_factory=list)
     colors: list[str] = field(default_factory=list)
     fonts: list[str] = field(default_factory=list)
@@ -82,6 +82,15 @@ TEMPLATE_REGISTRY: dict[str, TemplateInfo] = {
         best_for=["ats", "applicant-tracking", "recruiting"],
         colors=["#000000", "#333333", "#666666"],
         fonts=["Arial", "Helvetica", "sans-serif"],
+    ),
+    "senior": TemplateInfo(
+        name="senior",
+        description="Restrained, editorial design for senior/mid-level IC roles — plain-text skills line, "
+        "left-aligned header, single muted accent instead of generic AI blue",
+        style="modern",
+        best_for=["senior", "mid-level", "engineering", "tech", "general"],
+        colors=["#1a1a1a", "#3f6659", "#595959"],
+        fonts=["Helvetica Neue", "Arial"],
     ),
 }
 

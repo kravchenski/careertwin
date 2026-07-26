@@ -59,21 +59,42 @@ class ResumeParser:
             pass
         if not texts:
             raise ValueError(f"Could not extract text from {path}")
-        # Prefer pdfminer for multi-column PDFs, otherwise pick the longest
-        for name, text in texts:
-            if name == "pdfminer":
-                return text
-        return max(texts, key=lambda t: len(t[1]))[1]
+        return max(texts, key=lambda item: self._pdf_text_quality(item[1]))[1]
 
     def _clean_pypdf_text(self, text: str) -> str:
         text = re.sub(r"(\w)\s(\w)\s(\w)\s", r"\1\2\3 ", text)
         text = re.sub(r"(\w)\s(\w)\s", r"\1\2 ", text)
         text = re.sub(r"(\w)\s(\w)$", r"\1\2", text, flags=re.MULTILINE)
         text = re.sub(r"(\w)\s{2,}(\w)", r"\1 \2", text)
+        text = re.sub(r"(?<=\b[A-Za-z]{2,})\s(?=[A-Za-z]{2,}\b)", "", text)
+        text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+        text = re.sub(r"\s{2,}", " ", text)
         return text
 
+    def _pdf_text_quality(self, text: str) -> float:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return 0.0
+
+        score = len(text)
+        headers = ("SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS", "PROJECTS")
+        score += sum(300 for line in lines if any(header in line.upper() for header in headers))
+
+        fragmented = re.findall(r"(?:\b[a-zA-Z]\b[\s,.;:|/-]*){6,}", text)
+        score -= len(fragmented) * 250
+
+        long_words = re.findall(r"\b[a-zA-Z]{18,}\b", text)
+        score -= len(long_words) * 40
+
+        if "linkedin.com" in text.lower():
+            score += 120
+        if "github.com" in text.lower():
+            score += 120
+
+        return float(score)
+
     def _preprocess_text(self, text: str) -> str:
-        # Fix merged words from pdfminer (e.g. "MaksimKrauchyk" -> "Maksim Krauchyk")
+        """Fix common PDF extraction issues without breaking words."""
         text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
         text = re.sub(r"([A-Z])([A-Z][a-z])", r"\1 \2", text)
 
@@ -82,26 +103,19 @@ class ResumeParser:
             "CONTACT", "PROFILE", "LANGUAGES", "CERTIFICATIONS", "AWARDS",
             "COURSES", "CONTRIBUTIONS", "SELECTED PROJECTS", "FREELANCE EXPERIENCE",
             "HACKATHONS", "SKILLS PROFILE", "AI PLATFORM FIT",
+            "WORK HISTORY", "WORK EXPERIENCE", "PROFESSIONAL EXPERIENCE",
+            "TECHNICAL SKILLS", "TECH STACK",
         ]
         for header in section_headers:
-            text = re.sub(rf"(\w)({header})", r"\1\n\2", text)
-            text = re.sub(rf"({header})(\w)", r"\1\n\2", text)
-        text = re.sub(r"([.!?:])([A-Z])", r"\1\n\2", text)
+            text = re.sub(rf"(\s)({header})", r"\1\n\2", text)
+            text = re.sub(rf"({header})(\s)", r"\1\n\2", text)
+
         text = re.sub(r"(\d{4}\s*[-–—]\s*(?:\d{4}|Present|current))", r"\n\1", text)
 
-        # Add line breaks before email, phone, and URLs
         text = re.sub(r"(\+?\d{9,})", r"\n\1", text)
         text = re.sub(r"([\w.+-]+@[\w.-]+\.\w{2,})", r"\n\1", text)
         text = re.sub(r"(github\.com/)", r"\n\1", text)
         text = re.sub(r"(linkedin\.com/)", r"\n\1", text)
-
-        # Add line breaks before "(Commercial Client)" and "(Telegram)" patterns
-        text = re.sub(r"(\([^)]+\))\s*([A-Z])", r"\1\n\2", text)
-
-        # Add line breaks before known section markers
-        text = re.sub(r"(Designed, developed)", r"\n\1", text)
-        text = re.sub(r"(Developed a)", r"\n\1", text)
-        text = re.sub(r"(Managed the)", r"\n\1", text)
 
         return text
 
@@ -130,6 +144,9 @@ class ResumeParser:
         skills = self._extract_skills(sections)
         if len(skills) < 3:
             skills = self._extract_skills_from_text(text) or skills
+
+        certificates = self._extract_certificates(sections)
+
         return CareerGraph(
             profile=profile,
             experience=experience,
@@ -146,27 +163,22 @@ class ResumeParser:
         github = ""
         linkedin = ""
 
-        # Join first few lines for easier parsing
         text = " ".join(lines[:15])
 
-        # Extract email (look for @ ... .domain pattern, not phone numbers)
         email_match = re.search(r"[a-zA-Z][\w.+-]+@[\w.-]+\.\w{2,}", text)
         if email_match:
             email = email_match.group()
 
-        # Extract phone (international format with +)
-        phone_match = re.search(r"\+\d[\d\s\-\(\)]{6,}", text)
+        phone_match = re.search(r"\+?\d[\d\s\-\(\)]{6,}", text)
         if phone_match:
             phone = re.sub(r"\s", "", phone_match.group()).strip()
 
-        # Extract LinkedIn - check all lines
         for line in lines:
             linkedin_match = re.search(r"linkedin\.com/in/([\w-]+)", line)
             if linkedin_match:
                 linkedin = f"https://www.linkedin.com/in/{linkedin_match.group(1)}"
                 break
 
-        # Extract GitHub - check all lines
         for line in lines:
             github_match = re.search(
                 r"(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_-]+)(?:/|$|\s)",
@@ -176,7 +188,18 @@ class ResumeParser:
                 github = f"https://github.com/{github_match.group(1)}"
                 break
 
-        # Extract name (first 2-4 word line that looks like a name)
+        for line in lines[:5]:
+            pipe_match = re.search(r"\|\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,}),\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,})", line)
+            if pipe_match:
+                location = pipe_match.group().strip().lstrip("|").strip()
+                break
+            end_match = re.search(r"([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,}),\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,})\s*$", line)
+            if end_match:
+                loc = end_match.group().strip()
+                if len(loc) < 40 and not any(c.isdigit() for c in loc):
+                    location = loc
+                    break
+
         for line in lines[:8]:
             line = line.strip()
             if not line or "@" in line or "http" in line or "|" in line:
@@ -184,33 +207,20 @@ class ResumeParser:
             if any(h in line.upper() for h in [
                 "SKILLS", "PROFILE", "EXPERIENCE", "EDUCATION",
                 "PROJECTS", "PYTHON", "JAVASCRIPT", "LANGUAGES",
-                "COURSES", "CONTRIBUTIONS", "HACKATHONS",
+                "COURSES", "CONTRIBUTIONS", "HACKATHONS", "SUMMARY",
+                "CERTIFICATIONS", "WORK", "EMPLOYMENT", "CAREER",
             ]):
                 continue
             words = line.split()
-            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words if w):
+            if 2 <= len(words) <= 5 and all(w[0].isupper() for w in words if w):
                 name = line
                 break
 
-        # Fallback: extract name from the beginning of first line
         if not name and lines:
             first_line = lines[0]
             name_match = re.match(r"^([A-Z][a-z]+\s+[A-Z][a-z]+)", first_line)
             if name_match:
                 name = name_match.group(1)
-
-        # Extract location - look for "City, Country" in first line
-        if lines:
-            first_line = lines[0]
-            # Try to find "City, Country" pattern - must be preceded by name or start of line
-            location_match = re.search(
-                r"(?:^|\s)([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,}),\s+([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]{2,})",
-                first_line,
-            )
-            if location_match:
-                loc = location_match.group().strip()
-                if len(loc) < 40:
-                    location = loc
 
         return Profile(
             full_name=name,
@@ -233,54 +243,88 @@ class ResumeParser:
         )
 
     def _split_sections(self, lines: list[str]) -> dict[str, list[str]]:
-        section_headers = [
-            "experience", "work", "employment", "career", "freelance experience",
-            "education", "academic",
-            "skills", "technologies", "tech stack", "skills profile",
-            "projects", "portfolio", "selected projects",
-            "certifications", "awards", "summary", "about",
-            "languages", "courses", "contributions", "hackathons",
-            "ai platform fit",
-        ]
+        """Split resume lines into sections based on headers.
+        
+        Handles various CV formats with robust header detection.
+        """
+        section_map = {
+            "experience": "experience",
+            "work": "experience",
+            "work history": "experience",
+            "work experience": "experience",
+            "professional experience": "experience",
+            "employment": "experience",
+            "career": "experience",
+            "freelance experience": "experience",
+            "education": "education",
+            "academic": "education",
+            "skills": "skills",
+            "technologies": "skills",
+            "tech stack": "skills",
+            "technical skills": "skills",
+            "skills profile": "skills",
+            "projects": "projects",
+            "portfolio": "projects",
+            "selected projects": "projects",
+            "certifications": "certificates",
+            "certificates": "certificates",
+            "courses": "certificates",
+            "certifications & courses": "certificates",
+            "certifications and courses": "certificates",
+            "awards": "certificates",
+            "summary": "summary",
+            "about": "summary",
+            "profile": "summary",
+            "objective": "summary",
+            "professional summary": "summary",
+            "languages": "languages",
+            "contributions": "other",
+            "hackathons": "other",
+            "ai platform fit": "other",
+        }
+
         sections: dict[str, list[str]] = {"other": []}
         current = "other"
+        section_order = []
+
         for line in lines:
-            lower = line.lower().rstrip(":")
-            # Check if line contains a section header (even if mixed with other text)
+            stripped = line.strip()
+            lower = stripped.lower().rstrip(":")
+
             matched = False
-            for header in section_headers:
-                if header in lower:
-                    # If the header is at the start or the line is short, treat as section header
-                    idx = lower.find(header)
-                    if idx == 0 or len(line) < 60:
-                        current = header
+
+            if lower in section_map:
+                current = section_map[lower]
+                if current not in sections:
+                    sections[current] = []
+                    section_order.append(current)
+                matched = True
+            else:
+                for header, section in section_map.items():
+                    if lower.startswith(header):
+                        current = section
                         if current not in sections:
                             sections[current] = []
-                        # If there's text after the header on the same line, add it
-                        rest = line[idx + len(header):].strip()
+                            section_order.append(current)
+                        rest = stripped[len(header):].strip().lstrip(":").strip()
                         if rest:
                             sections[current].append(rest)
                         matched = True
                         break
-                    else:
-                        # Header is in the middle of a longer line - split it
-                        before = line[:idx].strip()
-                        after = line[idx + len(header):].strip()
-                        if before:
-                            sections[current].append(before)
-                        current = header
-                        if current not in sections:
-                            sections[current] = []
-                        if after:
-                            sections[current].append(after)
-                        matched = True
-                        break
+
             if not matched:
-                sections[current].append(line)
+                sections[current].append(stripped)
+
+        for sec_name in section_order:
+            if not sections[sec_name]:
+                pass
+
         return sections
 
     def _extract_experience(self, sections: dict[str, list[str]]) -> list[Experience]:
-        exp_keys = ["experience", "work", "employment", "career", "freelance experience"]
+        exp_keys = ["experience", "work", "work history", "work experience",
+                     "professional experience", "employment", "career",
+                     "freelance experience"]
         lines = []
         for key in exp_keys:
             if key in sections:
@@ -291,37 +335,91 @@ class ResumeParser:
         experiences = []
         current_exp: Optional[dict] = None
 
+        def _start_new(raw_line: str) -> dict:
+            m = re.match(r"^(.+?)\s*[—–]\s*(.+)$", raw_line)
+            if m:
+                return {"company": m.group(1).strip(), "position": m.group(2).strip(),
+                         "description": "", "location": ""}
+            return {"company": "", "position": raw_line, "description": "", "location": ""}
+
+        def _looks_like_new_header(raw_line: str) -> bool:
+            s = raw_line.strip()
+            return (
+                bool(s)
+                and len(s) <= 100
+                and not s.endswith((".", ",", ";", ":"))
+                and bool(re.search(r"[—–]", s))
+            )
+
         for line in lines:
-            if "|" in line and self._is_date_range(line):
-                parts = [p.strip() for p in line.split("|")]
-                if len(parts) >= 2:
-                    dates = self._parse_date_range(line)
-                    exp: dict = {
-                        "position": parts[0], "company": parts[1],
-                        "description": "", "location": "",
-                        "start_date": dates[0] if dates else None,
-                        "end_date": dates[1] if len(dates) > 1 else None,
-                    }
-                    experiences.append(exp)
-                    current_exp = exp
-                    continue
-            if self._is_date_range(line):
+            stripped = line.strip()
+
+            if stripped in ("•", "-", "*", "◦", "▪", "‣"):
+                continue
+
+            if line.lower().rstrip(":") in ("experience", "work history", "work experience",
+                                              "professional experience", "employment"):
+                continue
+
+            line = re.sub(r"\s*\|\s*$", "", line)
+
+            has_date = self._is_date_range(line)
+
+            if has_date:
                 dates = self._parse_date_range(line)
-                if current_exp and current_exp not in experiences:
+                if (
+                    current_exp is not None
+                    and current_exp.get("start_date") is None
+                    and (current_exp.get("position") or current_exp.get("company"))
+                ):
                     current_exp["start_date"] = dates[0] if dates else None
                     current_exp["end_date"] = dates[1] if len(dates) > 1 else None
+                    continue
+                if current_exp:
+                    if current_exp.get("position") or current_exp.get("company"):
+                        experiences.append(current_exp)
+                date_text = re.sub(r"\d{4}\s*[-–—]\s*(?:\d{4}|present|now|current).*$", "", line, flags=re.IGNORECASE).strip()
+                company = ""
+                position = ""
+                if "|" in date_text:
+                    parts = [p.strip() for p in date_text.split("|")]
+                    position = parts[0] if len(parts) > 0 else ""
+                    company = parts[1] if len(parts) > 1 else ""
+                current_exp = {
+                    "company": company, "position": position,
+                    "description": "", "location": "",
+                    "start_date": dates[0] if dates else None,
+                    "end_date": dates[1] if len(dates) > 1 else None,
+                }
+                continue
+
+            if current_exp is None:
+                if "|" in line:
+                    parts = [p.strip() for p in line.split("|")]
+                    if len(parts) >= 2 and parts[0] and parts[1]:
+                        current_exp = {
+                            "position": parts[0], "company": parts[1],
+                            "description": "", "location": "",
+                        }
+                        continue
+                current_exp = _start_new(line)
+            elif current_exp["company"] and current_exp["position"]:
+                if _looks_like_new_header(line):
                     experiences.append(current_exp)
-                current_exp = {"company": "", "position": "", "description": "", "location": ""}
-            elif current_exp is None:
-                current_exp = {"company": "", "position": line, "description": "", "location": ""}
+                    current_exp = _start_new(line)
+                    continue
+                current_exp["description"] += line + "\n"
             elif not current_exp["company"]:
-                current_exp["company"] = line
+                if "|" in line:
+                    parts = [p.strip() for p in line.split("|")]
+                    current_exp["position"] = parts[0]
+                    current_exp["company"] = parts[1] if len(parts) > 1 else ""
+                else:
+                    current_exp["company"] = line
             elif not current_exp["position"]:
                 current_exp["position"] = line
-            else:
-                current_exp["description"] += line + "\n"
 
-        if current_exp and current_exp.get("company") and current_exp not in experiences:
+        if current_exp and (current_exp.get("position") or current_exp.get("company")):
             experiences.append(current_exp)
 
         return [
@@ -332,6 +430,7 @@ class ResumeParser:
                 evidence=[Evidence(source=SourceType.RESUME, description="Parsed from resume")],
             )
             for e in experiences
+            if e.get("position") or e.get("company")
         ]
 
     def _extract_education(self, sections: dict[str, list[str]]) -> list[Education]:
@@ -341,17 +440,118 @@ class ResumeParser:
             if key in sections:
                 lines = sections[key]
                 break
+        if not lines:
+            return []
+
         educations = []
+        current = None
+
         for line in lines:
-            parts = [p.strip() for p in re.split(r"[•|,]", line) if p.strip()]
-            if parts:
-                educations.append(Education(
-                    institution=parts[0] if len(parts) > 0 else "",
-                    degree=parts[1] if len(parts) > 1 else "",
-                    field=parts[2] if len(parts) > 2 else None,
+            if re.match(r"^\d{4}\s*[-–—]\s*\d{4}$", line.strip()):
+                continue
+            if re.match(r"^\d{4}$", line.strip()):
+                continue
+            if re.match(r"^gpa[:\s]", line.lower()):
+                continue
+
+            has_date = bool(re.search(r"\d{4}\s*[-–—]\s*(?:\d{4}|present)", line.lower()))
+            looks_like_school = any(w in line.lower() for w in [
+                "university", "institute", "college", "school", "academy",
+                "polytechnic", "bachelor", "master", "phd", "bsc", "msc",
+            ])
+
+            if has_date or looks_like_school:
+                if current and current.institution:
+                    educations.append(current)
+                if "|" in line:
+                    parts = [p.strip() for p in line.split("|")]
+                elif "—" in line or " – " in line:
+                    parts = [p.strip() for p in re.split(r"[—–]", line)]
+                else:
+                    parts = [line.strip()]
+
+                clean_parts = []
+                for p in parts:
+                    if re.match(r"^\d{4}\s*[-–—]", p):
+                        continue
+                    if p:
+                        clean_parts.append(p)
+
+                current = Education(
+                    institution=clean_parts[0] if clean_parts else "",
+                    degree=clean_parts[1] if len(clean_parts) > 1 else "",
+                    field=clean_parts[2] if len(clean_parts) > 2 else None,
                     evidence=[Evidence(source=SourceType.RESUME, description="Parsed from resume")],
-                ))
+                )
+            elif current:
+                if not current.degree and not re.match(r"^\d{4}", line):
+                    current.degree = line
+                elif not current.field and not re.match(r"^\d{4}", line):
+                    current.field = line
+
+        if current and current.institution:
+            educations.append(current)
+
         return educations
+
+    def _extract_certificates(self, sections: dict[str, list[str]]) -> list[dict]:
+        """Extract certificates/courses from certifications and courses sections."""
+        cert_keys = ["certifications", "awards", "courses", "certificates",
+                      "certifications & courses", "certifications and courses"]
+        lines = []
+        for key in cert_keys:
+            if key in sections:
+                lines.extend(sections[key])
+        if not lines:
+            return []
+
+        certs = []
+        current_name = ""
+        current_issuer = ""
+
+        for line in lines:
+            if re.match(r"^\d{4}$", line.strip()):
+                continue
+            if re.match(r"^\d{4}\s*[-–—]", line.strip()):
+                continue
+            if line.lower().rstrip(":") in ("certifications", "courses", "certificates",
+                                              "awards", "certifications & courses"):
+                continue
+
+            if "|" in line:
+                parts = [p.strip() for p in line.split("|")]
+                name = parts[0]
+                issuer = parts[1] if len(parts) > 1 else ""
+                if name and not re.match(r"^\d+$", name):
+                    certs.append({"name": name, "issuer": issuer})
+                    current_name = ""
+                    current_issuer = ""
+                continue
+
+            m = re.match(r"^(.+?)\s*[—–-]\s*(.+)$", line)
+            if m:
+                name = m.group(1).strip()
+                issuer = m.group(2).strip()
+                if name and not re.match(r"^\d+$", name):
+                    certs.append({"name": name, "issuer": issuer})
+                    current_name = ""
+                    current_issuer = ""
+                continue
+
+            if re.match(r"^\d+$", line.strip()):
+                continue
+            if not current_name:
+                current_name = line
+            elif not current_issuer:
+                current_issuer = line
+                certs.append({"name": current_name, "issuer": current_issuer})
+                current_name = ""
+                current_issuer = ""
+
+        if current_name:
+            certs.append({"name": current_name, "issuer": current_issuer})
+
+        return certs
 
     def _extract_skills(self, sections: dict[str, list[str]]) -> list[Skill]:
         skill_keys = [
@@ -366,7 +566,6 @@ class ResumeParser:
         skills = []
         seen: set[str] = set()
         for line in raw:
-            # Handle "Languages:" and "AI/Data:" prefixes
             line = re.sub(
                 r"^(?:Languages|AI/Data|Technologies|Tools|Frameworks):\s*",
                 "", line, flags=re.IGNORECASE,
@@ -374,7 +573,6 @@ class ResumeParser:
             items = re.split(r"[•,|/]", line)
             for item in items:
                 name = item.strip()
-                # Clean up common extraction artifacts
                 name = re.sub(r"\s+", " ", name)
                 if name and len(name) > 1 and name.lower() not in seen:
                     seen.add(name.lower())

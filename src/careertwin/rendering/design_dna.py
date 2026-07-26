@@ -12,15 +12,15 @@ class DesignDNA:
     """Extracted design characteristics of a resume."""
     colors: list[str] = field(default_factory=list)
     fonts: list[str] = field(default_factory=list)
-    spacing: str = "normal"  # compact, normal, spacious
-    layout: str = "single"  # single, two-column, sidebar
-    style: str = "modern"  # modern, classic, minimal, creative
-    section_style: str = "line"  # line, box, bold, underline
-    tag_style: str = "filled"  # filled, outlined, plain
+    spacing: str = "normal"
+    layout: str = "single"
+    style: str = "modern"
+    section_style: str = "line"
+    tag_style: str = "filled"
     scores: dict[str, float] = field(default_factory=dict)
     readability_score: float = 0.0
     ats_score: float = 0.0
-    visual_hierarchy: str = "good"  # good, poor, excellent
+    visual_hierarchy: str = "good"
 
 
 class DesignDNAEngine:

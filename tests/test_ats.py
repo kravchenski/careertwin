@@ -18,7 +18,6 @@ class TestATSChecker:
         text = sample_graph.to_search_text()
         report = checker.check(sample_graph, text)
 
-        # Should find experience, skills sections
         passed_names = [p for p in report.passed_checks]
         assert any("experience" in p.lower() for p in passed_names)
         assert any("skills" in p.lower() for p in passed_names)
@@ -37,7 +36,6 @@ class TestATSChecker:
         text = sample_graph.to_search_text()
         report = checker.check(sample_graph, text)
 
-        # Check either passed or failed - depends on sample data
         all_messages = report.passed_checks + [i.message for i in report.issues]
         has_verb_check = any("action verb" in m.lower() for m in all_messages)
         assert has_verb_check
@@ -56,5 +54,4 @@ class TestATSChecker:
         text = sample_graph.to_search_text()
         report = checker.check(sample_graph, text)
 
-        # score >= 70 is passing
         assert isinstance(report.is_passing, bool)

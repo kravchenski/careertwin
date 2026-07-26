@@ -1,0 +1,27 @@
+services:
+  backend:
+    network_mode: bridge
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src:ro
+      - ./web/api:/app/web/api
+    environment:
+      - UVICORN_RELOAD=true
+    networks:
+      - careertwin
+
+  frontend:
+    build:
+      target: builder
+    command: npm run start -- --host 0.0.0.0 --port 4200
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./web/frontend/src:/app/src:ro
+    environment:
+      - NG_DEV=true
+
+networks:
+  careertwin:
+    driver: bridge

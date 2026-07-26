@@ -11,11 +11,11 @@ from pathlib import Path
 @dataclass
 class DesignTrend:
     name: str
-    source: str  # dribbble, behance, built-in
+    source: str
     colors: list[str] = field(default_factory=list)
     fonts: list[str] = field(default_factory=list)
     style_tags: list[str] = field(default_factory=list)
-    popularity: float = 0.0  # 0-1
+    popularity: float = 0.0
     url: str = ""
     image_url: str = ""
 
