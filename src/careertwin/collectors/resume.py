@@ -378,9 +378,16 @@ class ResumeParser:
                 if current_exp:
                     if current_exp.get("position") or current_exp.get("company"):
                         experiences.append(current_exp)
+                date_text = re.sub(r"\d{4}\s*[-–—]\s*(?:\d{4}|present|now|current).*$", "", line, flags=re.IGNORECASE).strip()
+                company = ""
+                position = ""
+                if "|" in date_text:
+                    parts = [p.strip() for p in date_text.split("|")]
+                    position = parts[0] if len(parts) > 0 else ""
+                    company = parts[1] if len(parts) > 1 else ""
                 current_exp = {
-                    "company": "", "position": "", "description": "",
-                    "location": "",
+                    "company": company, "position": position,
+                    "description": "", "location": "",
                     "start_date": dates[0] if dates else None,
                     "end_date": dates[1] if len(dates) > 1 else None,
                 }
