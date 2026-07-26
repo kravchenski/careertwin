@@ -129,7 +129,10 @@ import { resolveProfileName } from "../../utils/profile-name";
     .action-btn--primary {
       background: linear-gradient(135deg, #ecd4ab, #d1a157); color: #120b07; border-color: #d1a157;
     }
-    .action-btn--primary:hover { box-shadow: 0 4px 16px rgba(209,161,87,0.3); transform: translateY(-1px); }
+    .action-btn--primary:hover {
+      background: linear-gradient(135deg, #f5df90, #d1a157);
+      box-shadow: 0 4px 16px rgba(209,161,87,0.3); transform: translateY(-1px);
+    }
     .action-arrow { font-size: 1.1rem; }
 
     .dash__setup {
@@ -234,6 +237,7 @@ export class DashboardComponent implements OnInit {
       this.state = local;
       this.hasProfile = true;
       this.setupSteps[2].done = true;
+      this.updateMemoriesStat();
     }
 
     const jobsData = localStorage.getItem("careertwin-jobs");
@@ -251,8 +255,19 @@ export class DashboardComponent implements OnInit {
         this.state = remote;
         this.hasProfile = true;
         this.setupSteps[2].done = true;
+        this.updateMemoriesStat();
       }
     });
+  }
+
+  /** "Memories" = how many concrete facts the AI has learned about the user
+   * from their resume/profile (skills, languages, experience, education,
+   * certificates) — not a hardcoded placeholder. */
+  private updateMemoriesStat(): void {
+    const p = this.state?.profile;
+    if (!p) return;
+    this.stats[5].value =
+      p.skills.length + p.languages.length + p.experience.length + p.education.length + p.certificates.length;
   }
 
   initials(): string {

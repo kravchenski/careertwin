@@ -1,8 +1,9 @@
-import { AfterViewInit, Component, ElementRef, ViewChild, OnDestroy } from "@angular/core";
+import { AfterViewInit, Component, ElementRef, ViewChild, OnDestroy, inject } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { StudioService } from "../../services/studio.service";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -24,41 +25,10 @@ gsap.registerPlugin(ScrollTrigger);
           <p class="hero-sub">Build a Knowledge Graph of your professional DNA. <br class="hide-mobile">Generate tailored, ATS-optimized documents for every opportunity.</p>
           <div class="hero-cta">
             <a routerLink="/studio" class="btn-primary">
-              <span>Open Studio</span>
+              <span>{{ hasProfile() ? "Open Studio" : "Get Started" }}</span>
               <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </a>
-            <a routerLink="/resume" class="btn-ghost">
-              <span>See a sample CV</span>
-            </a>
           </div>
-        </div>
-      </section>
-
-      <section class="bento-scene">
-        <div class="bento-head">
-          <h2 class="bento-title">Everything a recruiter's screen checks<br class="hide-mobile"> before a human ever does.</h2>
-        </div>
-        <div class="bento-grid">
-          <a routerLink="/resume" class="bento-card bento-card--wide">
-            <div class="bento-card__glow"></div>
-            <h3>ATS optimization</h3>
-            <p>Every draft is checked against the same keyword and formatting rules an applicant tracking system runs first, before a person ever opens it.</p>
-          </a>
-          <a routerLink="/resume" class="bento-card">
-            <div class="bento-card__glow"></div>
-            <h3>Visual QA</h3>
-            <p>Vision AI inspects the rendered page for spacing, overflow, and contrast, then repairs what it finds.</p>
-          </a>
-          <a routerLink="/jobs" class="bento-card">
-            <div class="bento-card__glow"></div>
-            <h3>Multi-language</h3>
-            <p>Applications generate in the language the posting was written in, automatically.</p>
-          </a>
-          <a routerLink="/studio" class="bento-card bento-card--wide">
-            <div class="bento-card__glow"></div>
-            <h3>Knowledge Graph</h3>
-            <p>One structured graph of your experience powers every tailored document: GitHub, projects, and work history connected once, reused everywhere.</p>
-          </a>
         </div>
       </section>
 
@@ -88,43 +58,29 @@ gsap.registerPlugin(ScrollTrigger);
         </div>
       </section>
 
-      <section class="final-cta">
-        <div class="final-cta__glow" aria-hidden="true"></div>
-        <h2 class="final-cta__title">Stop guessing what<br>gets a callback.</h2>
-        <a routerLink="/studio" class="btn-primary btn-primary--large">
-          <span>Open Studio</span>
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-        </a>
-      </section>
-
       <footer class="site-footer">
         <div class="footer-inner">
           <div class="footer-top">
             <div class="footer-brand">
-              <span class="footer-logo">JobTwin</span>
-              <p class="footer-tagline">Your AI-powered career operating system.</p>
+              <a routerLink="/" class="footer-mark">
+                <span class="footer-mark-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M4 6.5C4 5.12 5.12 4 6.5 4H12a8 8 0 1 1 0 16H6.5A2.5 2.5 0 0 1 4 17.5z"/>
+                    <path d="M8 9h6M8 12h8M8 15h5"/>
+                  </svg>
+                </span>
+                <span class="footer-logo">JobTwin</span>
+              </a>
+              <p class="footer-tagline">Your AI-powered career operating system. It collects roles, tailors your materials, and prepares each application so you can spend your time on interviews.</p>
             </div>
-            <div class="footer-links">
-              <div class="footer-col">
-                <h4>Product</h4>
-                <a routerLink="/profile">Profile</a>
-                <a routerLink="/resume">Resume builder</a>
-              </div>
-              <div class="footer-col">
-                <h4>Features</h4>
-                <a routerLink="/studio">Knowledge Graph</a>
-                <a routerLink="/resume">ATS optimization</a>
-                <a routerLink="/resume">Visual QA</a>
-                <a routerLink="/jobs">Multi-language</a>
-              </div>
-              <div class="footer-col">
-                <h4>Resources</h4>
-                <a href="https://jobtwin.app/docs" target="_blank" rel="noopener">Documentation</a>
-                <a href="https://jobtwin.app/api" target="_blank" rel="noopener">API reference</a>
-                <a href="https://jobtwin.app/changelog" target="_blank" rel="noopener">Changelog</a>
-                <a href="https://jobtwin.app/support" target="_blank" rel="noopener">Support</a>
-              </div>
-            </div>
+
+            <nav class="footer-nav" aria-label="Product">
+              <span class="footer-nav-title">Product</span>
+              <a routerLink="/studio">Studio</a>
+              <a routerLink="/jobs">Jobs</a>
+              <a routerLink="/applications">Applications</a>
+              <a routerLink="/dashboard">Dashboard</a>
+            </nav>
           </div>
           <div class="footer-bottom">
             <span>&copy; 2026 JobTwin. All rights reserved.</span>
@@ -147,10 +103,6 @@ gsap.registerPlugin(ScrollTrigger);
       overflow-x: hidden;
       max-width: 100%;
       position: relative;
-      background:
-        radial-gradient(60rem 40rem at 15% 0%, rgba(200, 155, 80, 0.07), transparent 55%),
-        radial-gradient(50rem 60rem at 100% 40%, rgba(200, 155, 80, 0.05), transparent 60%),
-        radial-gradient(46rem 50rem at 0% 85%, rgba(200, 155, 80, 0.06), transparent 55%);
     }
 
     /* ── Hero ─────────────────────────────────────────────────── */
@@ -181,7 +133,7 @@ gsap.registerPlugin(ScrollTrigger);
       z-index: 0;
       pointer-events: none;
       background:
-        radial-gradient(46rem 30rem at 50% 8%, rgba(200, 155, 80, 0.16), transparent 60%),
+        radial-gradient(46rem 34rem at 50% 34%, rgba(200, 155, 80, 0.16), transparent 62%),
         radial-gradient(38rem 26rem at 12% 92%, rgba(200, 155, 80, 0.08), transparent 65%);
     }
 
@@ -244,122 +196,17 @@ gsap.registerPlugin(ScrollTrigger);
       flex-wrap: wrap;
     }
 
-    .btn-ghost {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      color: var(--color-muted);
-      font-size: 0.95rem;
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: color 0.25s ease, border-color 0.25s ease;
-      padding-bottom: 0.15rem;
-    }
-
-    .btn-ghost:hover {
-      color: var(--color-foreground);
-      border-color: var(--color-line-strong);
-    }
-
-    /* ── Bento features ───────────────────────────────────────── */
-
-    .bento-scene {
-      max-width: 76rem;
-      margin: 0 auto;
-      padding: 8rem 2rem;
-    }
-
-    .bento-head {
-      max-width: 44rem;
-      margin: 0 0 3.5rem;
-    }
-
-    .bento-title {
-      font-family: var(--font-display);
-      font-size: clamp(2.2rem, 4vw, 3.4rem);
-      line-height: 1.05;
-      letter-spacing: 0.005em;
-      color: var(--color-foreground);
-    }
-
-    .bento-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-auto-flow: dense;
-      gap: 1.25rem;
-    }
-
-    .bento-card {
-      position: relative;
-      display: block;
-      grid-column: span 1;
-      padding: 2.4rem 2rem;
-      border-radius: 1.4rem;
-      border: 1px solid var(--color-line);
-      background: var(--color-panel);
-      text-decoration: none;
-      overflow: hidden;
-      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, background 0.4s ease;
-    }
-
-    .bento-card--wide {
-      grid-column: span 2;
-    }
-
-    .bento-card:hover {
-      transform: translateY(-6px);
-      border-color: var(--color-line-strong);
-      background: var(--color-panel-strong);
-    }
-
-    .bento-card__glow {
-      position: absolute;
-      inset: -40% -40% auto auto;
-      width: 14rem;
-      height: 14rem;
-      background: radial-gradient(circle, rgba(200, 155, 80, 0.22), transparent 70%);
-      opacity: 0;
-      transition: opacity 0.5s ease;
-      pointer-events: none;
-    }
-
-    .bento-card:hover .bento-card__glow {
-      opacity: 1;
-    }
-
-    .bento-card h3 {
-      font-family: var(--font-logo);
-      font-size: 1.3rem;
-      font-weight: 600;
-      color: var(--color-foreground);
-      margin-bottom: 0.7rem;
-      position: relative;
-      z-index: 1;
-    }
-
-    .bento-card p {
-      font-size: 0.92rem;
-      line-height: 1.65;
-      color: var(--color-muted);
-      position: relative;
-      z-index: 1;
-      max-width: 34rem;
-    }
-
     /* ── Steps ────────────────────────────────────────────────── */
 
     .steps-wrapper {
       position: relative;
-      height: 250vh;
+      overflow: hidden;
     }
 
     .steps-track {
-      position: sticky;
-      top: 0;
       display: flex;
       width: 300vw;
       height: 100dvh;
-      overflow: hidden;
     }
 
     .step-panel {
@@ -414,44 +261,6 @@ gsap.registerPlugin(ScrollTrigger);
       border-bottom: 1px solid rgba(200, 155, 80, 0.3);
     }
 
-    /* ── Final CTA ────────────────────────────────────────────── */
-
-    .final-cta {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2.6rem;
-      padding: 10rem 2rem;
-      text-align: center;
-      overflow: hidden;
-    }
-
-    .final-cta__glow {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      background: radial-gradient(40rem 24rem at 50% 50%, rgba(200, 155, 80, 0.14), transparent 65%);
-    }
-
-    .final-cta__title {
-      position: relative;
-      z-index: 1;
-      font-family: var(--font-display);
-      font-size: clamp(2.6rem, 6vw, 5.2rem);
-      line-height: 1;
-      color: var(--color-foreground);
-    }
-
-    .btn-primary--large {
-      position: relative;
-      z-index: 1;
-      font-size: 1.05rem;
-      padding: 1.1rem 2.2rem;
-    }
-
     /* ── Footer ───────────────────────────────────────────────── */
 
     .site-footer {
@@ -467,10 +276,39 @@ gsap.registerPlugin(ScrollTrigger);
     }
 
     .footer-top {
-      display: grid;
-      grid-template-columns: 1.2fr 2fr;
-      gap: 4rem;
-      margin-bottom: 4rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 3rem;
+      margin-bottom: 3.5rem;
+    }
+
+    .footer-brand {
+      max-width: 24rem;
+    }
+
+    .footer-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      text-decoration: none;
+    }
+
+    .footer-mark-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 999px;
+      border: 1px solid var(--color-line-strong);
+      background: var(--color-panel-strong);
+      color: var(--color-foreground);
+    }
+
+    .footer-mark-icon svg {
+      width: 1.05rem;
+      height: 1.05rem;
     }
 
     .footer-logo {
@@ -483,41 +321,33 @@ gsap.registerPlugin(ScrollTrigger);
 
     .footer-tagline {
       color: var(--color-muted);
-      font-size: 0.85rem;
-      margin-top: 0.6rem;
-      max-width: 18rem;
-      line-height: 1.6;
+      font-size: 0.88rem;
+      margin-top: 0.9rem;
+      line-height: 1.65;
     }
 
-    .footer-links {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2rem;
+    .footer-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      min-width: 8rem;
     }
 
-    .footer-col h4 {
-      font-family: var(--font-logo);
-      font-size: 0.7rem;
+    .footer-nav-title {
+      color: var(--color-foreground);
+      font-size: 0.78rem;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: var(--color-foreground);
-      margin-bottom: 1.2rem;
-      opacity: 0.7;
     }
 
-    .footer-col a {
-      display: block;
+    .footer-nav a {
       color: var(--color-muted);
-      font-size: 0.85rem;
       text-decoration: none;
-      padding: 0.35rem 0;
-      transition: color 0.2s, transform 0.2s;
+      font-size: 0.85rem;
+      transition: color 0.2s;
     }
 
-    .footer-col a:hover {
+    .footer-nav a:hover {
       color: var(--color-foreground);
-      transform: translateX(3px);
     }
 
     .footer-bottom {
@@ -567,27 +397,10 @@ gsap.registerPlugin(ScrollTrigger);
         margin-top: 1.8rem;
       }
 
-      .bento-scene {
-        padding: 5rem 1.5rem;
-      }
-
-      .bento-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .bento-card--wide {
-        grid-column: span 1;
-      }
-
-      .steps-wrapper {
-        height: 400vh;
-      }
-
       .steps-track {
         flex-direction: column;
         width: 100vw;
-        height: 100dvh;
-        overflow: visible;
+        height: auto;
       }
 
       .step-panel {
@@ -604,17 +417,9 @@ gsap.registerPlugin(ScrollTrigger);
         font-size: 1rem;
       }
 
-      .final-cta {
-        padding: 6rem 1.5rem;
-      }
-
       .footer-top {
-        grid-template-columns: 1fr;
-        gap: 2.5rem;
-      }
-
-      .footer-links {
-        grid-template-columns: repeat(2, 1fr);
+        flex-direction: column;
+        gap: 2rem;
       }
 
       .footer-bottom {
@@ -643,6 +448,11 @@ gsap.registerPlugin(ScrollTrigger);
 export class HomeComponent implements AfterViewInit, OnDestroy {
   @ViewChild("stepsWrapper") stepsWrapperRef!: ElementRef<HTMLElement>;
   private animationFrameId: number | null = null;
+  private readonly studio = inject(StudioService);
+
+  hasProfile(): boolean {
+    return !!this.studio.load()?.completedAt;
+  }
 
   ngAfterViewInit() {
     this.initAnimations();
@@ -693,126 +503,68 @@ export class HomeComponent implements AfterViewInit, OnDestroy {
       repeat: -1,
     });
 
-    gsap.from(".bento-title", {
-      y: 24,
-      opacity: 0,
-      duration: 0.9,
-      ease: "power3.out",
-      scrollTrigger: {
-        trigger: ".bento-head",
-        start: "top 85%",
-      },
-    });
-
-    gsap.utils.toArray<HTMLElement>(".bento-card").forEach((card, i) => {
-      gsap.from(card, {
-        y: 40,
-        opacity: 0,
-        duration: 0.8,
-        delay: i * 0.08,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: card,
-          start: "top 88%",
-        },
-      });
-    });
-
     const stepsTrack = document.querySelector(".steps-track") as HTMLElement;
     const stepsWrapper = document.querySelector(".steps-wrapper") as HTMLElement;
     if (stepsTrack && stepsWrapper) {
       const isMobile = window.innerWidth <= 768;
+      const axis: "x" | "y" = isMobile ? "y" : "x";
+      const panels = gsap.utils.toArray<HTMLElement>(".step-panel");
+      const panelCount = panels.length;
+      const getDistance = () =>
+        isMobile
+          ? stepsTrack.scrollHeight - window.innerHeight
+          : stepsTrack.scrollWidth - window.innerWidth;
 
-      if (isMobile) {
-        const totalHeight = stepsTrack.scrollHeight - window.innerHeight;
-        gsap.to(stepsTrack, {
-          y: -totalHeight,
-          ease: "none",
-          scrollTrigger: {
-            trigger: ".steps-wrapper",
-            start: "top top",
-            end: "bottom bottom",
-            scrub: 1.5,
-            snap: 1 / (document.querySelectorAll(".step-panel").length - 1),
-            invalidateOnRefresh: true,
-          },
-        });
-      } else {
-        const totalWidth = stepsTrack.scrollWidth - window.innerWidth;
-        const panelCount = document.querySelectorAll(".step-panel").length;
-
-        gsap.to(stepsTrack, {
-          x: -totalWidth,
-          ease: "none",
-          scrollTrigger: {
-            trigger: ".steps-wrapper",
-            start: "top top",
-            end: "bottom bottom",
-            scrub: 1.5,
-            snap: 1 / (panelCount - 1),
-            invalidateOnRefresh: true,
-          },
-        });
-      }
-
-      document.querySelectorAll<HTMLElement>(".step-panel__number").forEach((num) => {
-        gsap.fromTo(num,
-          { yPercent: 60, opacity: 0 },
-          {
-            yPercent: 0,
-            opacity: 1,
-            duration: 1.2,
-            ease: "power2.out",
-            scrollTrigger: {
-              trigger: num.closest(".step-panel"),
-              start: isMobile ? "top 75%" : "left 75%",
-              end: isMobile ? "top 25%" : "left 25%",
-              scrub: 1,
-            },
-          }
-        );
+      const tl = gsap.timeline({
+        defaults: { ease: "none" },
+        scrollTrigger: {
+          trigger: ".steps-wrapper",
+          start: "top top",
+          end: () => `+=${getDistance()}`,
+          pin: true,
+          scrub: 1,
+          snap: 1 / (panelCount - 1),
+          invalidateOnRefresh: true,
+        },
       });
 
-      document.querySelectorAll<HTMLElement>(".step-panel__content").forEach((content) => {
-        gsap.fromTo(content,
-          { y: 30, opacity: 0 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.9,
-            ease: "power3.out",
-            scrollTrigger: {
-              trigger: content.closest(".step-panel"),
-              start: isMobile ? "top 70%" : "left 70%",
-              end: isMobile ? "top 30%" : "left 30%",
-              scrub: 1,
-            },
+      tl.to(stepsTrack, { [axis]: () => -getDistance(), duration: panelCount - 1 }, 0);
+
+      panels.forEach((panel, i) => {
+        const num = panel.querySelector<HTMLElement>(".step-panel__number");
+        const content = panel.querySelector<HTMLElement>(".step-panel__content");
+        const center = i;
+
+        if (num) {
+          if (i > 0) {
+            tl.fromTo(num,
+              { opacity: 0, scale: 0.72 },
+              { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" },
+              center - 0.45
+            );
+          } else {
+            gsap.set(num, { opacity: 1, scale: 1 });
           }
-        );
+          if (i < panelCount - 1) {
+            tl.to(num, { opacity: 0, scale: 1.22, duration: 0.45, ease: "power2.in" }, center + 0.05);
+          }
+        }
+
+        if (content) {
+          if (i > 0) {
+            tl.fromTo(content,
+              { opacity: 0, y: 56, scale: 0.94 },
+              { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "power3.out" },
+              center - 0.45
+            );
+          } else {
+            gsap.set(content, { opacity: 1, y: 0, scale: 1 });
+          }
+          if (i < panelCount - 1) {
+            tl.to(content, { opacity: 0, y: -44, scale: 0.94, duration: 0.4, ease: "power3.in" }, center + 0.08);
+          }
+        }
       });
     }
-
-    gsap.from(".final-cta__title", {
-      y: 30,
-      opacity: 0,
-      duration: 1,
-      ease: "power3.out",
-      scrollTrigger: {
-        trigger: ".final-cta",
-        start: "top 75%",
-      },
-    });
-
-    gsap.from(".final-cta .btn-primary", {
-      y: 16,
-      opacity: 0,
-      duration: 0.8,
-      delay: 0.2,
-      ease: "power3.out",
-      scrollTrigger: {
-        trigger: ".final-cta",
-        start: "top 75%",
-      },
-    });
   }
 }
