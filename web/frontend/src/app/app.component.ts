@@ -29,6 +29,7 @@ import gsap from "gsap";
           </a>
 
           <div class="flex items-center gap-3">
+            <a routerLink="/agents" class="btn-secondary">Agents</a>
             <a routerLink="/studio" class="btn-primary" *ngIf="!hasProfile() && !isStudio()">
               <span>Get Started</span>
               <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -96,6 +97,11 @@ import gsap from "gsap";
     </div>
   `,
   styles: [`
+    @media (max-width: 640px) {
+      .app-topbar { flex-wrap: wrap; gap: 0.75rem; }
+      .app-topbar > .flex { flex-wrap: wrap; }
+    }
+
     :host ::ng-deep nav a.active {
       color: var(--color-foreground);
     }
