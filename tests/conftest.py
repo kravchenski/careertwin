@@ -101,3 +101,8 @@ def sample_resume_path() -> Path:
 @pytest.fixture
 def minimal_resume_path() -> Path:
     return FIXTURES_DIR / "minimal_resume.txt"
+
+
+@pytest.fixture(autouse=True)
+def isolated_candidate_context(tmp_path, monkeypatch):
+    monkeypatch.setenv("CAREERTWIN_ABOUT_PATH", str(tmp_path / "ABOUT.md"))

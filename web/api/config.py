@@ -83,6 +83,12 @@ TEMPLATE_MAP: dict[str, str] = {
 }
 
 PROVIDERS: dict[str, dict[str, str]] = {
+    "switchyard": {
+        "kind": "openai",
+        "url": os.getenv("SWITCHYARD_URL", "http://127.0.0.1:3260").rstrip("/") + "/v1/chat/completions",
+        "key_env": "SWITCHYARD_API_KEY",
+        "default_model": os.getenv("SWITCHYARD_MODEL", "agent"),
+    },
     "lmstudio": {
         "kind": "lmstudio",
         "url": os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/api/v1/chat"),

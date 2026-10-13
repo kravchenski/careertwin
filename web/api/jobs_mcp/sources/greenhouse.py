@@ -10,7 +10,7 @@ from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_
 class GreenhouseSource(BaseSourceAdapter):
     source_name = "greenhouse"
 
-    BASE_URL = "https://api.greenhouse.io/v1/boards"
+    BASE_URL = "https://boards-api.greenhouse.io/v1/boards"
 
     def detect_ats(self, url: str) -> bool:
         return "greenhouse.io" in url or "boards.greenhouse.io" in url
