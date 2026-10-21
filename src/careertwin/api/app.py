@@ -16,6 +16,7 @@ from careertwin.api.routes import (
     automation,
     boards,
     companies,
+    interview,
     jobs,
     profile,
     providers,
@@ -77,6 +78,7 @@ app.include_router(companies.router)
 app.include_router(boards.router)
 app.include_router(applications.router)
 app.include_router(automation.router)
+app.include_router(interview.router)
 
 
 @app.get("/")

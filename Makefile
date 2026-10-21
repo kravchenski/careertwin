@@ -1,4 +1,4 @@
-.PHONY: dev api mcp agent test lint lint-fix docker clean
+.PHONY: dev api mcp agent interview test lint lint-fix docker clean
 
 dev: api
 
@@ -10,6 +10,9 @@ mcp:
 
 agent:
 	uv run careertwin agent
+
+interview:
+	uv run --extra interview careertwin-interview
 
 test:
 	uv run pytest tests/ -v --tb=short -m "not integration"
