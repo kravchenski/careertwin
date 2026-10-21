@@ -145,8 +145,6 @@ class ResumeParser:
         if len(skills) < 3:
             skills = self._extract_skills_from_text(text) or skills
 
-        certificates = self._extract_certificates(sections)
-
         return CareerGraph(
             profile=profile,
             experience=experience,
