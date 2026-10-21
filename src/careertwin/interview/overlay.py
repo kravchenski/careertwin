@@ -110,7 +110,9 @@ class OverlayWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.addWidget(self._section("Conversation", self.conversation))
         splitter.addWidget(self._section("Suggested answer", self.suggestion))
-        splitter.setSizes([260, 400])
+        splitter.setSizes([170, 490])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
         layout.addWidget(splitter, 1)
 
         self.input = QLineEdit()

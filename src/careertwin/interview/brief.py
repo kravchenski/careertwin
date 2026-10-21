@@ -80,14 +80,30 @@ class InterviewBrief:
         return "\n\n".join(parts)
 
     def vocabulary(self) -> str:
-        """Names worth biasing speech recognition toward."""
+        """Names worth biasing speech recognition toward: the vacancy and your skills."""
         words = [self.company, self.job_title]
         words += re.findall(r"\b[A-Z][A-Za-z+#.]{2,}\b", self.job_description)[:25]
-        seen: list[str] = []
+        words += _skill_terms(self.candidate)
+        seen: dict[str, None] = {}
         for word in words:
-            if word and word not in seen:
-                seen.append(word)
-        return ", ".join(seen)
+            if word:
+                seen.setdefault(word, None)
+        return ", ".join(list(seen)[:45])
+
+
+def _skill_terms(candidate: str) -> list[str]:
+    """Technology names from the `## Skills` section of the candidate context."""
+    match = re.search(r"^##\s+Skills\s*$([\s\S]*?)(?=^##\s|\Z)", candidate, re.M | re.I)
+    if not match:
+        return []
+    terms: list[str] = []
+    for line in match[1].splitlines():
+        line = line.split(":", 1)[-1]
+        for part in re.split(r"[,;()]", line):
+            term = part.strip(" -*\t.")
+            if 0 < len(term.split()) <= 3 and len(term) <= 30 and re.search(r"[A-Z0-9]", term):
+                terms.append(term)
+    return terms
 
 
 def _describe_salary(policy: dict) -> str:

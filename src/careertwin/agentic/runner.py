@@ -114,6 +114,7 @@ class AgentRunner:
             return json.dumps({"error": f"Arguments are not valid JSON: {exc}"})
         self.on_event(f"→ {name}({_short(arguments)})")
         if item.outward and not self._approved(item, arguments):
+            self.on_event("  ✗ not approved")
             return json.dumps({"error": "The candidate did not approve this action."})
         try:
             value = await item.call(arguments)

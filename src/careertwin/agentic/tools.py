@@ -39,7 +39,7 @@ def _brief(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@tool()
+@tool("API health and what the agents are doing")
 async def get_status() -> dict[str, Any]:
     """Check that the CareerTwin API is up and report what the automation agents are doing:
     whether a search cycle runs, which vacancies are being processed, applications submitted today
@@ -49,7 +49,7 @@ async def get_status() -> dict[str, Any]:
     return {"api": health, "automation": await client.get("/v1/automation/status")}
 
 
-@tool()
+@tool("Search settings and your ABOUT context")
 async def get_candidate_context(
     max_chars: Annotated[int, Field(ge=200, le=20000)] = 3000,
 ) -> dict[str, Any]:
@@ -64,13 +64,13 @@ async def get_candidate_context(
     }
 
 
-@tool()
+@tool("Sources the search agent can use")
 async def list_job_sources() -> list[dict[str, Any]]:
     """List the job sources the search agent can use (public feeds and indexed boards)."""
     return await _client().get("/v1/automation/sources")
 
 
-@tool()
+@tool("Search company career boards via their ATS")
 async def search_company_boards(
     companies: Annotated[list[str], Field(min_length=1, max_length=20)],
     query: str = "",
@@ -104,7 +104,7 @@ async def search_company_boards(
     }
 
 
-@tool()
+@tool("Full text of a vacancy page")
 async def fetch_job_description(url: str, title: str = "") -> dict[str, Any]:
     """Fetch the full text of a vacancy page (JavaScript pages included). Use it before
     importing a vacancy so ranking sees the real requirements."""
@@ -113,7 +113,7 @@ async def fetch_job_description(url: str, title: str = "") -> dict[str, Any]:
     )
 
 
-@tool(mutating=True)
+@tool("Add a vacancy to the pipeline", mutating=True)
 async def import_vacancy(
     url: str,
     title: str,
@@ -139,7 +139,7 @@ async def import_vacancy(
     return _brief(job)
 
 
-@tool()
+@tool("Vacancies in the pipeline, by state")
 async def list_vacancies(
     state: str | None = None,
     limit: Annotated[int, Field(ge=1, le=200)] = 50,
@@ -154,7 +154,7 @@ async def list_vacancies(
     return [_brief(job) for job in jobs[:limit]]
 
 
-@tool()
+@tool("One vacancy with evaluation, files, events")
 async def get_vacancy(job_id: str) -> dict[str, Any]:
     """Full detail of one vacancy: state, fit evaluation with reasons, prepared documents
     and the latest events. Use it to read why a vacancy was skipped or what a form needs."""
@@ -170,7 +170,7 @@ async def get_vacancy(job_id: str) -> dict[str, Any]:
     }
 
 
-@tool(mutating=True)
+@tool("Queue rank, prepare, fill or verify", mutating=True)
 async def process_vacancy(
     job_id: str,
     operation: Literal["rank", "prepare", "fill", "verify"],
@@ -182,7 +182,7 @@ async def process_vacancy(
     return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": operation})
 
 
-@tool()
+@tool("Wait for a queued step to finish")
 async def wait_for_vacancy(
     job_id: str,
     timeout_seconds: Annotated[int, Field(ge=5, le=600)] = 120,
@@ -201,7 +201,7 @@ async def wait_for_vacancy(
         await asyncio.sleep(2)
 
 
-@tool(mutating=True)
+@tool("Run the search agent", mutating=True)
 async def start_search_cycle() -> dict[str, Any]:
     """Start the search agent: it runs the saved queries across the saved sources, imports new
     vacancies, ranks them and, when auto_prepare is on, prepares documents for strong matches.
@@ -209,13 +209,13 @@ async def start_search_cycle() -> dict[str, Any]:
     return await _client().post("/v1/automation/run")
 
 
-@tool(mutating=True)
+@tool("Cancel running agents and scheduling", mutating=True)
 async def stop_agents() -> dict[str, Any]:
     """Cancel the running search cycle and every queued vacancy step, and switch off scheduling."""
     return await _client().post("/v1/automation/stop")
 
 
-@tool(mutating=True)
+@tool("Queries, sources, threshold, limits", mutating=True)
 async def update_search_settings(
     queries: list[str] | None = None,
     sources: list[str] | None = None,
@@ -243,7 +243,7 @@ async def update_search_settings(
     return {key: saved.get(key) for key in SETTINGS_FIELDS}
 
 
-@tool(mutating=True)
+@tool("Save your answer to a form question", mutating=True)
 async def answer_question(job_id: str, question: str, answer: str) -> dict[str, Any]:
     """Save the candidate's own answer to a question an application form asked (state
     `awaiting_answers`). Only pass answers the candidate gave or that the profile states;
@@ -253,7 +253,7 @@ async def answer_question(job_id: str, question: str, answer: str) -> dict[str, 
     )
 
 
-@tool(mutating=True, outward=True)
+@tool("Press submit on a prepared form", mutating=True, outward=True)
 async def submit_application(job_id: str, confirm: bool = False) -> dict[str, Any]:
     """Press submit on a prepared application form. This sends the application to the employer
     and cannot be undone. It runs only with `confirm=true` AND when the candidate set
@@ -268,7 +268,7 @@ async def submit_application(job_id: str, confirm: bool = False) -> dict[str, An
     return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": "submit"})
 
 
-@tool(mutating=True)
+@tool("Interview, offer, hired, rejected, withdrawn", mutating=True)
 async def record_outcome(
     job_id: str,
     status: Literal["interview", "offer", "hired", "rejected", "withdrawn"],
@@ -281,14 +281,14 @@ async def record_outcome(
     return _brief(job)
 
 
-@tool()
+@tool("Newest events from every agent")
 async def recent_events(limit: Annotated[int, Field(ge=1, le=200)] = 30) -> list[dict[str, Any]]:
     """The newest events from every agent (ranked, prepared, answers saved, submissions)."""
     events = await _client().get("/v1/automation/events")
     return events[-limit:]
 
 
-@tool()
+@tool("Grounded talking points for one question")
 async def suggest_interview_answer(
     question: str,
     job_id: str | None = None,
@@ -305,7 +305,7 @@ async def suggest_interview_answer(
     )
 
 
-@tool()
+@tool("Likely questions with honest outlines")
 async def prepare_interview_questions(
     job_id: str | None = None,
     count: Annotated[int, Field(ge=3, le=15)] = 8,

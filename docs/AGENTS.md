@@ -102,7 +102,7 @@ so any OpenAI-compatible client can use the same tools.
 ## Adding a tool
 
 Write an async function in `src/careertwin/agentic/tools.py` and decorate it
-with `@tool()`. Type hints become the JSON schema and the docstring becomes the
+with `@tool("one-line summary")`. Type hints become the JSON schema and the docstring becomes the
 description. Use `mutating=True` when it changes local state and `outward=True`
 when it contacts a third party. The MCP server, the built-in agent and the
 tests pick it up automatically.
