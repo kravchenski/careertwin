@@ -8,7 +8,6 @@ from typing import Protocol
 
 import numpy as np
 
-
 GPU_LIBRARY_ERROR = re.compile(r"cublas|cudnn|cuda|libcu", re.I)
 
 
