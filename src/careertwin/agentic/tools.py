@@ -1,0 +1,288 @@
+"""The CareerTwin tool catalogue: one async function per agent capability."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import time
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
+
+from careertwin.agentic.client import ApiError, CareerTwinClient
+from careertwin.agentic.registry import tool
+
+TRANSIENT_STATES = frozenset({"ranking", "preparing", "filling", "submitting", "verifying"})
+SETTINGS_FIELDS = (
+    "queries", "sources", "preferences", "threshold", "confidence", "auto_prepare",
+    "limit", "daily_limit", "companies",
+)
+
+
+def _client() -> CareerTwinClient:
+    return CareerTwinClient()
+
+
+def _brief(job: dict[str, Any]) -> dict[str, Any]:
+    vacancy = job.get("vacancy") or {}
+    evaluation = job.get("evaluation") or {}
+    return {
+        "id": job.get("id"),
+        "title": vacancy.get("title"),
+        "company": vacancy.get("company"),
+        "url": vacancy.get("url"),
+        "state": job.get("state"),
+        "fit_score": evaluation.get("score"),
+        "category": evaluation.get("category"),
+        "error": job.get("error") or None,
+        "updated_at": job.get("updated_at"),
+    }
+
+
+@tool()
+async def get_status() -> dict[str, Any]:
+    """Check that the CareerTwin API is up and report what the automation agents are doing:
+    whether a search cycle runs, which vacancies are being processed, applications submitted today
+    and whether the Switchyard browser is configured."""
+    client = _client()
+    health = await client.get("/v1/health")
+    return {"api": health, "automation": await client.get("/v1/automation/status")}
+
+
+@tool()
+async def get_candidate_context(
+    max_chars: Annotated[int, Field(ge=200, le=20000)] = 3000,
+) -> dict[str, Any]:
+    """Return the candidate's search settings and the start of the private ABOUT context
+    (skills, experience, salary policy). Use it to ground every document and answer in facts."""
+    settings = await _client().get("/v1/automation/settings")
+    context = settings.get("context", "")
+    return {
+        **{key: settings.get(key) for key in SETTINGS_FIELDS},
+        "context_chars": len(context),
+        "context": context[:max_chars],
+    }
+
+
+@tool()
+async def list_job_sources() -> list[dict[str, Any]]:
+    """List the job sources the search agent can use (public feeds and indexed boards)."""
+    return await _client().get("/v1/automation/sources")
+
+
+@tool()
+async def search_company_boards(
+    companies: Annotated[list[str], Field(min_length=1, max_length=20)],
+    query: str = "",
+    sources: list[str] | None = None,
+    limit: Annotated[int, Field(ge=1, le=100)] = 25,
+    intern_only: bool = False,
+) -> dict[str, Any]:
+    """Search the career boards of specific companies through their applicant tracking system
+    (greenhouse, lever, ashby, smartrecruiters, workday). Use company names known to
+    CareerTwin; `sources` optionally restricts the ATS platforms. Returns vacancies you can
+    import with import_vacancy."""
+    result = await _client().post(
+        "/v1/jobs/mcp/search",
+        {
+            "query": query,
+            "companies": companies,
+            "sources": sources or [],
+            "intern_only": intern_only,
+            "limit": limit,
+        },
+        timeout=300,
+    )
+    jobs = result.get("jobs", [])
+    return {
+        "total": result.get("total", len(jobs)),
+        "sources_queried": result.get("sources_queried", []),
+        "jobs": [
+            {key: job.get(key) for key in ("company", "title", "url", "location", "source")}
+            for job in jobs[:limit]
+        ],
+    }
+
+
+@tool()
+async def fetch_job_description(url: str, title: str = "") -> dict[str, Any]:
+    """Fetch the full text of a vacancy page (JavaScript pages included). Use it before
+    importing a vacancy so ranking sees the real requirements."""
+    return await _client().post(
+        "/v1/jobs/mcp/fetch-description", {"url": url, "title": title}, timeout=120
+    )
+
+
+@tool(mutating=True)
+async def import_vacancy(
+    url: str,
+    title: str,
+    company: str = "",
+    description: str = "",
+    location: str = "",
+    salary: str = "",
+) -> dict[str, Any]:
+    """Add a vacancy to the pipeline (state `new`). Duplicates are merged by URL. Pass the
+    full description when you have it, then run process_vacancy with `rank`."""
+    job = await _client().post(
+        "/v1/automation/jobs",
+        {
+            "url": url,
+            "title": title,
+            "company": company,
+            "description": description,
+            "location": location,
+            "salary": salary,
+            "source": "agent",
+        },
+    )
+    return _brief(job)
+
+
+@tool()
+async def list_vacancies(
+    state: str | None = None,
+    limit: Annotated[int, Field(ge=1, le=200)] = 50,
+) -> list[dict[str, Any]]:
+    """List vacancies in the pipeline, newest first. `state` filters by pipeline state:
+    new, ranking, priority, stretch, needs_info, skip, preparing, prepared, filling,
+    awaiting_answers, form_ready, submitting, submitted, submission_uncertain, verifying,
+    interview, offer, hired, rejected, withdrawn."""
+    jobs = await _client().get("/v1/automation/jobs")
+    if state:
+        jobs = [job for job in jobs if job.get("state") == state]
+    return [_brief(job) for job in jobs[:limit]]
+
+
+@tool()
+async def get_vacancy(job_id: str) -> dict[str, Any]:
+    """Full detail of one vacancy: state, fit evaluation with reasons, prepared documents
+    and the latest events. Use it to read why a vacancy was skipped or what a form needs."""
+    detail = await _client().get(f"/v1/automation/jobs/{job_id}")
+    job = detail["job"]
+    return {
+        **_brief(job),
+        "description": (job.get("vacancy") or {}).get("description", "")[:4000],
+        "evaluation": job.get("evaluation"),
+        "package": job.get("package"),
+        "files": detail.get("files"),
+        "events": detail.get("events", [])[-15:],
+    }
+
+
+@tool(mutating=True)
+async def process_vacancy(
+    job_id: str,
+    operation: Literal["rank", "prepare", "fill", "verify"],
+) -> dict[str, Any]:
+    """Queue one agent step for a vacancy and return immediately: `rank` scores fit against the
+    candidate, `prepare` writes the tailored CV and cover letter, `fill` completes the application
+    form in the signed-in browser without sending it, `verify` re-reads the confirmation page.
+    Steps run in the background, so follow with wait_for_vacancy."""
+    return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": operation})
+
+
+@tool()
+async def wait_for_vacancy(
+    job_id: str,
+    timeout_seconds: Annotated[int, Field(ge=5, le=600)] = 120,
+) -> dict[str, Any]:
+    """Wait until a queued step finishes (the vacancy leaves ranking, preparing, filling,
+    submitting or verifying) or the timeout passes, then return its brief state."""
+    client = _client()
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        detail = await client.get(f"/v1/automation/jobs/{job_id}")
+        job = detail["job"]
+        if job.get("state") not in TRANSIENT_STATES:
+            return {**_brief(job), "finished": True}
+        if time.monotonic() >= deadline:
+            return {**_brief(job), "finished": False}
+        await asyncio.sleep(2)
+
+
+@tool(mutating=True)
+async def start_search_cycle() -> dict[str, Any]:
+    """Start the search agent: it runs the saved queries across the saved sources, imports new
+    vacancies, ranks them and, when auto_prepare is on, prepares documents for strong matches.
+    Poll get_status and list_vacancies for progress."""
+    return await _client().post("/v1/automation/run")
+
+
+@tool(mutating=True)
+async def stop_agents() -> dict[str, Any]:
+    """Cancel the running search cycle and every queued vacancy step, and switch off scheduling."""
+    return await _client().post("/v1/automation/stop")
+
+
+@tool(mutating=True)
+async def update_search_settings(
+    queries: list[str] | None = None,
+    sources: list[str] | None = None,
+    preferences: str | None = None,
+    threshold: Annotated[float | None, Field(ge=0, le=100)] = None,
+    auto_prepare: bool | None = None,
+    limit: Annotated[int | None, Field(ge=1, le=100)] = None,
+    daily_limit: Annotated[int | None, Field(ge=1, le=100)] = None,
+) -> dict[str, Any]:
+    """Change search settings; omitted fields keep their value. Submitting is deliberately not
+    settable here: only the candidate turns on auto_submit or scheduling."""
+    client = _client()
+    settings = await client.get("/v1/automation/settings")
+    changes = {
+        "queries": queries,
+        "sources": sources,
+        "preferences": preferences,
+        "threshold": threshold,
+        "auto_prepare": auto_prepare,
+        "limit": limit,
+        "daily_limit": daily_limit,
+    }
+    settings.update({key: value for key, value in changes.items() if value is not None})
+    saved = await client.put("/v1/automation/settings", settings)
+    return {key: saved.get(key) for key in SETTINGS_FIELDS}
+
+
+@tool(mutating=True)
+async def answer_question(job_id: str, question: str, answer: str) -> dict[str, Any]:
+    """Save the candidate's own answer to a question an application form asked (state
+    `awaiting_answers`). Only pass answers the candidate gave or that the profile states;
+    never invent one. Then run process_vacancy with `fill` again."""
+    return await _client().post(
+        f"/v1/automation/jobs/{job_id}/answers", {"question": question, "answer": answer}
+    )
+
+
+@tool(mutating=True, outward=True)
+async def submit_application(job_id: str, confirm: bool = False) -> dict[str, Any]:
+    """Press submit on a prepared application form. This sends the application to the employer
+    and cannot be undone. It runs only with `confirm=true` AND when the candidate set
+    CAREERTWIN_AGENT_ALLOW_SUBMIT=1. Ask the candidate first, every time."""
+    if not confirm:
+        raise ApiError("Not submitted: ask the candidate, then call again with confirm=true.")
+    if os.getenv("CAREERTWIN_AGENT_ALLOW_SUBMIT") != "1":
+        raise ApiError(
+            "Not submitted: submitting from an agent is disabled. The candidate can submit in "
+            "the browser, or set CAREERTWIN_AGENT_ALLOW_SUBMIT=1 for this agent."
+        )
+    return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": "submit"})
+
+
+@tool(mutating=True)
+async def record_outcome(
+    job_id: str,
+    status: Literal["interview", "offer", "hired", "rejected", "withdrawn"],
+    note: str = "",
+) -> dict[str, Any]:
+    """Record what happened after applying, as reported by the candidate."""
+    job = await _client().post(
+        f"/v1/automation/jobs/{job_id}/outcome", {"status": status, "note": note}
+    )
+    return _brief(job)
+
+
+@tool()
+async def recent_events(limit: Annotated[int, Field(ge=1, le=200)] = 30) -> list[dict[str, Any]]:
+    """The newest events from every agent (ranked, prepared, answers saved, submissions)."""
+    events = await _client().get("/v1/automation/events")
+    return events[-limit:]

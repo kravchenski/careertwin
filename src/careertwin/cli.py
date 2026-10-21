@@ -352,8 +352,28 @@ def main() -> None:
     dna = sub.add_parser("dna", help="Analyze design DNA of a template")
     _ = dna.add_argument("--template", "-t", help="Template to analyze")
 
+    serve = sub.add_parser("serve", help="Run the HTTP API")
+    _ = serve.add_argument("--host", default="127.0.0.1")
+    _ = serve.add_argument("--port", type=int, default=8000)
+    _ = serve.add_argument("--reload", action="store_true")
+
+    mcp = sub.add_parser("mcp", help="Run the MCP server for agents")
+    _ = mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio")
+    _ = mcp.add_argument("--host", default="127.0.0.1")
+    _ = mcp.add_argument("--port", type=int, default=8765)
+
+    agent = sub.add_parser("agent", help="Run the job-search agent on a Switchyard gateway")
+    _ = agent.add_argument("task", nargs="?", help="What to do; omit for an interactive session")
+    _ = agent.add_argument("--model", help="Gateway model id (default: SWITCHYARD_AGENT_MODEL)")
+    _ = agent.add_argument("--max-steps", type=int, default=25)
+    _ = agent.add_argument("--yes", action="store_true", help="Approve outward actions without asking")
+
     args = parser.parse_args()
     command: str = args.command or ""
+
+    if command in {"serve", "mcp", "agent"}:
+        _run_service(command, args)
+        return
 
     orchestrator = CareerTwinOrchestrator()
 
@@ -392,6 +412,25 @@ def main() -> None:
         _handle_dna(args, orchestrator)
     else:
         parser.print_help()
+
+
+def _run_service(command: str, args: argparse.Namespace) -> None:
+    if command == "serve":
+        import uvicorn
+
+        uvicorn.run(
+            "careertwin.api.app:app", host=args.host, port=args.port, reload=args.reload
+        )
+    elif command == "mcp":
+        from careertwin.agentic.mcp_server import main as mcp_main
+
+        mcp_main(["--transport", args.transport, "--host", args.host, "--port", str(args.port)])
+    else:
+        import asyncio
+
+        from careertwin.agentic.cli import run_agent
+
+        asyncio.run(run_agent(args.task, model=args.model, max_steps=args.max_steps, yes=args.yes))
 
 
 def _try_load_saved_graph(orchestrator: CareerTwinOrchestrator, command: str) -> None:
