@@ -19,6 +19,3 @@ trim_trailing_whitespace = false
 
 [{Makefile,Dockerfile,docker-compose*.yml}]
 indent_style = tab
-
-[web/frontend/**]
-indent_size = 2

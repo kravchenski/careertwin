@@ -230,17 +230,6 @@ class ResumeParser:
             github=github or None,
             linkedin=linkedin or None,
         )
-        if location_match:
-            location = location_match.group()
-
-        return Profile(
-            full_name=name,
-            email=email or None,
-            phone=phone or None,
-            location=location or None,
-            github=github or None,
-            linkedin=linkedin or None,
-        )
 
     def _split_sections(self, lines: list[str]) -> dict[str, list[str]]:
         """Split resume lines into sections based on headers.

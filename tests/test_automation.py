@@ -5,23 +5,20 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "web" / "api"))
-
-import database
-from automation import browser, documents
-from automation.engine import Engine
-from automation.excel import ExcelAgent, workbook
-from automation.models import Settings, Vacancy
-from automation.ranker import DIMENSIONS, GATES, JevRanker
-from automation.sources import parse_posting
-from automation.store import Store
+from careertwin import db
+from careertwin.automation import browser, documents
+from careertwin.automation.engine import Engine
+from careertwin.automation.excel import ExcelAgent, workbook
+from careertwin.automation.models import Settings, Vacancy
+from careertwin.automation.ranker import DIMENSIONS, GATES, JevRanker
+from careertwin.automation.sources import parse_posting
+from careertwin.automation.store import Store
 
 PROFILE = """## Contact
 | Full name | Test Candidate |
@@ -43,7 +40,7 @@ PROFILE = """## Contact
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
-    monkeypatch.setattr(database, "DB_PATH", tmp_path / "test.db")
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     value = Store()
     value.initialize()
     value.save_settings(Settings(context=PROFILE))
@@ -501,7 +498,8 @@ async def test_modified_pdf_is_not_uploaded(store, form, tmp_path, monkeypatch):
 def test_api_import_export_outcome_and_missing_key(store, vacancy, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from routes import automation
+
+    from careertwin.api.routes import automation
 
     store.save_settings(Settings(context=PROFILE, decision_backend="typesafe"))
     monkeypatch.setattr(automation, "engine", Engine(store))
@@ -623,7 +621,7 @@ async def test_cloud_service_error_preserves_actionable_reason(vacancy):
 
 @pytest.mark.asyncio
 async def test_available_cloud_model_listing(monkeypatch):
-    from routes import automation
+    from careertwin.api.routes import automation
 
     class Client:
         def __init__(self, **kwargs):

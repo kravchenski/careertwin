@@ -2,7 +2,7 @@
 
 from careertwin.graph.schema import CareerGraph, Profile
 from careertwin.rendering import RenderConfig
-from careertwin.rendering.repair import RepairAgent, RepairResult, RepairAction
+from careertwin.rendering.repair import RepairAction, RepairAgent, RepairResult
 from careertwin.vision import QAIssue
 
 
