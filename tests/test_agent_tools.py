@@ -176,3 +176,28 @@ async def test_runner_survives_bad_arguments_and_unknown_tools(api):
     assert await runner.ask("go") == "done"
     contents = [m["content"] for m in sent[1]["messages"] if m["role"] == "tool"]
     assert "Unknown tool" in contents[0] and "not valid JSON" in contents[1]
+
+
+def test_dotenv_is_loaded_without_overriding_the_environment(tmp_path, monkeypatch):
+    from careertwin import env
+
+    (tmp_path / ".env").write_text("CT_FROM_DOTENV=file\nCT_ALREADY_SET=file\n")
+    monkeypatch.setattr(env, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("CAREERTWIN_NO_DOTENV", raising=False)
+    monkeypatch.delenv("CT_FROM_DOTENV", raising=False)
+    monkeypatch.setenv("CT_ALREADY_SET", "shell")
+    env.load_env()
+    assert __import__("os").environ["CT_FROM_DOTENV"] == "file"
+    assert __import__("os").environ["CT_ALREADY_SET"] == "shell"
+    monkeypatch.delenv("CT_FROM_DOTENV")
+
+
+def test_dotenv_loading_can_be_disabled(tmp_path, monkeypatch):
+    from careertwin import env
+
+    (tmp_path / ".env").write_text("CT_DISABLED=1\n")
+    monkeypatch.setattr(env, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("CAREERTWIN_NO_DOTENV", "1")
+    monkeypatch.delenv("CT_DISABLED", raising=False)
+    env.load_env()
+    assert "CT_DISABLED" not in __import__("os").environ

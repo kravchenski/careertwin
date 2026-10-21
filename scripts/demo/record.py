@@ -41,6 +41,7 @@ ENV = {
     "SWITCHYARD_MODEL": "demo",
     "INTERVIEW_MODEL": "demo",
     "CAREERTWIN_AGENT_ALLOW_SUBMIT": "",
+    "CAREERTWIN_NO_DOTENV": "1",
     "PYTHONUNBUFFERED": "1",
     "QT_QPA_PLATFORM": "offscreen",
     "QT_SCALE_FACTOR": "2",
