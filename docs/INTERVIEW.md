@@ -1,11 +1,16 @@
 # Interview assistant
 
 A compact window you keep next to Zoom, Meet or Teams. It listens to the call, and when the
-interviewer asks something it shows a short answer built from **your own** background:
-your `ABOUT.md`, the CV the employer received, and the vacancy. Hints come in the language
-of the interview.
+interviewer says something it writes **what you should say**: short first-person lines you can
+read out, built only from **your own** background (your `ABOUT.md`, your CV, the vacancy), in
+the language of the interview.
 
-<p align="center"><img src="media/interview-overlay.png" alt="The overlay: status dots, Ask and Screenshot buttons, the question and four bullet points" width="760"></p>
+<p align="center"><img src="media/interview-overlay.png" alt="The overlay: status dots, Ask and Screenshot buttons, the question and the lines to say" width="760"></p>
+
+For "hi" it gives the greeting itself, who you are and an invitation to start. For "What is
+React?" it gives the facts as sentences you can say. For "Do you have experience with
+Kubernetes?" the first line says honestly that you do not, and the rest bridges to what you
+really did. Nothing in it is advice such as "keep it short".
 
 ## Use it fairly
 
@@ -19,78 +24,77 @@ decide what to say.
 ```bash
 uv sync --extra interview          # PySide6 and faster-whisper
 switchyard                         # the language model gateway
-uv run careertwin-interview --doctor
-uv run careertwin-interview --job <vacancy id | description.txt | https://…> --resume cv.pdf
+uv run careertwin-interview
 ```
 
 The commands live in the project's virtualenv, not on your `PATH`: run them with `uv run`, or
-`source .venv/bin/activate` (`activate.fish` in fish) first. `--doctor` checks Qt, Whisper,
-PipeWire, Switchyard, your `ABOUT.md`, the CV and the screenshot tool.
+`source .venv/bin/activate` (`activate.fish` in fish) first.
+
+**Everything is set up in the window.** Open ☰ → *Settings…* (or click the dim *Context* line
+at the bottom). Changes apply at once and are saved, so the next start is already configured.
+There is nothing to edit in files and no flag you need.
+
+## Settings
+
+<p align="center"><img src="media/interview-settings.png" alt="The Documents tab of the settings window" width="640"></p>
+
+| Tab | What you set |
+|---|---|
+| **Documents** | Add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window. Mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it. Files are copied into `data/interview/documents/`, so moving the original does no harm. A blank or scanned PDF is refused with a reason. |
+| **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
+| **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
+| **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed) and whether to show the full spoken answer. |
+| **Audio & speech** | Listen to the call on or off, the call audio source, your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
+| **AI model** | Gateway URL, API key and model, *Load models* to pick from what your gateway offers, and *Test connection*. Leave them empty to use `.env` (`SWITCHYARD_*`) and auto routing. |
+| **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
+| **Window** | Keep on top, frameless or framed, opacity, text size, saving transcripts, and *Reset all settings*. |
+
+Settings are stored in `data/interview/settings.json` (readable only by you; an API key you type
+here is kept in that file) and your context in `data/interview/context.json`. Command-line flags
+(`--language`, `--whisper`, `--model`, `--source`, `--mic`, `--text-only`, `--resume`, `--job`,
+`--notes`, `--framed`, `--no-pin`) override the saved values for that run only; see
+`careertwin-interview --help`.
 
 ## What it knows about you
 
-Every hint is generated from these sources, shown in the dim line at the bottom of the window:
+Every hint is generated from the sources shown in the dim line at the bottom of the window:
 
-| Source | How it gets there |
-|---|---|
-| **`ABOUT.md`** | Always. Read whole, including *Interview stories*, *Honest limits* and *Never claim*. If it is too long, the least useful sections (*Applications log*, *CV files*, *Contact*) go first, never the tail. |
-| **Your CV** | `--resume cv.pdf` (repeat for several), `CAREERTWIN_RESUME=/path/a.pdf:/path/b.pdf` in `.env`, **drag a PDF onto the window**, or ☰ → *Add CV…*. PDF, DOCX and text work; a scanned or blank PDF is refused with a message. |
-| **The CV that was sent** | With `--job <vacancy id>` the CV prepared for that vacancy is attached automatically, so answers match what the interviewer read. |
-| **The vacancy** | `--job` as an id, a text file or a URL. |
-| **Notes** | `--notes "extra facts for this interview"`. |
+- **`ABOUT.md`**, read whole, including the interview stories and honest limits. If it is too long,
+  the least useful sections (*Applications log*, *CV files*, *Contact*) go first, never the tail.
+- **Your documents** from the Documents tab. A document marked *CV* is treated as what the
+  interviewer has read, so answers stay consistent with it; *About me* documents are extra facts.
+  If a document and `ABOUT.md` disagree, `ABOUT.md` wins and the first line says so honestly.
+- **The vacancy and your notes**, from the Vacancy tab. With `--job <vacancy id>` the CV that was
+  prepared for that vacancy is attached automatically.
 
-If the CV and `ABOUT.md` disagree, `ABOUT.md` wins and the first bullet says the CV differs.
-A CV you keep per role (`Name_CV_{Role}_{EN|PL}.pdf`) works well: pass the one you sent.
+With no context at all the window says so instead of guessing.
 
 ## Language
 
-Answers are written in the **interview language**, whatever language the question, `ABOUT.md`
-or the CV is in. Company names, technologies and job titles are never translated.
+Answers are written in the **interview language**, whatever language the question, `ABOUT.md` or
+your documents are in. Company names, technologies and job titles are never translated.
 
-- `--language auto` (default): Whisper detects the language of each utterance and the window
-  settles on the majority of the last few, so one stray sentence does not flip it.
-- `--language ru` (or `en`, `pl`, `de`, `uk`, …): fixes the language for speech recognition
-  and answers.
-- ☰ → *Interview language* changes it during the call.
+- *Auto-detect* (default): Whisper detects the language of each utterance and the window settles on
+  the majority of the last few, so one stray sentence does not flip it.
+- A fixed language (Settings → Language, or ☰ → *Interview language*) is used for speech
+  recognition and answers, and can be changed during the call.
 
-The window itself is translated into English, Russian and Polish and follows the interview
-language.
+The window itself is translated into English, Russian and Polish.
 
 ## The window
 
 | Control | Does |
 |---|---|
 | ⏸ | Pause or resume listening |
-| Dots | Live level of the call audio, so you can see it is being heard; turn into text while loading, thinking or on errors |
+| Dots | Live level of the call audio, so you can see it is heard; text while loading, thinking or on errors |
 | **Ask** `Ctrl ↵` | Answer the last thing the interviewer said, even if it did not sound like a question |
-| **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The window becomes transparent for the capture. Needs `grim` (Wayland) or `spectacle`; `maim`/`scrot` on X11 |
+| **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The window turns transparent for the capture |
 | Input + **Get answer** | Type or paste a question |
 | `Ctrl ←` `Ctrl →` | Page through earlier answers (`2/2`) |
-| ☰ | Transcript, full spoken answer, pin on top, opacity, add CV, language, quit |
+| ☰ | Settings, Context, transcript, full answer, pin on top, interview language, quit |
 
-Answers are short bullets with the key terms in bold. Turn on ☰ → *Full answer* to also see a
-30-second spoken version. `Ctrl P` pauses.
-
-Questions are recognised automatically (debounced, split questions merged). The first bullet
-says "No direct experience on record" when your context has nothing to draw on, and the answer
-is an honest bridge instead of a bluff.
-
-### Options
-
-| Option | Meaning |
-|---|---|
-| `--job` | Vacancy id from the pipeline, a text file, or a URL |
-| `--resume FILE` | CV to read; repeatable |
-| `--notes "…"` | Extra facts for this interview |
-| `--language auto` | Interview language |
-| `--whisper small` | `base` is fastest, `small` a good default, `medium` and `large-v3-turbo` the most accurate |
-| `--mic` | Also transcribe your microphone so the transcript shows both sides; use headphones |
-| `--source NAME` | Another Pulse source for the call audio; `--list-sources` shows them |
-| `--text-only` | No audio: type or paste questions |
-| `--framed` | A normal window with a title bar instead of the frameless strip |
-| `--no-pin` | Do not keep the window on top |
-| `--xcb` | Run through XWayland so *pin on top* works on compositors that ignore it |
-| `--model` | Gateway model id; env `INTERVIEW_MODEL`, then `SWITCHYARD_MODEL`, then `auto` |
+Lines have their key terms in bold. Turn on *Full answer* to also see a 30-second spoken version.
+`Ctrl P` pauses. Questions are recognised automatically (debounced, split questions merged).
 
 ## How it works
 
@@ -99,25 +103,25 @@ call audio (sink monitor) ─► 20 ms frames ─► utterance segmenter ─► 
                                                                           │ text
                              is it a question? ─► debounce ─► streaming coach ─► Switchyard (SSE)
                                                                           │ tokens
-          ABOUT.md · CV · vacancy · last turns · interview language ──────┘
+          ABOUT.md · documents · vacancy · last turns · interview language ┘
 ```
 
 - **Audio stays local.** `parec` reads the sink monitor; faster-whisper transcribes on your
-  machine (CPU, or GPU when its CUDA libraries load). Speech recognition is primed with your
-  skills and the vacancy so names like Kubernetes are heard correctly.
-- **Only text leaves the machine:** the question, recent turns, your context and CV, and
+  machine (CPU, or GPU when its CUDA libraries load). Recognition is primed with your skills and
+  the vacancy so names like Kubernetes are heard correctly.
+- **Only text leaves the machine:** the question, recent turns, your context and documents, and
   screenshots you send go to the model through Switchyard.
-- **Answers stick to your facts.** The prompt forbids inventing employers, dates, numbers or
-  skills.
-- **Salary follows your policy** from the Studio. In `auto` mode it never states a number you
-  did not choose.
-- **Transcripts** are saved to `data/interviews/` when you close the window. Audio is never stored.
+- **Answers stick to your facts.** The prompt forbids inventing employers, dates, numbers or skills.
+- **Salary follows your policy** from the Studio. In `auto` mode it never states a number you did
+  not choose.
+- **Transcripts** are saved to `data/interviews/` when you close the window (switch off in
+  Settings → Window). Audio is never stored.
 
 ## Window managers
 
-The window is frameless and translucent; drag it by the empty parts of the header and resize
-from the corner grip. Qt sets the window's app id to `careertwin-interview`, so you can
-float it. In niri (25.01 or later):
+The window is frameless and translucent; drag it by the empty parts of the header and resize from
+the corner grip (or turn *Frameless window* off). Qt sets the app id to `careertwin-interview`, so
+you can float it. In niri (25.01 or later):
 
 ```kdl
 window-rule {
@@ -128,8 +132,8 @@ window-rule {
 }
 ```
 
-Without such a rule a tiling compositor gives it a full tile, which the layout handles but
-looks sparse. Under Wayland, *pin on top* is the compositor's call; `--xcb` runs the window
+Without such a rule a tiling compositor gives it a full tile, which the layout handles. Under
+Wayland, *keep on top* is the compositor's call; `careertwin-interview --xcb` runs the window
 through XWayland where the hint is honoured.
 
 ## Practice before the call
@@ -148,11 +152,14 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 
 ## Troubleshooting
 
-- **No transcript:** watch the dots; if they stay dark, run `--list-sources` and pick the
-  monitor of your output device with `--source`. Bluetooth headsets that switch profile during
-  a call change the sink; restart the app after joining.
-- **CV refused:** the PDF has no text layer. Export a text PDF or attach DOCX.
-- **First start is slow:** Whisper downloads its model once and loads it before listening
-  starts; the status pill says so.
-- **`libcublas` errors:** the app already falls back to CPU. For a GPU, install the CUDA 12
-  runtime libraries.
+- **No transcript:** watch the dots; if they stay dark, pick the monitor of your output device in
+  Settings → Audio & speech. Bluetooth headsets that switch profile during a call change the sink;
+  press *Refresh* after joining.
+- **Screenshot is greyed out:** install `grim` (Wayland) or `spectacle`, or `maim`/`scrot` on X11,
+  and check Settings → Screenshot.
+- **A document is refused:** the PDF has no text layer. Export a text PDF or attach DOCX.
+- **First start is slow:** Whisper downloads its model once and loads it before listening starts;
+  the status pill says so.
+- **`libcublas` errors:** the app already falls back to CPU. For a GPU, install the CUDA 12 runtime
+  libraries.
+- **Check the setup without the window:** `uv run careertwin-interview --doctor`.
