@@ -252,7 +252,7 @@ def test_vacancy_notes_and_about_tabs_write_through(gui):
     assert gui.context.brief.job_description == "" and "No vacancy" in gui.dialog.vacancy_current.text()
     gui.dialog.notes.setPlainText("Prefers backend roles")
     gui.dialog._notes_timer.timeout.emit()
-    assert gui.context.brief.notes == "Prefers backend roles" and Library.load().notes == "Prefers backend roles"
+    assert gui.context.brief.notes == "Prefers backend roles" and Library.load().current.notes == "Prefers backend roles"
     gui.dialog.about.setPlainText("# Candidate\n\n## Honest limits\n- No Kubernetes.\n")
     gui.dialog._save_about()
     assert "No Kubernetes" in gui.about_file.read_text() and "ABOUT.md" in gui.window.context.full
@@ -293,3 +293,45 @@ def test_an_empty_context_shows_where_to_add_one(tmp_path, monkeypatch):
         assert "No context yet" not in stack.window.answer.toPlainText()
     finally:
         stack.window.close()
+
+
+def test_interviews_are_listed_switched_renamed_and_deleted(gui, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog, QMessageBox
+
+    gui.dialog.add_files([gui.file("CV_python.txt")])
+    gui.dialog.vacancy_text.setPlainText("Python role with FastAPI")
+    gui.dialog._use_text()
+    first = gui.context.current.id
+    assert gui.dialog.interview_combo.count() == 1
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Java at Beta", True))
+    gui.dialog._new_interview()
+    gui.process()
+    assert gui.dialog.interview_combo.count() == 2 and gui.dialog.interview_combo.currentText() == "Java at Beta"
+    assert gui.context.brief.documents == [] and gui.dialog.tabs.currentIndex() == gui.dialog.TABS.index("vacancy")
+    assert gui.window.context.full.startswith("Java at Beta")
+    assert "No vacancy yet" in gui.window.answer.toPlainText()
+    gui.choose(gui.dialog.interview_combo, first)
+    gui.process()
+    assert [d.name for d in gui.context.brief.documents] == ["CV_python.txt"]
+    assert gui.window.context.full.startswith("Python role") or "CV_python.txt" in gui.window.context.full
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("EPAM Python", True))
+    gui.dialog._rename_interview()
+    assert gui.dialog.interview_combo.currentText() == "EPAM Python"
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    gui.dialog._delete_interview()
+    gui.process()
+    assert gui.dialog.interview_combo.count() == 1 and gui.dialog.interview_combo.currentText() == "Java at Beta"
+
+
+def test_the_window_menu_switches_interviews(gui):
+    gui.context.rename_interview("First")
+    first = gui.context.current.id
+    gui.context.new_interview("Second")
+    gui.window.refresh_controls()
+    gui.window._fill_interview_menu()
+    actions = [a for a in gui.window.interview_menu.actions() if a.isCheckable()]
+    assert [(a.text(), a.isChecked()) for a in actions] == [("First", False), ("Second", True)]
+    actions[0].trigger()
+    assert gui.context.current.id == first and gui.window.context.full.startswith("First")
+    gui.window._new_interview()
+    assert gui.context.interview_name().startswith("Interview") and gui.dialog.tabs.currentIndex() == 1
