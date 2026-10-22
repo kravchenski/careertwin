@@ -16,6 +16,15 @@ from careertwin.interview.audio import AudioError, ParecSource, default_sources,
 from careertwin.interview.coach import StreamingCoach, gateway_url
 from careertwin.interview.languages import normalize
 from careertwin.interview.library import ContextController
+from careertwin.interview.prepare import (
+    ANALYSIS_SYSTEM,
+    QUESTIONS_SYSTEM,
+    PrepareError,
+    analysis_prompt,
+    parse_analysis,
+    parse_questions,
+    questions_prompt,
+)
 from careertwin.interview.session import INTERVIEWER, YOU, InterviewSession
 from careertwin.interview.settings import InterviewSettings
 from careertwin.interview.stt import WhisperTranscriber
@@ -140,6 +149,39 @@ class Runtime:
             raise RuntimeError(f"Cannot reach {self.gateway()} ({type(exc).__name__})") from exc
         except (ValueError, KeyError, TypeError) as exc:
             raise RuntimeError(f"{self.gateway()} did not return a model list") from exc
+
+    # ---- preparing ---------------------------------------------------------
+
+    def prepare_language(self) -> str | None:
+        """The language to prepare in: the fixed one, else what the interview settled on."""
+        return self._language() or self.session.language.current
+
+    def question_bank(self, count: int = 10, focus: str = "") -> list[dict]:
+        """Likely questions for the active interview, each with first-person lines to say."""
+        brief = self.context.brief
+        prompt = questions_prompt(brief, count, focus, self.prepare_language())
+        return self._retry(
+            lambda: parse_questions(
+                self.coach.complete(QUESTIONS_SYSTEM, prompt, max_tokens=3000, temperature=0.4), count
+            )
+        )
+
+    def analyze_cv(self) -> dict:
+        """Review the attached CV against the vacancy of the active interview."""
+        prompt = analysis_prompt(self.context.brief, self.prepare_language())
+        return self._retry(
+            lambda: parse_analysis(self.coach.complete(ANALYSIS_SYSTEM, prompt, max_tokens=3000))
+        )
+
+    @staticmethod
+    def _retry(work, attempts: int = 2):
+        """Free models sometimes return broken JSON; try once more before giving up."""
+        for attempt in range(attempts):
+            try:
+                return work()
+            except PrepareError:
+                if attempt == attempts - 1:
+                    raise
 
     # ---- screenshots -------------------------------------------------------
 

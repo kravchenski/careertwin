@@ -322,3 +322,14 @@ async def prepare_interview_questions(
         {"job_id": job_id, "count": count, "focus": focus, "language": language},
         timeout=180,
     )
+
+
+@tool("Review the CV sent for a vacancy")
+async def review_cv_for_vacancy(job_id: str, language: str | None = None) -> dict[str, Any]:
+    """Compare the CV prepared for a pipeline vacancy with that vacancy: a short summary, the real
+    strengths to lead with, honest gaps with a way to address each in the interview, the questions
+    those gaps invite, and concrete fixes to the CV text. `language` is the language of the review
+    (en, ru, pl, de, ...). Run process_vacancy `prepare` first so the vacancy has a CV."""
+    return await _client().post(
+        "/v1/interview/cv-review", {"job_id": job_id, "language": language}, timeout=180
+    )
