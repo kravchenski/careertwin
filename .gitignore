@@ -223,7 +223,7 @@ llm_login.py
 llm_browser_demo.py
 
 # Runtime data
-data/*.db
+data/
 
 # Claude Code config
 .claude/
@@ -232,5 +232,4 @@ data/*.db
 .mimocode/
 # Personal candidate context and generated application artifacts.
 ABOUT.md
-data/outputs/
 node_modules/
