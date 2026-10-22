@@ -201,7 +201,8 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 - **Speech turns into text slowly:** on a CPU one Whisper pass takes about 0.8 s whatever the length of the
   question, so the delay you feel is the silence wait plus the model. With an NVIDIA GPU the installer adds
   the CUDA 12 libraries (about 1.3 GB; `CAREERTWIN_NO_GPU=1 ./scripts/install.sh` skips them) and Whisper
-  runs on the GPU in half precision, which is several times faster. Settings → Audio & speech → *Device*
+  runs on the GPU in half precision: on an RTX 4050 a pass dropped from 0.8 s to 0.35 s, and the text of a
+  9-second question was ready about 1 s after the speech ended (1.9 s on the CPU). Settings → Audio & speech → *Device*
   shows `auto`, `cpu` or `cuda`; if the GPU fails to start the app falls back to the CPU by itself.
 - **Answers are slow:** the model matters most. Settings → AI model → *Load models*; in a test with a
   realistic prompt `groq/openai/gpt-oss-120b` finished in about 1–4 s and `kilo/poolside/laguna-s-2.1:free` showed

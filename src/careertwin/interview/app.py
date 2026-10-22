@@ -96,6 +96,13 @@ def doctor(args: argparse.Namespace) -> int:
         import faster_whisper  # noqa: F401
 
         report(True, f"faster-whisper installed (model {settings.whisper_model})")
+        try:
+            probe = WhisperTranscriber(settings.whisper_model, device=settings.whisper_device)
+            probe.load()
+            where = "the GPU (CUDA)" if probe.active_device == "cuda" else "the CPU"
+            report(True, f"speech recognition runs on {where}")
+        except Exception as exc:
+            report(False, f"speech model did not load: {exc}")
     except ImportError:
         report(False, "faster-whisper missing: uv sync --extra interview")
     for binary in ("parec", "pactl"):

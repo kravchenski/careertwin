@@ -29,6 +29,7 @@ YOU = "You"
 MIN_WORDS_FOR_LANGUAGE = 3
 LEVEL_EVERY = 3
 PARTIAL_EVERY = 75  # frames of 20 ms: a live caption about every 1.5 s of speech
+QUESTION_MARK_WAIT = 0.1  # seconds to wait after a sentence that ends with a question mark
 REUSE_SAMPLES = 16_000 * 6 // 10  # a caption that covers all but 0.6 s of the speech is final enough
 
 
@@ -308,7 +309,9 @@ class InterviewSession:
             self._pending.append(text)
             if self._timer:
                 self._timer.cancel()
-            self._timer = threading.Timer(self.debounce, self._flush_pending)
+            # A sentence that ends with a question mark is complete: do not wait for a second part.
+            wait = QUESTION_MARK_WAIT if text.rstrip().endswith(("?", "？")) else self.debounce
+            self._timer = threading.Timer(min(wait, self.debounce), self._flush_pending)
             self._timer.daemon = True
             self._timer.start()
 

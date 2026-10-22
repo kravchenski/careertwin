@@ -284,3 +284,26 @@ def test_preloading_cuda_libraries_finds_the_nvidia_wheels(tmp_path, monkeypatch
     monkeypatch.setattr(stt.importlib.util, "find_spec", spec)
     assert stt.preload_cuda_libraries() == 2
     assert [p.rsplit("/", 1)[1] for p in loaded] == ["libcublasLt.so.12", "libcublas.so.12"]
+
+
+def test_a_sentence_ending_with_a_question_mark_is_sent_without_the_full_debounce(about, tmp_path):
+    asked = []
+
+    class Recording:
+        def stream(self, question, *args, **kwargs):
+            asked.append((question, time.monotonic()))
+            return iter(())
+
+    session = InterviewSession(
+        InterviewBrief.load(), None, Recording(), Callbacks(), debounce=0.6, log=TranscriptLog(tmp_path)
+    )
+    started = time.monotonic()
+    session.handle_text(INTERVIEWER, "Could you tell me about yourself?")
+    assert wait_for(lambda: asked, timeout=2)
+    assert asked[0][1] - started < 0.45
+    asked.clear()
+    started = time.monotonic()
+    session.handle_text(INTERVIEWER, "Tell me about your last project")
+    assert wait_for(lambda: asked, timeout=2)
+    assert asked[0][1] - started >= 0.55
+    session.stop()
