@@ -5,33 +5,46 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from careertwin.interview import languages
 from careertwin.interview.brief import InterviewBrief
 from careertwin.interview.questions import Kind, detect_language
 
-LANGUAGES = {"en": "English", "ru": "Russian", "pl": "Polish"}
-
 SYSTEM = """\
-You help a candidate during a live job interview. You see the interviewer's question and the \
+You help a candidate during a live job interview. You see what the interviewer asked and the \
 candidate's own background. Reply fast and in this exact shape:
 
 POINTS:
-- three to four short bullets (at most 12 words each) the candidate can glance at
+- four to six short bullets (at most 12 words each) the candidate can glance at and say; wrap \
+the one or two key terms of every bullet in **double asterisks**
 ANSWER:
-a natural spoken answer of 3 to 6 sentences, about 30 seconds aloud, first person
+a natural spoken answer of 3 to 5 sentences, first person, about 30 seconds aloud
 
 Rules
-- Use ONLY facts from CANDIDATE CONTEXT. Never invent employers, dates, numbers, tools, \
-degrees or results.
-- If the context does not support the question, start POINTS with "No direct experience on \
-record" and give an honest answer: the closest real experience, how the candidate learns, \
-and no bluff.
-- Answer in the language of the question.
-- Behavioral questions: use situation, task, action, result, with the real details.
+- Language: write POINTS and ANSWER entirely in the interview language named in the request, \
+whatever language the question or the background is written in. Keep technical terms and \
+product names as they are normally written.
+- Use ONLY facts from CANDIDATE CONTEXT and the CV. Never invent employers, dates, numbers, \
+tools, degrees or results.
+- Never translate or transliterate company names, product names, technologies or job titles: \
+write them exactly as they appear in the context.
+- The CV is what the interviewer has read: stay consistent with it. If the CV and the context \
+disagree, trust the context and make the first bullet say that the CV differs and how.
+- Prefer the candidate's prepared interview stories when one fits. Respect the sections \
+"Honest limits" and "Never claim".
+- If the context does not support the question, the first bullet says there is no direct \
+experience on record (in the interview language) and the answer is honest: the closest real \
+experience, how the candidate learns, no bluff.
+- Behavioral questions: situation, task, action, result, with the real details.
 - Technical questions: answer directly, name the trade-off, offer to go deeper.
 - Salary: follow SALARY POLICY. Never state a number that is not in the context.
-- Questions for the interviewer: suggest two specific, non-generic questions about the \
-vacancy.
-- No filler such as "great question". No markdown other than the two headings and bullets.
+- Questions for the interviewer: suggest two specific, non-generic questions about the vacancy.
+- No filler such as "great question". No markdown other than the two headings, bullets and bold.
+"""
+
+SCREENSHOT_NOTE = """\
+The candidate shared a screenshot of their screen. Find the interview question or task in it. \
+For a coding task give the approach in POINTS and the code in ANSWER; otherwise answer as usual. \
+If the screenshot shows no question or task, say so in one bullet.
 """
 
 KIND_HINTS = {
@@ -46,13 +59,29 @@ KIND_HINTS = {
 }
 
 
-def user_prompt(brief: InterviewBrief, question: str, kind: Kind, history: list[str]) -> str:
-    language = LANGUAGES[detect_language(question)]
+def user_prompt(
+    brief: InterviewBrief,
+    question: str,
+    kind: Kind,
+    history: list[str],
+    language: str | None = None,
+) -> str:
+    """`language` is the interview language; without one it is guessed from the question."""
+    name = languages.name(language or detect_language(question))
     recent = "\n".join(history[-6:]) or "(start of the interview)"
     return (
         f"{brief.render()}\n\nRECENT CONVERSATION\n{recent}\n\n"
         f"INTERVIEWER'S QUESTION: {question}\nTYPE: {kind.value}. {KIND_HINTS[kind]}\n"
-        f"Answer in {language}."
+        f"INTERVIEW LANGUAGE: {name}. Write POINTS and ANSWER in {name}."
+    )
+
+
+def screenshot_prompt(brief: InterviewBrief, history: list[str], language: str | None) -> str:
+    name = languages.name(language)
+    recent = "\n".join(history[-6:]) or "(start of the interview)"
+    return (
+        f"{brief.render()}\n\nRECENT CONVERSATION\n{recent}\n\n{SCREENSHOT_NOTE}"
+        f"INTERVIEW LANGUAGE: {name}. Write POINTS and ANSWER in {name}."
     )
 
 
@@ -63,7 +92,15 @@ class Suggestion:
     raw: str = ""
 
     def as_dict(self) -> dict:
-        return {"points": self.points, "answer": self.answer}
+        """Plain text for the API and agents: the **bold** markers are for the window."""
+        return {"points": [point.replace("**", "") for point in self.points], "answer": self.answer}
+
+
+_BULLET = re.compile(r"^\s*(?:[-•]|\*(?!\*)|\d+[.)])\s*")
+
+
+def _bullets(block: str) -> list[str]:
+    return [_BULLET.sub("", line).strip() for line in block.splitlines() if line.strip()]
 
 
 def parse_suggestion(text: str) -> Suggestion:
@@ -71,22 +108,12 @@ def parse_suggestion(text: str) -> Suggestion:
     match = re.search(r"POINTS:\s*(.*?)\s*ANSWER:\s*(.*)", raw, re.S | re.I)
     if not match:
         return Suggestion(answer=raw, raw=raw)
-    points = [
-        re.sub(r"^[-•*\d.)\s]+", "", line).strip()
-        for line in match[1].splitlines()
-        if line.strip()
-    ]
-    return Suggestion(points=points, answer=match[2].strip(), raw=raw)
+    return Suggestion(points=_bullets(match[1]), answer=match[2].strip(), raw=raw)
 
 
 def split_partial(text: str) -> tuple[list[str], str]:
     """Points and answer so far from a half-streamed reply."""
-    head, _, tail = text.partition("ANSWER:")
     if "ANSWER:" not in text and "POINTS:" not in text:
         return [], text.strip()
-    points = [
-        re.sub(r"^[-•*\d.)\s]+", "", line).strip()
-        for line in head.replace("POINTS:", "").splitlines()
-        if line.strip()
-    ]
-    return points, tail.strip()
+    head, _, tail = text.partition("ANSWER:")
+    return _bullets(head.replace("POINTS:", "")), tail.strip()
