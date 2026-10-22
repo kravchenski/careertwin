@@ -35,7 +35,7 @@ class InterviewSettings:
     gateway_key: str = ""
     model: str = ""
     answer_style: str = "standard"
-    show_full_answer: bool = False
+    show_full_answer: bool = True
     screenshot_enabled: bool = True
     screenshot_tool: str = "auto"
     screenshot_delay_ms: int = 250

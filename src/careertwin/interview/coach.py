@@ -52,7 +52,7 @@ async def suggest(
 ) -> Suggestion:
     """One-shot suggestion through the configured Switchyard provider."""
     prompt = user_prompt(brief, question, classify(question), history or [], language)
-    text = await call_ai(SYSTEM, prompt, "switchyard", model or model_name(), max_tokens=700)
+    text = await call_ai(SYSTEM, prompt, "switchyard", model or model_name(), max_tokens=1600)
     if not text.strip():
         raise CoachError("The model returned no text. Is Switchyard running with a provider?")
     return parse_suggestion(text)
@@ -165,7 +165,7 @@ class StreamingCoach:
                 {"role": "user", "content": content},
             ],
             "temperature": 0.3,
-            "max_tokens": 700,
+            "max_tokens": 1800,
             "stream": True,
         }
         headers = {"Accept": "text/event-stream"}

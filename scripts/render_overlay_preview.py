@@ -16,26 +16,41 @@ from careertwin.interview.overlay import Bridge, OverlayWindow, create_app  # no
 
 SAMPLES = {
     "en": (
-        "Tell me about a time you fixed a production problem.",
+        "What is Python?",
         "POINTS:\n"
-        "- After a release our order API's **p95 latency doubled**.\n"
-        "- I traced it to a query on customer id with **no index**.\n"
-        "- I added the **index** and a latency alert.\n"
-        "- It was **back to normal within the hour**.\n"
+        "- **Python** is a high-level, interpreted language with dynamic typing.\n"
+        "- It is known for **readable syntax** and a huge standard library.\n"
+        "- It is used for **web backends**, automation, data and machine learning.\n"
+        "- The trade-off: it is **slower** than compiled languages, and the GIL limits threads.\n"
         "ANSWER:\n"
-        "After a release our order API got twice as slow. I traced it to a query without an "
-        "index, added one, and we were back to normal within the hour.",
+        "Python is a general-purpose, high-level language that is interpreted and dynamically typed. "
+        "It favours readability and has a very large ecosystem, which is why it is common in backends, "
+        "scripting and data work.\n"
+        "KEY:\n"
+        "- **Dynamic typing**: types are checked at run time, which speeds up writing code.\n"
+        "- **GIL**: one thread runs Python bytecode at a time, so CPU-bound work uses processes.\n"
+        "- **Ecosystem**: FastAPI, Django, asyncio, NumPy and thousands of packages.\n"
+        "CONTEXT:\n"
+        "I use it for async services on FastAPI and PostgreSQL, and move heavy work into separate "
+        "processes or services.",
     ),
     "ru": (
-        "Расскажите о случае, когда вы чинили проблему в продакшене.",
+        "Что такое Python?",
         "POINTS:\n"
-        "- После релиза **задержка** нашего order API выросла вдвое.\n"
-        "- Я нашёл запрос по customer id **без индекса**.\n"
-        "- Добавил **индекс** и алерт на задержку.\n"
-        "- Через час всё было **в норме**.\n"
+        "- **Python** — высокоуровневый интерпретируемый язык с динамической типизацией.\n"
+        "- Известен **читаемым синтаксисом** и большой стандартной библиотекой.\n"
+        "- Применяют для **веб-бэкенда**, автоматизации, данных и машинного обучения.\n"
+        "- Компромисс: он **медленнее** компилируемых языков, а GIL ограничивает потоки.\n"
         "ANSWER:\n"
-        "После релиза наш order API замедлился вдвое. Я нашёл запрос без индекса, добавил его, "
-        "и через час всё работало как раньше.",
+        "Python — язык общего назначения: интерпретируемый, с динамической типизацией и упором на "
+        "читаемость. Огромная экосистема делает его частым выбором для бэкенда, скриптов и данных.\n"
+        "KEY:\n"
+        "- **Динамическая типизация**: типы проверяются при выполнении, код пишется быстрее.\n"
+        "- **GIL**: байткод выполняет один поток за раз, поэтому тяжёлое делают в процессах.\n"
+        "- **Экосистема**: FastAPI, Django, asyncio, NumPy и тысячи пакетов.\n"
+        "CONTEXT:\n"
+        "Я использую его для async-сервисов на FastAPI и PostgreSQL, а тяжёлые участки выношу в "
+        "отдельные процессы или сервисы.",
     ),
 }
 
@@ -57,7 +72,8 @@ def main(target: str, language: str = "en") -> None:
         ui_language=language,
         frameless=True,
     )
-    window.resize(900, 400)
+    window.resize(900, 700)
+    window.apply_setting("show_full_answer", True)
     window.show()
     question, reply = SAMPLES[language if language in SAMPLES else "en"]
     bridge.state.emit("listening")
