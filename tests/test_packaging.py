@@ -15,7 +15,7 @@ APP_ID = "careertwin-interview"
 def test_desktop_entry_matches_the_app_id_and_icon():
     text = (ROOT / "packaging" / f"{APP_ID}.desktop").read_text()
     fields = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
-    assert fields["Exec"] == f"@BIN@/{APP_ID}" and fields["Icon"] == APP_ID
+    assert fields["Exec"] == f"@BIN@/{APP_ID}" and fields["Icon"] == "@ICON@"
     assert fields["StartupWMClass"] == APP_ID and fields["Terminal"] == "false"
     assert fields["Categories"].count(";") == 1
     overlay = (ROOT / "src" / "careertwin" / "interview" / "overlay.py").read_text()
@@ -51,3 +51,4 @@ def test_the_png_icon_matches_the_svg_and_is_installed():
     uninstall = (ROOT / "scripts" / "uninstall.sh").read_text()
     for name in (f"{APP_ID}.svg", f"{APP_ID}.png"):
         assert name in install and name in uninstall
+    assert "@ICON@" in install and f"{APP_ID}.png" in install.split("@ICON@")[1]

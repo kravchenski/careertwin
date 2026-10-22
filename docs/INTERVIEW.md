@@ -186,4 +186,7 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
   the status pill says so.
 - **`libcublas` errors:** the app already falls back to CPU. For a GPU, install the CUDA 12 runtime
   libraries.
+- **The launcher shows a generic gear icon:** the launcher cached its icon folders before the install
+  created `~/.local/share/icons`. The desktop entry uses an absolute icon path to avoid this; if an old
+  entry is still shown, restart the launcher or shell (for Noctalia, restart `qs`).
 - **Check the setup without the window:** `uv run careertwin-interview --doctor`.

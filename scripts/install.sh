@@ -31,7 +31,10 @@ BIN="$(uv tool dir --bin)"
 install -Dm644 "$ROOT/packaging/careertwin-interview.svg" "$ICONS/careertwin-interview.svg"
 install -Dm644 "$ROOT/packaging/careertwin-interview.png" "$ICONS_PNG/careertwin-interview.png"
 mkdir -p "$APPS"
-sed "s|@BIN@|$BIN|" "$ROOT/packaging/careertwin-interview.desktop" > "$APPS/careertwin-interview.desktop"
+# An absolute icon path works even in a launcher that started before ~/.local/share/icons existed
+# and cached the icon directories (it would otherwise show a generic gear until restarted).
+sed -e "s|@BIN@|$BIN|" -e "s|@ICON@|$ICONS_PNG/careertwin-interview.png|" \
+  "$ROOT/packaging/careertwin-interview.desktop" > "$APPS/careertwin-interview.desktop"
 chmod 644 "$APPS/careertwin-interview.desktop"
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -t "$DATA/icons/hicolor" 2>/dev/null || true
