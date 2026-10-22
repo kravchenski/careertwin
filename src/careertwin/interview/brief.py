@@ -15,6 +15,10 @@ CV_CHARS = 9_000
 JOB_CHARS = 6_000
 JOB_ID = re.compile(r"[0-9a-f]{24}")
 LOW_PRIORITY_SECTIONS = ("applications log", "cv files", "contact")
+# Parts of ABOUT.md written for CV writing and bookkeeping, not for answering a question: the
+# log of applications, CV file names, the job-ad matching rules and the project catalogue.
+# Dropping them makes every request about 40% smaller, so the first words come sooner.
+SKIP_FOR_ANSWERS = ("applications log", "cv files", "matching a job ad")
 
 
 class BriefError(ValueError):
@@ -159,7 +163,7 @@ class InterviewBrief:
         parts = []
         if self.candidate.strip():
             parts.append(
-                f"CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{fit_context(self.candidate, CONTEXT_CHARS)}"
+                f"CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{fit_context(slim_for_answers(self.candidate), CONTEXT_CHARS)}"
             )
         for doc in self.documents:
             if not doc.enabled:
@@ -193,6 +197,14 @@ class InterviewBrief:
             if word:
                 seen.setdefault(word, None)
         return ", ".join(list(seen)[:45])
+
+
+def slim_for_answers(text: str) -> str:
+    """ABOUT.md without the sections that never help answer a question."""
+    parts = re.split(r"^(?=## )", text, flags=re.M)
+    skip = tuple(f"## {name}" for name in SKIP_FOR_ANSWERS)
+    kept = "".join(part for part in parts if not part.lower().startswith(skip))
+    return re.sub(r"^### Project catalog[\s\S]*?(?=^## |\Z)", "", kept, flags=re.M)
 
 
 def fit_context(text: str, budget: int) -> str:
