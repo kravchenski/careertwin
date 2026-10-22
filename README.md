@@ -25,8 +25,8 @@ The language model is scripted so the recording is repeatable; the API, tools an
   It stops at login, CAPTCHA and any question it cannot answer from your profile.
 - **Helps in live interviews.** A compact window transcribes the call on your machine and writes what to
   say, in first person, built only from your real experience: your `ABOUT.md`, the CV you sent and the
-  vacancy, in the language of the interview. Documents, language, audio, model and screenshots are all set
-  in the window's Settings.
+  vacancy, in the language of the interview. Before the call it builds a question bank and reviews your CV
+  against the vacancy. Documents, language, audio, model and screenshots are all set in the window's Settings.
 - **Is driven by agents, not a web page.** There is no web UI. Every capability is an HTTP endpoint and a
   typed tool, served over MCP to Claude Code, Codex, OpenCode or the built-in agent.
 
