@@ -41,6 +41,8 @@ uv run careertwin serve              # the API, http://127.0.0.1:8000  (docs at 
 uv run careertwin agent "Find strong Python matches and prepare CVs for the top two"
 ```
 
+The `careertwin*` commands live in the project's virtualenv: run them with `uv run`, or activate it
+(`source .venv/bin/activate`, or `activate.fish` in fish).
 Browser steps need the [Switchyard extension](https://github.com/kravchenski/switchyard-extension) in the
 Chrome you are signed in to. Python 3.14 and [uv](https://docs.astral.sh/uv/) are required.
 
