@@ -8,9 +8,11 @@ the language of the interview.
 <p align="center"><img src="media/interview-overlay.png" alt="The overlay: status dots, Ask and Screenshot buttons, the question and the lines to say" width="760"></p>
 
 For "hi" it gives the greeting itself, who you are and an invitation to start. For "What is
-React?" it gives the facts as sentences you can say. For "Do you have experience with
-Kubernetes?" the first line says honestly that you do not, and the rest bridges to what you
-really did. Nothing in it is advice such as "keep it short".
+Python?" it explains: a one-sentence definition, the key properties, typical uses and the main
+trade-off, with at most a closing line about your own experience. For "Do you have experience
+with Kubernetes?" the first line says honestly that you do not, and the rest bridges to what you
+really did. Nothing in it is advice such as "keep it short", and an earlier greeting is never
+repeated. Typos and speech-recognition slips in the question ("pytohn") are read through.
 
 ## Use it fairly
 
@@ -34,12 +36,29 @@ The commands live in the project's virtualenv, not on your `PATH`: run them with
 at the bottom). Changes apply at once and are saved, so the next start is already configured.
 There is nothing to edit in files and no flag you need.
 
+## One interview per vacancy
+
+Each interview keeps its **own vacancy, the CV you sent for it and your notes**; `ABOUT.md` is
+shared. Set one up in a minute:
+
+1. ☰ → *Interview* → *New interview…* (or *New* at the top of Settings).
+2. **Vacancy** tab: paste the vacancy text or a link, or pick it from the application pipeline
+   (the CV prepared for it is attached automatically).
+3. **Documents** tab: add the CV you sent for this vacancy (drop the file on the window or *Add
+   files…*). Add anything else about you as *About me*.
+
+The interview is named after the vacancy. Switch between interviews from ☰ → *Interview* or the
+picker at the top of Settings; the vacancy, CV and notes change together, and the last one used
+opens next time. The dim line at the bottom of the window shows which interview is active and what
+it reads.
+
 ## Settings
 
 <p align="center"><img src="media/interview-settings.png" alt="The Documents tab of the settings window" width="640"></p>
 
 | Tab | What you set |
 |---|---|
+| **Interview picker** (above the tabs) | Switch, create, rename or delete interviews. |
 | **Documents** | Add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window. Mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it. Files are copied into `data/interview/documents/`, so moving the original does no harm. A blank or scanned PDF is refused with a reason. |
 | **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
@@ -61,10 +80,10 @@ Every hint is generated from the sources shown in the dim line at the bottom of 
 
 - **`ABOUT.md`**, read whole, including the interview stories and honest limits. If it is too long,
   the least useful sections (*Applications log*, *CV files*, *Contact*) go first, never the tail.
-- **Your documents** from the Documents tab. A document marked *CV* is treated as what the
+- **Your documents** of the active interview, from the Documents tab. A document marked *CV* is treated as what the
   interviewer has read, so answers stay consistent with it; *About me* documents are extra facts.
   If a document and `ABOUT.md` disagree, `ABOUT.md` wins and the first line says so honestly.
-- **The vacancy and your notes**, from the Vacancy tab. With `--job <vacancy id>` the CV that was
+- **The vacancy and your notes** of the active interview, from the Vacancy tab. With `--job <vacancy id>` the CV that was
   prepared for that vacancy is attached automatically.
 
 With no context at all the window says so instead of guessing.
