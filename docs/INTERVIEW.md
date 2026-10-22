@@ -138,6 +138,11 @@ call audio (sink monitor) ─► 20 ms frames ─► utterance segmenter ─► 
           ABOUT.md · documents · vacancy · last turns · interview language ┘
 ```
 
+- **It does not wait for the end of the question.** While the interviewer speaks, a caption line (🎧)
+  shows the words heard so far and refreshes about every 1.5 s. The question counts as finished after
+  half a second of silence, and the request to the model leaves 0.4 s later (so a question split by a
+  short pause is still sent as one). A long monologue is cut into pieces of at most 12 s instead of
+  one 25 s block, and a caption that already covers the speech is used as the final text.
 - **Audio stays local.** `parec` reads the sink monitor; faster-whisper transcribes on your
   machine (CPU, or GPU when its CUDA libraries load). Recognition is primed with your skills and
   the vacancy so names like Kubernetes are heard correctly.
@@ -193,6 +198,11 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 - **Screenshot is greyed out:** install `grim` (Wayland) or `spectacle`, or `maim`/`scrot` on X11,
   and check Settings → Screenshot.
 - **A document is refused:** the PDF has no text layer. Export a text PDF or attach DOCX.
+- **Speech turns into text slowly:** on a CPU one Whisper pass takes about 0.8 s whatever the length of the
+  question, so the delay you feel is the silence wait plus the model. With an NVIDIA GPU the installer adds
+  the CUDA 12 libraries (about 1.3 GB; `CAREERTWIN_NO_GPU=1 ./scripts/install.sh` skips them) and Whisper
+  runs on the GPU in half precision, which is several times faster. Settings → Audio & speech → *Device*
+  shows `auto`, `cpu` or `cuda`; if the GPU fails to start the app falls back to the CPU by itself.
 - **Answers are slow:** the model matters most. Settings → AI model → *Load models*; in a test with a
   realistic prompt `groq/openai/gpt-oss-120b` finished in about 1–4 s and `kilo/poolside/laguna-s-2.1:free` showed
   its first words in about 2 s, while `auto` varied from 1 s to 40 s. If the chosen model fails before saying

@@ -24,8 +24,16 @@ need parec "sudo pacman -S libpulse pipewire-pulse   (captures the call audio)"
 need pactl "sudo pacman -S libpulse"
 [[ "$missing" == 0 ]] || exit 1
 
-echo "Installing the commands with uv (editable, Python 3.14, interview + rendering extras)..."
-uv tool install --editable --force --python 3.14 "$ROOT[interview,rendering]"
+EXTRAS="interview,rendering"
+# CTranslate2 needs the CUDA 12 runtime; the system CUDA on Arch is newer, so the pip wheels are used.
+if [[ -z "${CAREERTWIN_NO_GPU:-}" ]] && command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+  EXTRAS="$EXTRAS,gpu"
+  echo "NVIDIA GPU found: adding the CUDA 12 libraries (about 1.3 GB) for much faster speech recognition."
+  echo "Set CAREERTWIN_NO_GPU=1 to skip them."
+fi
+
+echo "Installing the commands with uv (editable, Python 3.14, extras: $EXTRAS)..."
+uv tool install --editable --force --python 3.14 "$ROOT[$EXTRAS]"
 BIN="$(uv tool dir --bin)"
 
 install -Dm644 "$ROOT/packaging/careertwin-interview.svg" "$ICONS/careertwin-interview.svg"

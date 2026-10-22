@@ -126,6 +126,7 @@ class Bridge(QObject):
     level = Signal(str, float)
     language = Signal(str)
     source = Signal(str)
+    partial = Signal(str)
     error = Signal(str)
 
     def callbacks(self) -> Callbacks:
@@ -139,6 +140,7 @@ class Bridge(QObject):
             on_level=self.level.emit,
             on_language=self.language.emit,
             on_source=self.source.emit,
+            on_partial=self.partial.emit,
             on_error=self.error.emit,
         )
 
@@ -389,6 +391,7 @@ class OverlayWindow(QWidget):
             QMenu::item:selected {{ background: rgba(188,180,255,0.22); }}
             QFrame#line {{ background: rgba(255,255,255,0.10); max-height: 1px; min-height: 1px; }}
             QLabel#dim {{ color: {MUTED}; font-size: 12px; }}
+            QLabel#heard {{ color: #bcb4ff; font-size: 14px; padding: 2px 4px; }}
             QLabel#page {{ background: rgba(255,255,255,0.08); border-radius: 15px; padding: 4px 16px; min-height: 22px;
                           color: {MUTED}; font-size: 13px; }}
             """
@@ -467,6 +470,11 @@ class OverlayWindow(QWidget):
         footer.addWidget(self.next)
         footer.addWidget(QSizeGrip(self), 0, Qt.AlignmentFlag.AlignBottom)
         root.addLayout(footer)
+        self.heard = ElidedLabel()
+        self.heard.setObjectName("heard")
+        self.heard.setCursor(Qt.CursorShape.ArrowCursor)
+        self.heard.hide()
+        root.insertWidget(root.indexOf(self.answer), self.heard)
         self.context = ElidedLabel()
         self.context.setObjectName("dim")
         self.context.clicked.connect(lambda: self.open_settings("docs"))
@@ -502,6 +510,7 @@ class OverlayWindow(QWidget):
         bridge.level.connect(self._level)
         bridge.language.connect(self.set_ui_language)
         bridge.source.connect(self._source_changed)
+        bridge.partial.connect(self._partial)
         bridge.error.connect(self.show_error)
         self.set_pinned(pinned)
         self._render()
@@ -746,6 +755,11 @@ class OverlayWindow(QWidget):
     def show_error(self, message: str) -> None:
         self.last_state = ("error", message)
         self.pill.show_state("error", message)
+
+    def _partial(self, text: str) -> None:
+        """The words being spoken right now, before the question is complete."""
+        self.heard.set_full_text(f"🎧 {text}" if text else "")
+        self.heard.setVisible(bool(text))
 
     def _source_changed(self, name: str) -> None:
         self.pill.source_line = f"{self.tr_('listening_to')}: {name}"
