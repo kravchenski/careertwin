@@ -23,8 +23,9 @@ The language model is scripted so the recording is repeatable; the API, tools an
 - **Prepares and sends applications.** It writes a tailored CV and cover letter from those same facts,
   fills the form in your signed-in Chrome, and tracks every step in SQLite and an Excel workbook.
   It stops at login, CAPTCHA and any question it cannot answer from your profile.
-- **Helps in live interviews.** A small window transcribes the call on your machine and streams talking
-  points built only from your real experience.
+- **Helps in live interviews.** A compact window transcribes the call on your machine and streams short
+  answers built only from your real experience: your `ABOUT.md`, the CV you sent and the vacancy. Hints come
+  in the language of the interview.
 - **Is driven by agents, not a web page.** There is no web UI. Every capability is an HTTP endpoint and a
   typed tool, served over MCP to Claude Code, Codex, OpenCode or the built-in agent.
 
