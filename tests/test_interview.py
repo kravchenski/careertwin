@@ -50,6 +50,10 @@ def test_classification_and_language():
     assert classify("Czym jest Docker?") is Kind.DEFINITION
     assert classify("What is your salary expectation?") is Kind.SALARY
     assert classify("What are you looking for in a role?") is Kind.TECHNICAL
+    assert classify("How would you manage 30 hours a week alongside your studies?") is Kind.LOGISTICS
+    assert classify("Are you comfortable with four days in the office?") is Kind.LOGISTICS
+    assert classify("Сколько часов в неделю вы готовы работать?") is Kind.LOGISTICS
+    assert classify("Ile godzin tygodniowo możesz pracować?") is Kind.LOGISTICS
     assert classify("Design a rate limiter for an API") is Kind.TECHNICAL
     assert detect_language("Расскажите о себе") == "ru"
     assert detect_language("Opowiedz o sobie, proszę") == "pl"

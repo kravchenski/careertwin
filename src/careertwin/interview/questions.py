@@ -46,10 +46,13 @@ _PATTERNS: list[tuple[Kind, re.Pattern[str]]] = [
         r"как работает|"
         r"co to (jest|są)|czym (jest|są)|wyjaśnij|jaka jest różnica|czym się różni|jak działa", re.I)),
     (Kind.LOGISTICS, re.compile(
-        r"notice period|when can you start|available to start|work permit|visa|relocat|"
-        r"remote|on-?site|hybrid|time ?zone|"
-        r"когда (вы )?(сможете|готовы) выйти|срок уведомления|переезд|удал[её]н|гибрид|"
-        r"okres wypowiedzenia|kiedy możesz zacząć|relokacj|zdaln", re.I)),
+        r"notice period|when can you start|available to start|start date|availability|work permit|visa|"
+        r"relocat|remote|on-?site|hybrid|in the office|time ?zone|commut|full[- ]time|part[- ]time|"
+        r"hours (a|per) (week|day)|\d+ hours|manage .*(studies|study|university|exams?|classes)|"
+        r"(studies|university|exams?|classes) .*(work|internship|hours)|"
+        r"когда (вы )?(сможете|готовы) выйти|срок уведомления|переезд|удал[её]н|гибрид|в офисе|"
+        r"сколько часов|совмещать .*(учёб|универ)|график|"
+        r"okres wypowiedzenia|kiedy możesz zacząć|relokacj|zdaln|w biurze|ile godzin|studi", re.I)),
 ]
 
 _QUESTION_START = re.compile(

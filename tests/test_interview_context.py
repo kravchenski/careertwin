@@ -404,3 +404,76 @@ def test_answers_skip_the_bookkeeping_sections_but_keep_everything_useful(about)
     about.write_text(text)
     rendered = InterviewBrief.load().render()
     assert "Interview stories" in rendered and "Applications log" not in rendered and "Project catalog" not in rendered
+
+
+def test_the_prompt_can_ask_for_the_main_answer_only(about):
+    from careertwin.interview.prompts import SYSTEM, screenshot_prompt, user_prompt
+
+    brief = InterviewBrief.load()
+    main = user_prompt(brief, "Why this internship?", Kind.MOTIVATION, [], "en", "standard", "main")
+    assert "ANSWER LAYOUT: main answer only" in main and "only the ANSWER section" in main
+    assert "ANSWER LAYOUT: lines to say" in user_prompt(brief, "Why?", Kind.MOTIVATION, [], "en")
+    assert "main answer only" in screenshot_prompt(brief, [], "en", "standard", "main")
+    assert "reply with just \"ANSWER:\"" in SYSTEM and "start the paragraph at once" in SYSTEM
+    assert "Never invent routines, methods, habits, tools or examples" in SYSTEM
+    assert "time-boxed" not in SYSTEM
+
+
+def test_the_coach_sends_the_chosen_layout(about):
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content)["messages"][1]["content"])
+        return sse("ANSWER:\nok")
+
+    coach = StreamingCoach(InterviewBrief.load(), transport=httpx.MockTransport(handler))
+    list(coach.stream("Why us?", [], threading.Event(), "en"))
+    coach.layout = "main"
+    list(coach.stream("Why us?", [], threading.Event(), "en"))
+    assert "lines to say, then the detailed answer" in seen[0]
+    assert "ANSWER LAYOUT: main answer only" in seen[1]
+
+
+def test_a_failing_model_falls_back_to_automatic_routing_before_the_first_word(about):
+    from careertwin.interview.coach import CoachError
+
+    models = []
+
+    def handler(request):
+        model = json.loads(request.content)["model"]
+        models.append(model)
+        if model == "groq/openai/gpt-oss-120b":
+            return httpx.Response(429, text="rate limited")
+        return sse("ANSWER:\n", "from auto")
+
+    coach = StreamingCoach(
+        InterviewBrief.load(), model="groq/openai/gpt-oss-120b", transport=httpx.MockTransport(handler)
+    )
+    assert "".join(coach.stream("Why us?", [], threading.Event(), "en")) == "ANSWER:\nfrom auto"
+    assert models == ["groq/openai/gpt-oss-120b", "auto"]
+
+    models.clear()
+    both_fail = StreamingCoach(
+        InterviewBrief.load(), model="x", transport=httpx.MockTransport(lambda r: httpx.Response(503, text="down"))
+    )
+    with pytest.raises(CoachError, match="503"):
+        list(both_fail.stream("Why us?", [], threading.Event(), "en"))
+
+    auto = StreamingCoach(InterviewBrief.load(), model="auto", transport=httpx.MockTransport(lambda r: models.append("auto") or httpx.Response(503, text="down")))
+    with pytest.raises(CoachError):
+        list(auto.stream("Why us?", [], threading.Event(), "en"))
+    assert models == ["auto"]
+
+
+def test_no_fallback_once_words_have_been_shown(about):
+
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content)["model"])
+        lines = f"data: {json.dumps({'choices': [{'delta': {'content': 'hi'}}]})}\n\n"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=lines + "data: {broken")
+
+    coach = StreamingCoach(InterviewBrief.load(), model="m", transport=httpx.MockTransport(handler))
+    assert "".join(coach.stream("Why?", [], threading.Event(), "en")) == "hi"
+    assert calls == ["m"]

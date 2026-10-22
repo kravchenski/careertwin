@@ -65,7 +65,7 @@ it reads.
 | **Documents** | Add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window. Mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it. Files are copied into `data/interview/documents/`, so moving the original does no harm. A blank or scanned PDF is refused with a reason. |
 | **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
-| **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed) and whether to show the detailed answer. |
+| **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed), answer layout (main answer only, or lines plus the detailed answer) and whether to show the detailed answer. |
 | **Audio & speech** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
 | **AI model** | Gateway URL, API key and model, *Load models* to pick from what your gateway offers, and *Test connection*. Leave them empty to use `.env` (`SWITCHYARD_*`) and auto routing. |
 | **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
@@ -113,10 +113,14 @@ The window itself is translated into English, Russian and Polish.
 | **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The window turns transparent for the capture |
 | Input + **Get answer** | Type or paste a question |
 | `Ctrl ←` `Ctrl →` | Page through earlier answers (`2/2`) |
-| **Details** `Ctrl D` | Show or hide the detailed answer under the lines |
+| **Details** `Ctrl D` | Show or hide the detailed answer under the lines (lines layout) |
+| `Ctrl M` | Switch between *main answer only* and *lines + details* |
 | ☰ | Settings, Context, transcript, detailed answer, pin on top, interview language, quit |
 
-The first thing you see is the lines to say, with key terms in bold; they stream in within a few
+**Main answer only** (Settings → Language → Answer layout, or `Ctrl M`) skips everything else: the model
+writes just one paragraph to read aloud and it starts at once, so it is also the fastest layout.
+
+In the default *lines* layout the first thing you see is the lines to say, with key terms in bold; they stream in within a few
 seconds. Under them the **detailed answer** follows as the rest arrives, in three parts: the *main
 answer* (a paragraph), *key points* (a term in bold and one sentence each) and *practical context*
 (where it is used, or how it applies to this vacancy and your real work). It is on by default; the
@@ -189,6 +193,12 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 - **Screenshot is greyed out:** install `grim` (Wayland) or `spectacle`, or `maim`/`scrot` on X11,
   and check Settings → Screenshot.
 - **A document is refused:** the PDF has no text layer. Export a text PDF or attach DOCX.
+- **Answers are slow:** the model matters most. Settings → AI model → *Load models*; in a test with a
+  realistic prompt `groq/openai/gpt-oss-120b` finished in about 1–4 s and `kilo/poolside/laguna-s-2.1:free` showed
+  its first words in about 2 s, while `auto` varied from 1 s to 40 s. If the chosen model fails before saying
+  anything (rate limit, outage), the request is repeated once on `auto`. Answers also get faster with the
+  *Concise* style and a smaller `ABOUT.md`; sections that never help answer (the applications log, CV file
+  names, job-ad matching rules, the project catalogue) are already left out of every request.
 - **First start is slow:** Whisper downloads its model once and loads it before listening starts;
   the status pill says so.
 - **`libcublas` errors:** the app already falls back to CPU. For a GPU, install the CUDA 12 runtime

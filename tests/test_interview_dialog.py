@@ -477,3 +477,46 @@ def test_details_are_translated_and_streamed_in_order(gui):
     for heading in ("Подробный ответ", "Основной ответ", "Ключевые моменты", "Практический контекст"):
         assert heading in text
     assert gui.window.details.text() == "Подробно"
+
+
+def test_main_answer_layout_shows_only_the_paragraph_as_it_streams(gui):
+    gui.runtime.update("answer_layout", "main")
+    assert gui.window.layout_mode == "main" and gui.window.act_main.isChecked()
+    assert not gui.window.details.isVisible() and not gui.window.act_full.isEnabled()
+    assert InterviewSettings.load().answer_layout == "main"
+    gui.bridge.started.emit("How would you manage 30 hours with your studies?")
+    gui.bridge.chunk.emit("ANSWER:\nMy studies leave weekdays free, so ")
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    assert "How would you manage" in text and "My studies leave weekdays free, so" in text
+    gui.bridge.chunk.emit("30 hours a week works for me.")
+    gui.bridge.done.emit("ANSWER:\nMy studies leave weekdays free, so 30 hours a week works for me.")
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    for hidden in ("Main answer", "Detailed answer", "Key points", "Practical context", "•"):
+        assert hidden not in text
+    assert gui.window.answer_text == "My studies leave weekdays free, so 30 hours a week works for me."
+
+
+def test_main_layout_survives_a_model_that_ignores_it(gui):
+    gui.runtime.update("answer_layout", "main")
+    gui.bridge.started.emit("What is React?")
+    gui.bridge.done.emit("POINTS:\n- **React** is a UI library.\n- It uses components.")
+    gui.process()
+    assert "React is a UI library." in gui.window.answer.toPlainText()
+    gui.bridge.started.emit("Plain?")
+    gui.bridge.done.emit("Just a sentence without markers.")
+    gui.process()
+    assert "Just a sentence without markers." in gui.window.answer.toPlainText()
+
+
+def test_layout_can_be_switched_from_the_menu_shortcut_and_settings(gui):
+    gui.window.act_main.setChecked(True)
+    assert gui.runtime.settings.answer_layout == "main" and gui.runtime.coach.layout == "main"
+    gui.choose(gui.dialog.answer_layout, "lines")
+    assert gui.window.layout_mode == "lines" and not gui.window.act_main.isChecked()
+    assert gui.window.details.isVisible() is True and gui.runtime.coach.layout == "lines"
+    gui.window.act_main.toggle()
+    assert gui.window.layout_mode == "main" and gui.dialog.answer_layout.currentData() == "lines"
+    gui.dialog.refresh()
+    assert gui.dialog.answer_layout.currentData() == "main"

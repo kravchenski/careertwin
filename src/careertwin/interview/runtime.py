@@ -37,7 +37,7 @@ from careertwin.interview.stt import WhisperTranscriber
 
 AUDIO_KEYS = {"listen", "call_source", "use_mic", "mic_source"}
 SPEECH_KEYS = {"whisper_model", "whisper_device"}
-COACH_KEYS = {"gateway_url", "gateway_key", "model", "answer_style"}
+COACH_KEYS = {"gateway_url", "gateway_key", "model", "answer_style", "answer_layout"}
 WINDOW_KEYS = {"pinned", "frameless", "opacity", "font_scale", "show_full_answer", "ui_language"}
 
 
@@ -71,6 +71,8 @@ class Runtime:
             self.session.set_language(self._language())
         elif name in COACH_KEYS:
             self._apply_coach()
+            if name == "answer_layout":
+                self.on_window(name, self.settings.answer_layout)
         elif name in SPEECH_KEYS:
             self.reload_speech()
         elif name in AUDIO_KEYS:
@@ -94,6 +96,7 @@ class Runtime:
         self.coach.api_key = self.settings.gateway_key or None
         self.coach.model = self.settings.model or None
         self.coach.style = self.settings.answer_style
+        self.coach.layout = self.settings.answer_layout
 
     # ---- audio and speech --------------------------------------------------
 

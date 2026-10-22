@@ -54,7 +54,7 @@ STATE_COLOURS = {
 STRINGS = {
     "en": {
         "ask": "Ask", "screenshot": "Screenshot", "get_answer": "Get answer",
-        "placeholder": "Type a question manually…", "full_answer": "Detailed answer", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details",
+        "placeholder": "Type a question manually…", "full_answer": "Detailed answer", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details", "main_only": "Main answer only",
         "transcript": "Transcript", "pin": "Pin on top", "opacity": "Opacity",
         "add_cv": "Add CV…", "language": "Interview language", "auto": "Auto-detect",
         "quit": "Quit", "interviewer": "Interviewer", "you": "You",
@@ -73,7 +73,7 @@ STRINGS = {
     },
     "ru": {
         "ask": "Спросить", "screenshot": "Скриншот", "get_answer": "Получить ответ",
-        "placeholder": "Введите вопрос вручную…", "full_answer": "Подробный ответ", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно",
+        "placeholder": "Введите вопрос вручную…", "full_answer": "Подробный ответ", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно", "main_only": "Только основной ответ",
         "transcript": "Расшифровка", "pin": "Поверх всех окон", "opacity": "Прозрачность",
         "add_cv": "Добавить резюме…", "language": "Язык интервью", "auto": "Определять сам",
         "quit": "Выход", "interviewer": "Интервьюер", "you": "Вы",
@@ -92,7 +92,7 @@ STRINGS = {
     },
     "pl": {
         "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "get_answer": "Odpowiedz",
-        "placeholder": "Wpisz pytanie ręcznie…", "full_answer": "Szczegółowa odpowiedź", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły",
+        "placeholder": "Wpisz pytanie ręcznie…", "full_answer": "Szczegółowa odpowiedź", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły", "main_only": "Tylko odpowiedź główna",
         "transcript": "Transkrypcja", "pin": "Zawsze na wierzchu", "opacity": "Przezroczystość",
         "add_cv": "Dodaj CV…", "language": "Język rozmowy", "auto": "Wykryj automatycznie",
         "quit": "Zamknij", "interviewer": "Rekruter", "you": "Ty",
@@ -369,6 +369,7 @@ class OverlayWindow(QWidget):
         self.entries: list[Entry] = []
         self.index = -1
         self.full_answer = False
+        self.layout_mode = "lines"
         self.last_state = ("idle" if not listening else "loading", "")
         self.setStyleSheet(
             f"""
@@ -488,6 +489,7 @@ class OverlayWindow(QWidget):
             ("Ctrl+Right", lambda: self.show_entry(self.index + 1)),
             ("Ctrl+P", self._key_pause),
             ("Ctrl+D", self.details.toggle),
+            ("Ctrl+M", self.act_main.toggle),
         ):
             QShortcut(QKeySequence(sequence), self, activated=slot)
 
@@ -514,12 +516,16 @@ class OverlayWindow(QWidget):
         self.act_context = QAction(self)
         self.act_transcript = QAction(self, checkable=True)
         self.act_full = QAction(self, checkable=True)
+        self.act_main = QAction(self, checkable=True)
         self.act_pin = QAction(self, checkable=True, checked=pinned)
         self.act_quit = QAction(self)
         self.act_settings.triggered.connect(lambda: self.open_settings("language"))
         self.act_context.triggered.connect(lambda: self.open_settings("docs"))
         self.act_transcript.toggled.connect(self.transcript.setVisible)
         self.act_full.toggled.connect(lambda value: self._quick("show_full_answer", value))
+        self.act_main.toggled.connect(
+            lambda value: self._quick("answer_layout", "main" if value else "lines")
+        )
         self.act_pin.toggled.connect(lambda value: self._quick("pinned", value))
         self.act_quit.triggered.connect(self.close)
         self.language_menu = QMenu(self)
@@ -537,7 +543,7 @@ class OverlayWindow(QWidget):
         self.interview_menu.aboutToShow.connect(self._fill_interview_menu)
         self.interview_menu_action = self.menu.addMenu(self.interview_menu)
         self.menu.addSeparator()
-        for item in (self.act_transcript, self.act_full, self.act_pin):
+        for item in (self.act_transcript, self.act_main, self.act_full, self.act_pin):
             self.menu.addAction(item)
         self.language_menu_action = self.menu.addMenu(self.language_menu)
         self.menu.addSeparator()
@@ -599,6 +605,7 @@ class OverlayWindow(QWidget):
         self.next.setText(keys["next"])
         self.act_transcript.setText(self.tr_("transcript"))
         self.act_full.setText(self.tr_("full_answer"))
+        self.act_main.setText(self.tr_("main_only"))
         self.details.setText(self.tr_("details_button"))
         self.act_pin.setText(self.tr_("pin"))
         self.interview_menu_action.setText(self.tr_("interview_menu"))
@@ -681,6 +688,14 @@ class OverlayWindow(QWidget):
                 toggle.setChecked(self.full_answer)
                 toggle.blockSignals(False)
             self._render()
+        elif name == "answer_layout":
+            self.layout_mode = str(value)
+            self.act_main.blockSignals(True)
+            self.act_main.setChecked(self.layout_mode == "main")
+            self.act_main.blockSignals(False)
+            self.details.setVisible(self.layout_mode != "main")
+            self.act_full.setEnabled(self.layout_mode != "main")
+            self._render()
         elif name == "ui_language":
             self.ui_locked = value != "auto"
             if self.ui_locked:
@@ -689,7 +704,7 @@ class OverlayWindow(QWidget):
             self.pause.setEnabled(bool(value))
 
     def apply_settings(self, settings) -> None:
-        for name in ("opacity", "font_scale", "show_full_answer", "ui_language", "listen"):
+        for name in ("opacity", "font_scale", "show_full_answer", "answer_layout", "ui_language", "listen"):
             self.apply_setting(name, getattr(settings, name))
 
     def open_settings(self, tab: str = "docs") -> None:
@@ -863,6 +878,8 @@ class OverlayWindow(QWidget):
             return ""
         parts = sections(self.entries[self.index].raw)
         plain = lambda line: line.replace("**", "")  # noqa: E731
+        if self.layout_mode == "main" and parts.answer:
+            return plain(parts.answer)
         lines = [f"• {plain(point)}" for point in parts.points]
         if parts.answer and (self.full_answer or not parts.points):
             lines.append(parts.answer)
@@ -916,10 +933,18 @@ class OverlayWindow(QWidget):
             f'<div style="font-size:{px(19)}px; font-weight:700; color:{STRONG}">'
             f"{html.escape(entry.question)}</div>"
         ]
+        if self.layout_mode == "main" and spoken:
+            parts.append(
+                f'<p style="font-size:{px(18)}px; color:{TEXT}; line-height:155%; margin-top:8px">'
+                f"{render_bold(spoken)}</p>"
+            )
+            points = []
         if points:
             items = "".join(f"<li>{render_bold(point)}</li>" for point in points)
             parts.append(f'<ul style="font-size:{px(16)}px">{items}</ul>')
-        if not points and spoken:
+        if self.layout_mode == "main":
+            pass
+        elif not points and spoken:
             parts.append(f'<p style="font-size:{px(16)}px; color:{TEXT}">{render_bold(spoken)}</p>')
         elif self.full_answer and found.has_details:
             parts.append(self._details_html(found, px))
