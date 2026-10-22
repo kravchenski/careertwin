@@ -56,6 +56,7 @@ class Callbacks:
     on_state: Callable[[str], None] = lambda kind: None
     on_level: Callable[[str, float], None] = lambda speaker, level: None
     on_language: Callable[[str], None] = lambda code: None
+    on_source: Callable[[str], None] = lambda name: None
     on_error: Callable[[str], None] = lambda text: None
 
 
@@ -204,7 +205,9 @@ class InterviewSession:
         self._threads.append(thread)
 
     def _listen(self, speaker: str, source: FrameSource) -> None:
-        segmenter = UtteranceSegmenter()
+        # A call monitor is digitally silent between words, so it can use a low threshold and
+        # still hear a quiet voice; a microphone has room noise and needs a higher one.
+        segmenter = UtteranceSegmenter(min_threshold=120.0 if speaker == INTERVIEWER else 250.0)
         count = 0
         try:
             for frame in source.frames():

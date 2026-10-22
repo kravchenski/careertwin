@@ -9,7 +9,13 @@ import sys
 
 import httpx
 
-from careertwin.interview.audio import AudioError, default_sources, list_sources
+from careertwin.interview.audio import (
+    AudioError,
+    audio_state,
+    default_sources,
+    list_sources,
+    next_monitor,
+)
 from careertwin.interview.brief import BriefError, InterviewBrief
 from careertwin.interview.coach import StreamingCoach, gateway_url, model_name
 from careertwin.interview.languages import normalize
@@ -96,7 +102,12 @@ def doctor(args: argparse.Namespace) -> int:
         report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
     try:
         sources = default_sources()
-        report(True, f"call audio: {settings.call_source or sources.interviewer}; microphone: {sources.microphone}")
+        if settings.call_source:
+            call = f"{settings.call_source} (pinned)"
+        else:
+            default, playing = audio_state()
+            call = f"automatic, now {next_monitor(None, default, playing, None)}"
+        report(True, f"call audio: {call}; microphone: {sources.microphone}")
     except AudioError as exc:
         report(False, str(exc))
     base = (settings.gateway_url or gateway_url()).rstrip("/")

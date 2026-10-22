@@ -12,7 +12,13 @@ from typing import Any
 import httpx
 
 from careertwin.interview import screenshot
-from careertwin.interview.audio import AudioError, ParecSource, default_sources, list_sources
+from careertwin.interview.audio import (
+    AudioError,
+    FollowingSource,
+    ParecSource,
+    default_sources,
+    list_sources,
+)
 from careertwin.interview.coach import StreamingCoach, gateway_url
 from careertwin.interview.languages import normalize
 from careertwin.interview.library import ContextController
@@ -47,6 +53,7 @@ class Runtime:
         self.context = context
         self.coach = coach
         self.session = session
+        self.current_source = ""
         self.on_window: Callable[[str, Any], None] = lambda name, value: None
         self.on_error: Callable[[str], None] = lambda message: None
 
@@ -90,15 +97,23 @@ class Runtime:
 
     # ---- audio and speech --------------------------------------------------
 
-    def build_sources(self) -> dict[str, ParecSource]:
+    def build_sources(self) -> dict[str, FollowingSource | ParecSource]:
         """The audio sources the settings ask for: call audio and optionally the microphone."""
         if not self.settings.listen:
             return {}
-        defaults = default_sources()
-        sources = {INTERVIEWER: ParecSource(self.settings.call_source or defaults.interviewer)}
+        sources: dict[str, FollowingSource | ParecSource] = {}
+        if self.settings.call_source:
+            sources[INTERVIEWER] = ParecSource(self.settings.call_source)
+            self._source_changed(self.settings.call_source)
+        else:
+            sources[INTERVIEWER] = FollowingSource(on_change=self._source_changed)
         if self.settings.use_mic:
-            sources[YOU] = ParecSource(self.settings.mic_source or defaults.microphone)
+            sources[YOU] = ParecSource(self.settings.mic_source or default_sources().microphone)
         return sources
+
+    def _source_changed(self, name: str) -> None:
+        self.current_source = name
+        self.session.cb.on_source(name)
 
     def start_audio(self) -> None:
         self.session.start(self._safe_sources())
@@ -108,7 +123,7 @@ class Runtime:
             self.reload_speech()
         self.session.set_sources(self._safe_sources())
 
-    def _safe_sources(self) -> dict[str, ParecSource]:
+    def _safe_sources(self) -> dict[str, FollowingSource | ParecSource]:
         try:
             return self.build_sources()
         except AudioError as exc:

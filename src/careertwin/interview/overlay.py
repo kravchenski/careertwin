@@ -68,7 +68,7 @@ STRINGS = {
         "no_context": "No context yet",
         "no_context_hint": "Open Settings → Docs and add your CV, or write about yourself in About me.",
         "shot_off": "Screenshots are turned off in Settings",
-        "interview_menu": "Interview", "new_interview": "New interview…",
+        "interview_menu": "Interview", "new_interview": "New interview…", "listening_to": "Listening to",
         "no_vacancy_hint": "No vacancy yet: Settings → Vacancy to paste it, then Documents for the CV you sent.",
     },
     "ru": {
@@ -87,7 +87,7 @@ STRINGS = {
         "no_context": "Контекста пока нет",
         "no_context_hint": "Откройте Настройки → Документы и добавьте резюме или напишите о себе во вкладке «Обо мне».",
         "shot_off": "Скриншоты выключены в настройках",
-        "interview_menu": "Интервью", "new_interview": "Новое интервью…",
+        "interview_menu": "Интервью", "new_interview": "Новое интервью…", "listening_to": "Слушаю",
         "no_vacancy_hint": "Вакансии пока нет: Настройки → Вакансия, чтобы вставить её, затем Документы для резюме, которое вы отправляли.",
     },
     "pl": {
@@ -106,7 +106,7 @@ STRINGS = {
         "no_context": "Brak kontekstu",
         "no_context_hint": "Otwórz Ustawienia → Dokumenty i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
         "shot_off": "Zrzuty ekranu są wyłączone w ustawieniach",
-        "interview_menu": "Rozmowa", "new_interview": "Nowa rozmowa…",
+        "interview_menu": "Rozmowa", "new_interview": "Nowa rozmowa…", "listening_to": "Słucham",
         "no_vacancy_hint": "Brak oferty: Ustawienia → Oferta, aby ją wkleić, potem Dokumenty dla wysłanego CV.",
     },
 }
@@ -125,6 +125,7 @@ class Bridge(QObject):
     state = Signal(str)
     level = Signal(str, float)
     language = Signal(str)
+    source = Signal(str)
     error = Signal(str)
 
     def callbacks(self) -> Callbacks:
@@ -137,6 +138,7 @@ class Bridge(QObject):
             on_state=self.state.emit,
             on_level=self.level.emit,
             on_language=self.language.emit,
+            on_source=self.source.emit,
             on_error=self.error.emit,
         )
 
@@ -190,6 +192,7 @@ class StatusPill(QWidget):
         self.level = 0.0
         self.text = ""
         self.kind = "idle"
+        self.source_line = ""
         self.timer = QTimer(self, interval=45)
         self.timer.timeout.connect(self._decay)
         self.timer.start()
@@ -200,7 +203,7 @@ class StatusPill(QWidget):
 
     def show_state(self, kind: str, text: str) -> None:
         self.kind, self.text = kind, "" if kind == "listening" else text
-        self.setToolTip(text)
+        self.setToolTip(f"{text}\n{self.source_line}" if self.source_line else text)
         self.update()
 
     def _decay(self) -> None:
@@ -496,6 +499,7 @@ class OverlayWindow(QWidget):
         bridge.state.connect(self.set_state)
         bridge.level.connect(self._level)
         bridge.language.connect(self.set_ui_language)
+        bridge.source.connect(self._source_changed)
         bridge.error.connect(self.show_error)
         self.set_pinned(pinned)
         self._render()
@@ -727,6 +731,10 @@ class OverlayWindow(QWidget):
     def show_error(self, message: str) -> None:
         self.last_state = ("error", message)
         self.pill.show_state("error", message)
+
+    def _source_changed(self, name: str) -> None:
+        self.pill.source_line = f"{self.tr_('listening_to')}: {name}"
+        self.pill.show_state(*self.last_state[:1], self.last_state[1] or self._state_text(self.last_state[0]))
 
     def _level(self, speaker: str, level: float) -> None:
         if speaker == INTERVIEWER:

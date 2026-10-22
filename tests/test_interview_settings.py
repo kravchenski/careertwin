@@ -352,16 +352,24 @@ def test_runtime_restarts_audio_and_reloads_speech(stack, monkeypatch):
 
 
 def test_runtime_builds_sources_from_settings(stack, monkeypatch):
+    from careertwin.interview.audio import FollowingSource
+
     monkeypatch.setattr(
         runtime_module, "default_sources",
         lambda: type("S", (), {"interviewer": "out.monitor", "microphone": "mic"})(),
     )
+    names = []
+    stack.session.cb.on_source = names.append
     sources = ORIGINAL_BUILD_SOURCES(stack)
-    assert [s.source for s in sources.values()] == ["out.monitor"]
+    assert isinstance(sources[INTERVIEWER], FollowingSource) and len(sources) == 1
+    sources[INTERVIEWER].on_change("a.monitor")
+    assert names == ["a.monitor"] and stack.current_source == "a.monitor"
     stack.settings.set("call_source", "other.monitor")
     stack.settings.set("use_mic", True)
     stack.settings.set("mic_source", "usb-mic")
-    assert [s.source for s in ORIGINAL_BUILD_SOURCES(stack).values()] == ["other.monitor", "usb-mic"]
+    pinned = ORIGINAL_BUILD_SOURCES(stack)
+    assert [s.source for s in pinned.values()] == ["other.monitor", "usb-mic"]
+    assert stack.current_source == "other.monitor"
     stack.settings.set("listen", False)
     assert ORIGINAL_BUILD_SOURCES(stack) == {}
 
