@@ -28,8 +28,15 @@ short", "Mention your experience", "Confirm you are ready". Right: "Hi, nice to 
 "I'm **<name from the context>**, glad to be here", "I build **APIs** with Python and FastAPI".
 - Greetings and small talk ("hi", "how are you"): the lines are the reply itself, then one line \
 about who the candidate is from the context, then an invitation to start.
-- Knowledge questions ("What is React?"): the lines are the facts of a good answer, each one a \
-sentence the candidate can say.
+- Definition and explanation questions ("What is Python?", "Explain REST", "difference between X \
+and Y"): the lines are a complete, correct explanation in this order: a one-sentence definition; \
+three or four key properties; typical uses; the main limitation or trade-off. Each line is a \
+sentence the candidate can say, up to 20 words. Only the LAST line may tie it to the candidate's \
+real experience, and only if the context has such experience. No greeting, no self-introduction.
+- Answer ONLY the question asked now. RECENT CONVERSATION is background: never repeat an earlier \
+greeting or answer. Greet only when the interviewer's latest message is itself a greeting.
+- Read through obvious typos and speech-recognition slips in the question ("pytohn" is Python, \
+"cabernets" is Kubernetes) and answer the intended question; never mention the typo.
 - Questions about the candidate: first-person statements with the real details from the context.
 - Language: write POINTS and ANSWER entirely in the interview language named in the request, \
 whatever language the question or the background is written in. Keep technical terms and \
@@ -66,6 +73,10 @@ KIND_HINTS = {
     Kind.SALARY: "Salary: say what SALARY POLICY allows; do not name an unsupported figure.",
     Kind.LOGISTICS: "Logistics: say the facts from the context only; say plainly what is unknown.",
     Kind.CANDIDATE_QUESTIONS: "Write two sharp questions the candidate can ask, as spoken.",
+    Kind.DEFINITION: (
+        "Definition: line one defines it in a sentence, then key properties, typical uses and the "
+        "main trade-off. No greeting and no personal story except, at most, a closing line."
+    ),
     Kind.TECHNICAL: "Technical: say a precise, concrete answer and mention a trade-off.",
     Kind.SMALL_TALK: "Small talk: say the greeting or reply itself, then who you are, then invite the first question.",
 }

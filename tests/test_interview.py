@@ -44,7 +44,13 @@ def test_classification_and_language():
     assert classify("What are your salary expectations?") is Kind.SALARY
     assert classify("Какие у вас ожидания по зарплате?") is Kind.SALARY
     assert classify("Why do you want to work here?") is Kind.MOTIVATION
-    assert classify("How does the GIL work?") is Kind.TECHNICAL
+    assert classify("How does the GIL work?") is Kind.DEFINITION
+    assert classify("что такое pytohn") is Kind.DEFINITION
+    assert classify("What is the difference between a process and a thread") is Kind.DEFINITION
+    assert classify("Czym jest Docker?") is Kind.DEFINITION
+    assert classify("What is your salary expectation?") is Kind.SALARY
+    assert classify("What are you looking for in a role?") is Kind.TECHNICAL
+    assert classify("Design a rate limiter for an API") is Kind.TECHNICAL
     assert detect_language("Расскажите о себе") == "ru"
     assert detect_language("Opowiedz o sobie, proszę") == "pl"
     assert detect_language("Tell me about yourself") == "en"
