@@ -84,6 +84,9 @@ class InterviewSession:
         self.stopping = threading.Event()
         self._utterances: queue.Queue[tuple[str, np.ndarray] | None] = queue.Queue()
         self._threads: list[threading.Thread] = []
+        self._listeners: list[threading.Thread] = []
+        self._stt: threading.Thread | None = None
+        self._ready = threading.Event()
         self._sources: list[FrameSource] = []
         self._pending: list[str] = []
         self._timer: threading.Timer | None = None
@@ -95,13 +98,59 @@ class InterviewSession:
     def start(self, sources: dict[str, FrameSource]) -> None:
         """Listen to `{speaker: source}`; with no sources only `ask` works."""
         self._listening = bool(sources)
+        if self.transcriber is not None:
+            self._spawn(lambda: self._load(self.transcriber, first=True), "load")
+        else:
+            self._ready.set()
         if sources:
-            self._spawn(self._transcribe_loop, "stt")
+            self._ensure_stt()
+            self._start_listeners(sources)
         else:
             self.cb.on_state("idle")
+
+    def set_sources(self, sources: dict[str, FrameSource]) -> None:
+        """Replace the audio sources while the interview runs (`{}` stops listening)."""
+        self._stop_listeners()
+        self._listening = bool(sources)
+        if sources:
+            self._ensure_stt()
+            self._start_listeners(sources)
+        self.cb.on_state(self._idle_state())
+
+    def set_transcriber(self, transcriber: Transcriber | None) -> None:
+        """Switch speech recognition; the old model keeps working until the new one is loaded."""
+        if transcriber is None:
+            self.transcriber = None
+            return
+        if self.language.current and not self.language.fixed:
+            transcriber.language = None
+        elif self.language.fixed:
+            transcriber.language = self.language.fixed
+        self._spawn(lambda: self._load(transcriber, first=self.transcriber is None), "load")
+
+    def _ensure_stt(self) -> None:
+        if self._stt is None or not self._stt.is_alive():
+            self._stt = threading.Thread(target=self._transcribe_loop, name="stt", daemon=True)
+            self._stt.start()
+            self._threads.append(self._stt)
+
+    def _start_listeners(self, sources: dict[str, FrameSource]) -> None:
         for speaker, source in sources.items():
             self._sources.append(source)
-            self._spawn(lambda s=speaker, src=source: self._listen(s, src), f"listen-{speaker}")
+            thread = threading.Thread(
+                target=lambda s=speaker, src=source: self._listen(s, src),
+                name=f"listen-{speaker}",
+                daemon=True,
+            )
+            thread.start()
+            self._listeners.append(thread)
+
+    def _stop_listeners(self) -> None:
+        for source in self._sources:
+            source.close()
+        for thread in self._listeners:
+            thread.join(timeout=3)
+        self._sources, self._listeners = [], []
 
     def pause(self, value: bool = True) -> None:
         self.paused.set() if value else self.paused.clear()
@@ -124,7 +173,7 @@ class InterviewSession:
         for source in self._sources:
             source.close()
         self._utterances.put(None)
-        for thread in self._threads:
+        for thread in [*self._listeners, *self._threads]:
             thread.join(timeout=3)
 
     def ask(self, question: str) -> None:
@@ -173,28 +222,35 @@ class InterviewSession:
             self.cb.on_state("error")
             self.cb.on_error(f"Audio from {speaker.lower()} stopped: {exc}")
 
-    def _transcribe_loop(self) -> None:
-        assert self.transcriber is not None
-        self.cb.on_state("loading")
+    def _load(self, transcriber: Transcriber, *, first: bool) -> None:
+        """Load a speech model (slow the first time) and make it the active one."""
+        if first:
+            self.cb.on_state("loading")
         self.cb.on_status("Loading speech model…")
         try:
-            load = getattr(self.transcriber, "load", None)
+            load = getattr(transcriber, "load", None)
             if load:
                 load()
         except Exception as exc:
             self.cb.on_state("error")
             self.cb.on_error(str(exc))
             return
-        self.cb.on_state("listening")
+        self.transcriber = transcriber
+        self._ready.set()
+        self.cb.on_state(self._idle_state())
         self.cb.on_status("Listening")
-        vocabulary = self.brief.vocabulary()
+
+    def _transcribe_loop(self) -> None:
         while not self.stopping.is_set():
             item = self._utterances.get()
             if item is None:
                 return
+            transcriber = self.transcriber
+            if transcriber is None or not self._ready.is_set():
+                continue
             speaker, pcm = item
             try:
-                text = self.transcriber.transcribe(pcm, vocabulary)
+                text = transcriber.transcribe(pcm, self.brief.vocabulary())
             except Exception as exc:
                 self.cb.on_error(f"Transcription failed: {exc}")
                 continue
@@ -249,6 +305,10 @@ class InterviewSession:
     def _run_suggestion(self, question: str, cancel: threading.Event, image: str | None) -> None:
         with self._suggest_lock:
             if cancel.is_set():
+                return
+            if self.brief.is_empty():
+                self.cb.on_state("error")
+                self.cb.on_error("No context yet: add your CV or write about yourself in Settings → Context")
                 return
             history = self.log.history()[:-1]
             self.cb.on_state("thinking")

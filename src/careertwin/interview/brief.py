@@ -23,9 +23,18 @@ class BriefError(ValueError):
 
 @dataclass
 class Document:
+    """A file the coach reads. `cv` is what the employer received; `about` is extra facts."""
+
     name: str
     text: str
     path: str = ""
+    kind: str = "cv"
+    enabled: bool = True
+
+
+def guess_kind(name: str) -> str:
+    """CVs are recognised by name; anything else is treated as extra facts about you."""
+    return "cv" if re.search(r"cv|resume|резюме|curriculum|životopis", name, re.I) else "about"
 
 
 @dataclass
@@ -38,6 +47,8 @@ class InterviewBrief:
     notes: str = ""
     documents: list[Document] = field(default_factory=list)
 
+    username: str = "default"
+
     @classmethod
     def load(
         cls,
@@ -46,6 +57,7 @@ class InterviewBrief:
         job: str | None = None,
         notes: str = "",
         resumes: list[str] | None = None,
+        allow_empty: bool = False,
     ) -> InterviewBrief:
         """Build a brief from ABOUT.md, the CVs you attach and an optional vacancy.
 
@@ -58,11 +70,16 @@ class InterviewBrief:
             candidate = read_context(username)
         except ValueError as exc:
             raise BriefError(str(exc)) from exc
-        if not candidate.strip():
+        if not candidate.strip() and not allow_empty:
             raise BriefError(
                 "No candidate context. Fill ABOUT.md (see ABOUT.example.md) or complete the Studio."
             )
-        brief = cls(candidate=candidate, salary=_describe_salary(salary_policy(candidate)), notes=notes)
+        brief = cls(
+            candidate=candidate,
+            salary=_describe_salary(salary_policy(candidate)),
+            notes=notes,
+            username=username,
+        )
         if job:
             brief._attach_job(job)
         paths = [*(resumes or []), *filter(None, os.getenv("CAREERTWIN_RESUME", "").split(os.pathsep))]
@@ -70,8 +87,8 @@ class InterviewBrief:
             brief.add_document(path)
         return brief
 
-    def add_document(self, path: str | Path) -> Document:
-        """Attach a CV (or any supporting file); the same file is attached once."""
+    def add_document(self, path: str | Path, kind: str | None = None) -> Document:
+        """Attach a CV or any file about you; the same file is attached once."""
         resolved = str(Path(path).expanduser().resolve())
         for existing in self.documents:
             if existing.path == resolved:
@@ -80,9 +97,28 @@ class InterviewBrief:
             text = read_document(resolved)
         except DocumentError as exc:
             raise BriefError(str(exc)) from exc
-        document = Document(name=Path(resolved).name, text=text, path=resolved)
+        name = Path(resolved).name
+        document = Document(name=name, text=text, path=resolved, kind=kind or guess_kind(name))
         self.documents.append(document)
         return document
+
+    def remove_document(self, path: str) -> None:
+        self.documents = [doc for doc in self.documents if doc.path != path]
+
+    def set_candidate(self, text: str) -> None:
+        """Replace the ABOUT text (the caller saves it to ABOUT.md)."""
+        self.candidate = text
+        self.salary = _describe_salary(salary_policy(text))
+
+    def set_vacancy(self, *, title: str = "", company: str = "", description: str = "") -> None:
+        self.job_title, self.company, self.job_description = title, company, description
+
+    def clear_vacancy(self) -> None:
+        self.set_vacancy()
+
+    def is_empty(self) -> bool:
+        """True when there is nothing to ground an answer in."""
+        return not self.candidate.strip() and not any(doc.enabled for doc in self.documents)
 
     def _attach_job(self, job: str) -> None:
         if JOB_ID.fullmatch(job):
@@ -108,19 +144,34 @@ class InterviewBrief:
 
     def sources(self) -> list[tuple[str, str]]:
         """What the coach is working from, as (kind, label) pairs for the window."""
-        items = [("about", f"ABOUT.md · {len(self.candidate) / 1000:.1f}k")]
-        items += [("cv", f"{doc.name} · {len(doc.text) / 1000:.1f}k") for doc in self.documents]
+        items = [("about", f"ABOUT.md · {len(self.candidate) / 1000:.1f}k")] if self.candidate.strip() else []
+        items += [
+            (doc.kind, f"{doc.name} · {len(doc.text) / 1000:.1f}k")
+            for doc in self.documents
+            if doc.enabled
+        ]
         if self.job_title or self.job_description:
             head = " at ".join(part for part in (self.job_title, self.company) if part)
             items.append(("job", head or "vacancy"))
         return items
 
     def render(self) -> str:
-        parts = [f"CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{fit_context(self.candidate, CONTEXT_CHARS)}"]
-        for doc in self.documents:
+        parts = []
+        if self.candidate.strip():
             parts.append(
-                f"CV THE EMPLOYER HAS READ: {doc.name}\n{doc.text[:CV_CHARS]}"
+                f"CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{fit_context(self.candidate, CONTEXT_CHARS)}"
             )
+        for doc in self.documents:
+            if not doc.enabled:
+                continue
+            heading = (
+                "CV THE EMPLOYER HAS READ"
+                if doc.kind == "cv"
+                else "MORE FACTS ABOUT THE CANDIDATE (the employer has not seen this)"
+            )
+            parts.append(f"{heading}: {doc.name}\n{doc.text[:CV_CHARS]}")
+        if not parts:
+            parts.append("CANDIDATE CONTEXT: (none provided)")
         if self.job_description or self.job_title:
             head = " at ".join(part for part in (self.job_title, self.company) if part)
             parts.append(f"VACANCY: {head}\n{self.job_description[:JOB_CHARS]}".strip())
@@ -134,6 +185,9 @@ class InterviewBrief:
         words = [self.company, self.job_title]
         words += re.findall(r"\b[A-Z][A-Za-z+#.]{2,}\b", self.job_description)[:25]
         words += _skill_terms(self.candidate)
+        for doc in self.documents:
+            if doc.enabled:
+                words += _skill_terms(doc.text)
         seen: dict[str, None] = {}
         for word in words:
             if word:

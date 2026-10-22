@@ -23,32 +23,44 @@ TOOLS: list[tuple[str, list[str], bool]] = [
 ]
 
 
-def available_tool() -> str | None:
+def available_tools() -> list[str]:
+    """Installed capture tools that can see this session's screen, best first."""
     import os
 
     wayland = bool(os.getenv("WAYLAND_DISPLAY"))
-    for name, _command, wayland_ok in TOOLS:
-        if shutil.which(name) and (wayland_ok or not wayland):
-            return name
-    return None
+    return [
+        name
+        for name, _command, wayland_ok in TOOLS
+        if shutil.which(name) and (wayland_ok or not wayland)
+    ]
 
 
-def capture_png() -> bytes:
-    """Return the whole screen as PNG bytes."""
-    tool = available_tool()
-    if tool is None:
+def available_tool() -> str | None:
+    tools = available_tools()
+    return tools[0] if tools else None
+
+
+def capture_png(tool: str = "auto") -> bytes:
+    """Return the whole screen as PNG bytes using `tool` (or the best available one)."""
+    installed = available_tools()
+    if not installed:
         raise ScreenshotError(
             "No screenshot tool. Install grim (Wayland, e.g. niri or sway) or spectacle, "
             "or maim/scrot on X11."
         )
-    command = next(command for name, command, _ in TOOLS if name == tool)
+    if tool != "auto" and tool not in installed:
+        raise ScreenshotError(f"{tool} is not installed or cannot capture this session")
+    chosen = installed[0] if tool == "auto" else tool
+    command = next(command for name, command, _ in TOOLS if name == chosen)
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "screen.png"
         result = subprocess.run(
             [part.format(path=path) for part in command], capture_output=True, text=True, timeout=20
         )
         if result.returncode != 0 or not path.is_file() or path.stat().st_size == 0:
-            raise ScreenshotError(f"{tool} failed: {result.stderr.strip()[:200] or 'no image written'}")
+            raise ScreenshotError(
+                f"{chosen} failed: {result.stderr.strip()[:200] or 'no image written'}"
+            )
         return path.read_bytes()
 
 
