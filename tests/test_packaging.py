@@ -40,3 +40,14 @@ def test_the_installed_commands_exist_in_pyproject():
     for command in ("careertwin", "careertwin-mcp", APP_ID):
         assert re.search(rf'^{re.escape(command)} = "', pyproject, re.M)
     assert "[interview,rendering]" in (ROOT / "scripts" / "install.sh").read_text()
+
+
+def test_the_png_icon_matches_the_svg_and_is_installed():
+    png = (ROOT / "packaging" / f"{APP_ID}.png").read_bytes()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = int.from_bytes(png[16:20], "big"), int.from_bytes(png[20:24], "big")
+    assert (width, height) == (256, 256)
+    install = (ROOT / "scripts" / "install.sh").read_text()
+    uninstall = (ROOT / "scripts" / "uninstall.sh").read_text()
+    for name in (f"{APP_ID}.svg", f"{APP_ID}.png"):
+        assert name in install and name in uninstall

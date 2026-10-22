@@ -10,6 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
 APPS="$DATA/applications"
 ICONS="$DATA/icons/hicolor/scalable/apps"
+ICONS_PNG="$DATA/icons/hicolor/256x256/apps"
 
 missing=0
 need() {
@@ -28,6 +29,7 @@ uv tool install --editable --force --python 3.14 "$ROOT[interview,rendering]"
 BIN="$(uv tool dir --bin)"
 
 install -Dm644 "$ROOT/packaging/careertwin-interview.svg" "$ICONS/careertwin-interview.svg"
+install -Dm644 "$ROOT/packaging/careertwin-interview.png" "$ICONS_PNG/careertwin-interview.png"
 mkdir -p "$APPS"
 sed "s|@BIN@|$BIN|" "$ROOT/packaging/careertwin-interview.desktop" > "$APPS/careertwin-interview.desktop"
 chmod 644 "$APPS/careertwin-interview.desktop"
