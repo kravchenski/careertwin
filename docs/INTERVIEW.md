@@ -24,13 +24,15 @@ decide what to say.
 ## Run it
 
 ```bash
-uv sync --extra interview          # PySide6 and faster-whisper
+./scripts/install.sh               # once: commands in ~/.local/bin and a launcher entry
 switchyard                         # the language model gateway
-uv run careertwin-interview
+careertwin-interview               # or open "CareerTwin Interview" from your launcher
 ```
 
-The commands live in the project's virtualenv, not on your `PATH`: run them with `uv run`, or
-`source .venv/bin/activate` (`activate.fish` in fish) first.
+The install is editable (it runs this checkout; re-run the script when dependencies change) and
+`./scripts/uninstall.sh` removes it. Without installing, use `uv sync --extra interview` and
+`uv run careertwin-interview`; the commands then live in the project's virtualenv, not on your
+`PATH` (`source .venv/bin/activate`, or `activate.fish` in fish).
 
 **Everything is set up in the window.** Open ☰ → *Settings…* (or click the dim *Context* line
 at the bottom). Changes apply at once and are saved, so the next start is already configured.

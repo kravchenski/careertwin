@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CareerTwin Interview
+GenericName=Interview assistant
+Comment=Live answers for online interviews from your own CV and ABOUT
+Exec=@BIN@/careertwin-interview
+Icon=careertwin-interview
+Terminal=false
+Categories=Utility;
+StartupWMClass=careertwin-interview
+Keywords=interview;cv;resume;career;

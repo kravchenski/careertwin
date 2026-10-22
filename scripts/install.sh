@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Install CareerTwin for the current user: the careertwin, careertwin-mcp and careertwin-interview
+# commands plus an app-launcher entry with an icon. Works on CachyOS and any Arch-based system.
+#
+# The install is editable: the commands run the code of THIS checkout, so a `git pull` or a branch
+# switch takes effect at once. Re-run the script after dependencies change. Undo with uninstall.sh.
+set -Eeuo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+APPS="$DATA/applications"
+ICONS="$DATA/icons/hicolor/scalable/apps"
+
+missing=0
+need() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "missing: $1 -> $2" >&2
+    missing=1
+  fi
+}
+need uv "sudo pacman -S uv  (or https://docs.astral.sh/uv/)"
+need parec "sudo pacman -S libpulse pipewire-pulse   (captures the call audio)"
+need pactl "sudo pacman -S libpulse"
+[[ "$missing" == 0 ]] || exit 1
+
+echo "Installing the commands with uv (editable, Python 3.14, interview + rendering extras)..."
+uv tool install --editable --force --python 3.14 "$ROOT[interview,rendering]"
+BIN="$(uv tool dir --bin)"
+
+install -Dm644 "$ROOT/packaging/careertwin-interview.svg" "$ICONS/careertwin-interview.svg"
+mkdir -p "$APPS"
+sed "s|@BIN@|$BIN|" "$ROOT/packaging/careertwin-interview.desktop" > "$APPS/careertwin-interview.desktop"
+chmod 644 "$APPS/careertwin-interview.desktop"
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -t "$DATA/icons/hicolor" 2>/dev/null || true
+
+echo
+echo "Installed:"
+echo "  $BIN/careertwin-interview   (also careertwin, careertwin-mcp)"
+echo "  $APPS/careertwin-interview.desktop"
+case ":$PATH:" in
+  *":$BIN:"*) ;;
+  *) echo "note: $BIN is not on your PATH; add it (fish: fish_add_path $BIN)" ;;
+esac
+command -v grim >/dev/null 2>&1 || command -v spectacle >/dev/null 2>&1 \
+  || echo "note: the Screenshot button needs grim: sudo pacman -S grim"
+echo
+echo "Run: careertwin-interview            (or open 'CareerTwin Interview' from your launcher)"
+echo "Check the setup: careertwin-interview --doctor"
