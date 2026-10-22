@@ -18,10 +18,10 @@ SAMPLES = {
     "en": (
         "Tell me about a time you fixed a production problem.",
         "POINTS:\n"
-        "- **Situation:** order API latency doubled after a release\n"
-        "- Traced it to a query with **no index** on customer id\n"
-        "- Added the **index** and a latency alert\n"
-        "- **Result:** back to normal within the hour\n"
+        "- After a release our order API's **p95 latency doubled**.\n"
+        "- I traced it to a query on customer id with **no index**.\n"
+        "- I added the **index** and a latency alert.\n"
+        "- It was **back to normal within the hour**.\n"
         "ANSWER:\n"
         "After a release our order API got twice as slow. I traced it to a query without an "
         "index, added one, and we were back to normal within the hour.",
@@ -29,10 +29,10 @@ SAMPLES = {
     "ru": (
         "Расскажите о случае, когда вы чинили проблему в продакшене.",
         "POINTS:\n"
-        "- **Ситуация:** после релиза задержка order API выросла вдвое\n"
-        "- Нашёл запрос **без индекса** по customer id\n"
-        "- Добавил **индекс** и алерт на задержку\n"
-        "- **Итог:** всё вернулось в норму за час\n"
+        "- После релиза **задержка** нашего order API выросла вдвое.\n"
+        "- Я нашёл запрос по customer id **без индекса**.\n"
+        "- Добавил **индекс** и алерт на задержку.\n"
+        "- Через час всё было **в норме**.\n"
         "ANSWER:\n"
         "После релиза наш order API замедлился вдвое. Я нашёл запрос без индекса, добавил его, "
         "и через час всё работало как раньше.",
@@ -49,7 +49,6 @@ def main(target: str, language: str = "en") -> None:
         on_hint=lambda: None,
         on_pause=lambda _: None,
         on_screenshot=lambda: None,
-        on_add_document=lambda _: [],
         sources=[
             ("about", "ABOUT.md · 20.6k"),
             ("cv", "Maksim_Krauchyk_CV_Python_EN.pdf · 5.2k"),
