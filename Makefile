@@ -1,4 +1,4 @@
-.PHONY: dev api mcp agent interview install uninstall test lint lint-fix docker clean
+.PHONY: dev api mcp agent interview install uninstall windows test lint lint-fix docker clean
 
 dev: api
 
@@ -19,6 +19,9 @@ install:
 
 uninstall:
 	./scripts/uninstall.sh
+
+windows:
+	./scripts/build_windows.sh
 
 test:
 	uv run pytest tests/ -v --tb=short -m "not integration"
