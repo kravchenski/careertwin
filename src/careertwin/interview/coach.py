@@ -26,6 +26,7 @@ from careertwin.interview.prompts import (
     screenshot_prompt,
     user_prompt,
 )
+from careertwin.interview.providers import base_url, provider_for
 from careertwin.interview.questions import classify
 from careertwin.llm import call_ai
 
@@ -35,7 +36,25 @@ def model_name() -> str:
 
 
 def gateway_url() -> str:
-    return os.getenv("SWITCHYARD_URL", "http://127.0.0.1:3260").rstrip("/")
+    return base_url(os.getenv("SWITCHYARD_URL", "http://127.0.0.1:3260"))
+
+
+def unreachable(base: str, exc: Exception) -> str:
+    return (
+        f"No AI gateway answers at {base} ({type(exc).__name__}). "
+        "Pick a provider in Settings → AI model, or start Switchyard."
+    )
+
+
+def failed(base: str, model: str, status: int, text: str) -> str:
+    """What a provider's error means for the person at the window."""
+    provider = provider_for(base)
+    message = f"{provider.label if provider else 'The AI gateway'} returned {status}: {text[:200]}"
+    if status in (400, 404) and model == "auto" and not (provider and provider.id == "switchyard"):
+        message += " (choose a model in Settings → AI model: Load models)"
+    if status in (401, 403):
+        message += " (check the API key in Settings → AI model)"
+    return message
 
 
 class CoachError(RuntimeError):
@@ -119,7 +138,7 @@ class StreamingCoach:
         headers = {}
         if key := self.api_key or os.getenv("SWITCHYARD_API_KEY"):
             headers["Authorization"] = f"Bearer {key}"
-        base = (self.url or gateway_url()).rstrip("/")
+        base = base_url(self.url or gateway_url())
         body = {
             "model": self.model or model_name(),
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
@@ -130,15 +149,15 @@ class StreamingCoach:
             with httpx.Client(timeout=httpx.Timeout(180, connect=5), transport=self.transport) as client:
                 response = client.post(f"{base}/v1/chat/completions", json=body, headers=headers)
         except httpx.HTTPError as exc:
-            raise CoachError(f"Switchyard is not reachable at {base} ({type(exc).__name__})") from exc
+            raise CoachError(unreachable(base, exc)) from exc
         if response.status_code >= 400:
-            raise CoachError(f"Switchyard returned {response.status_code}: {response.text[:200]}")
+            raise CoachError(failed(base, body["model"], response.status_code, response.text))
         try:
             text = response.json()["choices"][0]["message"]["content"] or ""
         except (ValueError, KeyError, IndexError, TypeError) as exc:
-            raise CoachError("Switchyard returned an unreadable answer") from exc
+            raise CoachError("The AI gateway returned an unreadable answer") from exc
         if not text.strip():
-            raise CoachError("The model returned no text. Is Switchyard running with a provider?")
+            raise CoachError("The model returned no text. Check the model in Settings → AI model.")
         return text
 
     def stream(
@@ -151,20 +170,32 @@ class StreamingCoach:
     ) -> Iterator[str]:
         """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored.
 
-        If the chosen model fails before saying anything (rate limit, outage), the request is
-        repeated once on automatic routing, so one bad provider does not cost a live answer."""
+        If the chosen model fails before saying anything (rate limit, outage) on a Switchyard
+        gateway, the request is repeated once on automatic routing, so one bad provider does not
+        cost a live answer. Other providers have no "auto", so their error is shown as it is."""
         model = self.model or model_name()
         started = False
         try:
             for chunk in self._stream_model(model, question, history, cancel, language, image):
                 started = True
                 yield chunk
-        except CoachError:
-            if started or cancel.is_set() or model == self.FALLBACK_MODEL:
+        except CoachError as first:
+            known = provider_for(base_url(self.url or gateway_url()))
+            if (
+                started or cancel.is_set() or model == self.FALLBACK_MODEL
+                or (known and known.id != "switchyard")  # only a gateway routes "auto"
+            ):
                 raise
-            yield from self._stream_model(
-                self.FALLBACK_MODEL, question, history, cancel, language, image
-            )
+            try:
+                for chunk in self._stream_model(
+                    self.FALLBACK_MODEL, question, history, cancel, language, image
+                ):
+                    started = True
+                    yield chunk
+            except CoachError:
+                if started:
+                    raise
+                raise first from None  # the chosen model's error says more than "auto"'s
 
     FALLBACK_MODEL = "auto"
 
@@ -200,7 +231,7 @@ class StreamingCoach:
         headers = {"Accept": "text/event-stream"}
         if key := self.api_key or os.getenv("SWITCHYARD_API_KEY"):
             headers["Authorization"] = f"Bearer {key}"
-        base = (self.url or gateway_url()).rstrip("/")
+        base = base_url(self.url or gateway_url())
         try:
             with httpx.Client(timeout=httpx.Timeout(120, connect=5), transport=self.transport) as client:
                 with client.stream(
@@ -208,14 +239,10 @@ class StreamingCoach:
                 ) as response:
                     if response.status_code >= 400:
                         response.read()
-                        raise CoachError(
-                            f"Switchyard returned {response.status_code}: {response.text[:200]}"
-                        )
+                        raise CoachError(failed(base, model, response.status_code, response.text))
                     yield from _chunks(response, cancel)
         except httpx.HTTPError as exc:
-            raise CoachError(
-                f"Switchyard is not reachable at {base} ({type(exc).__name__})"
-            ) from exc
+            raise CoachError(unreachable(base, exc)) from exc
 
 
 def _chunks(response: httpx.Response, cancel: threading.Event) -> Iterator[str]:

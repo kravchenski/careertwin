@@ -21,6 +21,7 @@ from careertwin.interview.brief import BriefError, InterviewBrief
 from careertwin.interview.coach import StreamingCoach, gateway_url, model_name
 from careertwin.interview.languages import normalize
 from careertwin.interview.library import ContextController, Library
+from careertwin.interview.providers import base_url
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.screenshot import available_tools
 from careertwin.interview.session import InterviewSession
@@ -122,12 +123,12 @@ def doctor(args: argparse.Namespace) -> int:
             report(True, f"call audio opens; peak level {level} (0 when nothing plays: play something and check again)")
     except AudioError as exc:
         report(False, str(exc))
-    base = (settings.gateway_url or gateway_url()).rstrip("/")
+    base = base_url(settings.gateway_url or gateway_url())
     try:
         response = httpx.get(f"{base}/v1/models", timeout=5)
-        report(response.status_code < 400, f"Switchyard {base} answers (model {settings.model or model_name()})")
+        report(response.status_code < 400, f"AI gateway {base} answers (model {settings.model or model_name()})")
     except httpx.HTTPError:
-        report(False, f"Switchyard not reachable at {base}")
+        report(False, f"no AI gateway answers at {base}: pick a provider in Settings → AI model")
     try:
         brief = InterviewBrief.load(
             username=args.username, job=args.job, notes=args.notes, resumes=args.resume, allow_empty=True
