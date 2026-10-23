@@ -14,6 +14,7 @@ from careertwin.interview.audio import (
     audio_state,
     default_sources,
     list_sources,
+    listen_briefly,
     next_monitor,
 )
 from careertwin.interview.brief import BriefError, InterviewBrief
@@ -105,21 +106,22 @@ def doctor(args: argparse.Namespace) -> int:
             report(False, f"speech model did not load: {exc}")
     except ImportError:
         report(False, "faster-whisper missing: uv sync --extra interview")
-    if sys.platform == "win32":
-        print("note  listening to the call is not available on Windows yet: type or paste questions")
-    else:
+    if sys.platform != "win32":
         for binary in ("parec", "pactl"):
             report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
-        try:
-            sources = default_sources()
-            if settings.call_source:
-                call = f"{settings.call_source} (pinned)"
-            else:
-                default, playing = audio_state()
-                call = f"automatic, now {next_monitor(None, default, playing, None)}"
-            report(True, f"call audio: {call}; microphone: {sources.microphone}")
-        except AudioError as exc:
-            report(False, str(exc))
+    try:
+        sources = default_sources()
+        if settings.call_source:
+            call = f"{settings.call_source} (pinned)"
+        else:
+            default, playing = audio_state()
+            call = f"automatic, now {next_monitor(None, default, playing, None)}"
+        report(True, f"call audio: {call}; microphone: {sources.microphone}")
+        if sys.platform == "win32":
+            level = listen_briefly(settings.call_source)
+            report(True, f"call audio opens; peak level {level} (0 when nothing plays: play something and check again)")
+    except AudioError as exc:
+        report(False, str(exc))
     base = (settings.gateway_url or gateway_url()).rstrip("/")
     try:
         response = httpx.get(f"{base}/v1/models", timeout=5)

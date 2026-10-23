@@ -278,6 +278,7 @@ interview = [
     { name = "faster-whisper" },
     { name = "numpy" },
     { name = "pyside6-essentials" },
+    { name = "soundcard", marker = "sys_platform == 'win32'" },
 ]
 rendering = [
     { name = "weasyprint" },
@@ -313,6 +314,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "qdrant-client", specifier = ">=1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
+    { name = "soundcard", marker = "sys_platform == 'win32' and extra == 'interview'", specifier = ">=0.4.4" },
     { name = "uvicorn", specifier = ">=0.30" },
     { name = "weasyprint", marker = "extra == 'rendering'", specifier = ">=60.0" },
     { name = "websockets", specifier = ">=12.0" },
@@ -2496,6 +2498,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/44/7b/af302bebf22c749c56c9c3e8ae13190b5b5db37a33d9068652e8f73b7089/snowballstemmer-2.2.0.tar.gz", hash = "sha256:09b16deb8547d3412ad7b590689584cd0fe25ec8db3be37788be3810cbf19cb1", size = 86699, upload-time = "2021-11-16T18:38:38.009Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/dc/c02e01294f7265e63a7315fe086dd1df7dacb9f840a804da846b96d01b96/snowballstemmer-2.2.0-py2.py3-none-any.whl", hash = "sha256:c8e1716e83cc398ae16824e5572ae04e0d9fc2c6b985fb0f900f5f0c96ecba1a", size = 93002, upload-time = "2021-11-16T18:38:34.792Z" },
+]
+
+[[package]]
+name = "soundcard"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f5/ef/85322a77399b19b23bd741ad57d86677687cdf9c9d9bc01997bc6bf9d30d/soundcard-0.4.6.tar.gz", hash = "sha256:9b46d64a26f97cd7d88bcfc385c97c069f97c5ec3404e4e7c23771598a8cf47b", size = 40830, upload-time = "2026-04-12T13:46:24.743Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/be/eb381e700a61b4ce899e14850d7ae78f9600fd2f8b58b4c52b8714e81917/soundcard-0.4.6-py3-none-any.whl", hash = "sha256:ab44b8c1033ac6ec49c5d618ce096dab9b60c7d7a427c92bef15856e5ebb3e09", size = 43939, upload-time = "2026-04-12T13:46:23.224Z" },
 ]
 
 [[package]]

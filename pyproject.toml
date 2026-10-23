@@ -42,6 +42,7 @@ interview = [
     "faster-whisper>=1.1",
     "numpy>=1.26",
     "pyside6-essentials>=6.8",
+    "soundcard>=0.4.4; sys_platform == 'win32'",
 ]
 gpu = [
     "nvidia-cublas-cu12>=12.4; sys_platform == 'linux'",

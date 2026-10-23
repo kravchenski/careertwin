@@ -15,9 +15,9 @@ from careertwin.interview import screenshot
 from careertwin.interview.audio import (
     AudioError,
     FollowingSource,
-    ParecSource,
     default_sources,
     list_sources,
+    open_source,
 )
 from careertwin.interview.coach import StreamingCoach, gateway_url
 from careertwin.interview.languages import normalize
@@ -31,7 +31,7 @@ from careertwin.interview.prepare import (
     parse_questions,
     questions_prompt,
 )
-from careertwin.interview.session import INTERVIEWER, YOU, InterviewSession
+from careertwin.interview.session import INTERVIEWER, YOU, FrameSource, InterviewSession
 from careertwin.interview.settings import InterviewSettings
 from careertwin.interview.stt import WhisperTranscriber
 
@@ -100,18 +100,18 @@ class Runtime:
 
     # ---- audio and speech --------------------------------------------------
 
-    def build_sources(self) -> dict[str, FollowingSource | ParecSource]:
+    def build_sources(self) -> dict[str, FrameSource]:
         """The audio sources the settings ask for: call audio and optionally the microphone."""
         if not self.settings.listen:
             return {}
-        sources: dict[str, FollowingSource | ParecSource] = {}
+        sources: dict[str, FrameSource] = {}
         if self.settings.call_source:
-            sources[INTERVIEWER] = ParecSource(self.settings.call_source)
+            sources[INTERVIEWER] = open_source(self.settings.call_source)
             self._source_changed(self.settings.call_source)
         else:
             sources[INTERVIEWER] = FollowingSource(on_change=self._source_changed)
         if self.settings.use_mic:
-            sources[YOU] = ParecSource(self.settings.mic_source or default_sources().microphone)
+            sources[YOU] = open_source(self.settings.mic_source or default_sources().microphone, microphone=True)
         return sources
 
     def _source_changed(self, name: str) -> None:
@@ -126,7 +126,7 @@ class Runtime:
             self.reload_speech()
         self.session.set_sources(self._safe_sources())
 
-    def _safe_sources(self) -> dict[str, FollowingSource | ParecSource]:
+    def _safe_sources(self) -> dict[str, FrameSource]:
         try:
             return self.build_sources()
         except AudioError as exc:
