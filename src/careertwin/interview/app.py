@@ -9,6 +9,7 @@ import sys
 
 import httpx
 
+from careertwin.interview import capture_exclude
 from careertwin.interview.audio import (
     AudioError,
     audio_state,
@@ -123,6 +124,8 @@ def doctor(args: argparse.Namespace) -> int:
     elif sys.platform != "win32":
         for binary in ("parec", "pactl"):
             report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
+    if capture_exclude.is_supported():
+        report(True, "the window keeps itself out of screen captures (WDA_EXCLUDEFROMCAPTURE)")
     try:
         sources = default_sources()
         if settings.call_source:

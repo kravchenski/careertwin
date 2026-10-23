@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from careertwin.interview import i18n, runlog, screenshot
+from careertwin.interview import capture_exclude, i18n, runlog, screenshot
 from careertwin.interview.codeview import highlight
 from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
@@ -368,6 +368,9 @@ class OverlayWindow(QWidget):
         self._shot_started = 0.0
         self.error_text = ""
         self.notice_text = ""
+        self._affinity_timer = QTimer(self)
+        self._affinity_timer.setInterval(2000)
+        self._affinity_timer.timeout.connect(self._reassert_capture_affinity)
         session = runtime.session if runtime else None
         self._on_ask = on_ask or (session.ask if session else lambda _text: None)
         self._on_hint = on_hint or (session.hint_now if session else lambda: None)
@@ -697,6 +700,21 @@ class OverlayWindow(QWidget):
         self.setWindowFlags(flags)
         if visible:
             self.show()
+
+    def showEvent(self, event) -> None:
+        """Ask Windows to keep the window out of captures whenever it appears."""
+        super().showEvent(event)
+        self._reassert_capture_affinity()
+        if capture_exclude.is_supported():
+            self._affinity_timer.start()
+
+    def _reassert_capture_affinity(self) -> None:
+        if capture_exclude.is_supported():
+            capture_exclude.exclude(int(self.winId()))
+
+    def closeEvent(self, event) -> None:
+        self._affinity_timer.stop()
+        super().closeEvent(event)
 
     def _state_text(self, kind: str) -> str:
         return self.tr_({"listening": "listening", "thinking": "thinking", "loading": "loading",
