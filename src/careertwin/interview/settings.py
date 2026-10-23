@@ -14,6 +14,7 @@ WHISPER_MODELS = ("tiny", "base", "small", "medium", "large-v3-turbo")
 ANSWER_STYLES = ("concise", "standard", "detailed")
 ANSWER_LAYOUTS = ("main", "lines")
 DEVICES = ("auto", "cpu", "cuda")
+STT_ENGINES = ("whisper", "deepgram")
 
 
 def interview_dir() -> Path:
@@ -30,8 +31,11 @@ class InterviewSettings:
     call_source: str = ""
     use_mic: bool = False
     mic_source: str = ""
+    stt_engine: str = "whisper"
     whisper_model: str = "small"
     whisper_device: str = "auto"
+    deepgram_key: str = ""
+    deepgram_model: str = "nova-3"
     gateway_url: str = ""
     gateway_key: str = ""
     model: str = ""
@@ -112,6 +116,7 @@ def _coerce(name: str, value: Any, current: Any) -> Any:
         "answer_style": ANSWER_STYLES,
         "answer_layout": ANSWER_LAYOUTS,
         "whisper_device": DEVICES,
+        "stt_engine": STT_ENGINES,
     }.get(name)
     if choices and value not in choices:
         raise ValueError(f"{name} must be one of {', '.join(choices)}")

@@ -35,12 +35,20 @@ from careertwin.interview.prepare import (
 from careertwin.interview.providers import base_url
 from careertwin.interview.session import INTERVIEWER, YOU, FrameSource, InterviewSession
 from careertwin.interview.settings import InterviewSettings
-from careertwin.interview.stt import WhisperTranscriber
+from careertwin.interview.stt import Transcriber, WhisperTranscriber
+from careertwin.interview.stt_deepgram import DeepgramTranscriber
 
 AUDIO_KEYS = {"listen", "call_source", "use_mic", "mic_source"}
-SPEECH_KEYS = {"whisper_model", "whisper_device"}
+SPEECH_KEYS = {"stt_engine", "whisper_model", "whisper_device", "deepgram_key", "deepgram_model"}
 COACH_KEYS = {"gateway_url", "gateway_key", "model", "answer_style", "answer_layout"}
 WINDOW_KEYS = {"pinned", "frameless", "opacity", "font_scale", "show_full_answer", "ui_language"}
+
+
+def make_transcriber(settings: InterviewSettings, language: str | None) -> Transcriber:
+    """The speech recognition the settings ask for: Deepgram in the cloud, or Whisper on this computer."""
+    if settings.stt_engine == "deepgram":
+        return DeepgramTranscriber(settings.deepgram_key, settings.deepgram_model, language=language)
+    return WhisperTranscriber(settings.whisper_model, language=language, device=settings.whisper_device)
 
 
 class Runtime:
@@ -138,13 +146,7 @@ class Runtime:
     def reload_speech(self) -> None:
         if not self.settings.listen and self.session.transcriber is None:
             return
-        self.session.set_transcriber(
-            WhisperTranscriber(
-                self.settings.whisper_model,
-                language=self._language(),
-                device=self.settings.whisper_device,
-            )
-        )
+        self.session.set_transcriber(make_transcriber(self.settings, self._language()))
 
     @classmethod
     def audio_choices(cls) -> tuple[list[str], list[str]]:

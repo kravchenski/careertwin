@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -31,6 +32,7 @@ LEVEL_EVERY = 3
 PARTIAL_EVERY = 75  # frames of 20 ms: a live caption about every 1.5 s of speech
 QUESTION_MARK_WAIT = 0.1  # seconds to wait after a sentence that ends with a question mark
 REUSE_SAMPLES = 16_000 * 6 // 10  # a caption that covers all but 0.6 s of the speech is final enough
+REPEAT_ERROR_AFTER = 10.0  # seconds before the same transcription failure is shown again
 
 
 class FrameSource(Protocol):
@@ -258,6 +260,7 @@ class InterviewSession:
 
     def _transcribe_loop(self) -> None:
         last_partial: tuple[str, int, str] | None = None
+        last_failure = ("", 0.0)
         while not self.stopping.is_set():
             item = self._utterances.get()
             if item is None:
@@ -275,7 +278,10 @@ class InterviewSession:
             try:
                 text = reuse or transcriber.transcribe(pcm, self.brief.vocabulary())
             except Exception as exc:
-                self.cb.on_error(f"Transcription failed: {exc}")
+                message, now = f"Transcription failed: {exc}", time.monotonic()
+                if message != last_failure[0] or now - last_failure[1] > REPEAT_ERROR_AFTER:
+                    self.cb.on_error(message)  # a wrong key would otherwise repeat with every caption
+                last_failure = (message, now)
                 continue
             if partial:
                 if text and self._utterances.empty():
