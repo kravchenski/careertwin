@@ -105,18 +105,21 @@ def doctor(args: argparse.Namespace) -> int:
             report(False, f"speech model did not load: {exc}")
     except ImportError:
         report(False, "faster-whisper missing: uv sync --extra interview")
-    for binary in ("parec", "pactl"):
-        report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
-    try:
-        sources = default_sources()
-        if settings.call_source:
-            call = f"{settings.call_source} (pinned)"
-        else:
-            default, playing = audio_state()
-            call = f"automatic, now {next_monitor(None, default, playing, None)}"
-        report(True, f"call audio: {call}; microphone: {sources.microphone}")
-    except AudioError as exc:
-        report(False, str(exc))
+    if sys.platform == "win32":
+        print("note  listening to the call is not available on Windows yet: type or paste questions")
+    else:
+        for binary in ("parec", "pactl"):
+            report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
+        try:
+            sources = default_sources()
+            if settings.call_source:
+                call = f"{settings.call_source} (pinned)"
+            else:
+                default, playing = audio_state()
+                call = f"automatic, now {next_monitor(None, default, playing, None)}"
+            report(True, f"call audio: {call}; microphone: {sources.microphone}")
+        except AudioError as exc:
+            report(False, str(exc))
     base = (settings.gateway_url or gateway_url()).rstrip("/")
     try:
         response = httpx.get(f"{base}/v1/models", timeout=5)
