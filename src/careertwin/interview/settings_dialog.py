@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import itertools
+import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -39,6 +40,8 @@ from careertwin.interview import languages
 from careertwin.interview.providers import OTHER, PROVIDERS, provider_for
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.settings import ANSWER_STYLES, DEVICES, WHISPER_MODELS
+from careertwin.interview.stt_deepgram import MODELS as DEEPGRAM_MODELS
+from careertwin.interview.stt_deepgram import check_key
 
 STRINGS = {
     "en": {
@@ -68,6 +71,9 @@ STRINGS = {
         "speech_note": "Bigger models are more accurate and slower. A new model downloads on first use.",
         "gateway_url": "Gateway URL", "gateway_key": "API key", "model_id": "Model",
         "provider": "Provider", "provider_other": "Other (own address)",
+        "engine": "Speech recognition", "engine_whisper": "Whisper on this computer", "engine_deepgram": "Deepgram (cloud)",
+        "deepgram_key": "Deepgram API key", "deepgram_model": "Deepgram model", "deepgram_test": "Test the key", "deepgram_ok": "Deepgram accepts the key",
+        "deepgram_note": "Deepgram hears the call (and your microphone when it is on): the audio leaves this computer. Live captions send each growing sentence again, so billed audio is about 3–4 times the speech. DEEPGRAM_API_KEY in .env works too.",
         "cloud_note": "{name} gets your CV, your ABOUT text and each question with every request. Enter its API key, load the list of models and choose one.",
         "load_models": "Load models", "test": "Test connection", "models_loaded": "{n} models available",
         "connected": "Connected: {n} models", "model_note": "Leave the URL, key and model empty to use .env (SWITCHYARD_*) and auto routing.",
@@ -120,6 +126,9 @@ STRINGS = {
         "speech_note": "Большие модели точнее и медленнее. Новая модель скачивается при первом использовании.",
         "gateway_url": "Адрес шлюза", "gateway_key": "API-ключ", "model_id": "Модель",
         "provider": "Провайдер", "provider_other": "Другой (свой адрес)",
+        "engine": "Распознавание речи", "engine_whisper": "Whisper на этом компьютере", "engine_deepgram": "Deepgram (облако)",
+        "deepgram_key": "API-ключ Deepgram", "deepgram_model": "Модель Deepgram", "deepgram_test": "Проверить ключ", "deepgram_ok": "Deepgram принимает ключ",
+        "deepgram_note": "Deepgram слышит звонок (и ваш микрофон, если он включён): звук уходит с этого компьютера. Живые субтитры отправляют растущую фразу заново, поэтому оплачиваемое аудио примерно в 3–4 раза длиннее речи. DEEPGRAM_API_KEY в .env тоже работает.",
         "cloud_note": "{name} получает ваше резюме, текст ABOUT и каждый вопрос в каждом запросе. Введите его API-ключ, загрузите список моделей и выберите одну.",
         "load_models": "Загрузить модели", "test": "Проверить связь", "models_loaded": "Доступно моделей: {n}",
         "connected": "Связь есть: моделей {n}", "model_note": "Оставьте адрес, ключ и модель пустыми, чтобы брать .env (SWITCHYARD_*) и автоподбор.",
@@ -172,6 +181,9 @@ STRINGS = {
         "speech_note": "Większe modele są dokładniejsze i wolniejsze. Nowy model pobiera się przy pierwszym użyciu.",
         "gateway_url": "Adres bramki", "gateway_key": "Klucz API", "model_id": "Model",
         "provider": "Dostawca", "provider_other": "Inny (własny adres)",
+        "engine": "Rozpoznawanie mowy", "engine_whisper": "Whisper na tym komputerze", "engine_deepgram": "Deepgram (chmura)",
+        "deepgram_key": "Klucz API Deepgram", "deepgram_model": "Model Deepgram", "deepgram_test": "Sprawdź klucz", "deepgram_ok": "Deepgram przyjmuje klucz",
+        "deepgram_note": "Deepgram słyszy rozmowę (i Twój mikrofon, gdy jest włączony): dźwięk opuszcza ten komputer. Napisy na żywo wysyłają rosnące zdanie ponownie, więc płatne audio jest około 3–4 razy dłuższe niż mowa. DEEPGRAM_API_KEY w .env też działa.",
         "cloud_note": "{name} dostaje Twoje CV, tekst ABOUT i każde pytanie przy każdym zapytaniu. Wpisz jego klucz API, wczytaj listę modeli i wybierz jeden.",
         "load_models": "Wczytaj modele", "test": "Sprawdź połączenie", "models_loaded": "Dostępne modele: {n}",
         "connected": "Połączono: modele {n}", "model_note": "Zostaw adres, klucz i model puste, aby użyć .env (SWITCHYARD_*) i automatycznego wyboru.",
@@ -731,8 +743,18 @@ class SettingsDialog(QDialog):
         self.refresh_sources = QPushButton()
         self.use_mic = QCheckBox()
         self.mic_source = QComboBox()
+        self.stt_engine = QComboBox()
+        self.stt_engine.addItem("", "whisper")
+        self.stt_engine.addItem("", "deepgram")
         self.whisper_model = QComboBox()
         self.whisper_device = QComboBox()
+        self.deepgram_key = QLineEdit()
+        self.deepgram_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.deepgram_model = QComboBox()
+        self.deepgram_model.setEditable(True)
+        self.deepgram_model.addItems(DEEPGRAM_MODELS)
+        self.deepgram_test = QPushButton()
+        self.engine_label, self.dg_key_label, self.dg_model_label = QLabel(), QLabel(), QLabel()
         self.audio_labels = [QLabel() for _ in range(4)]
         source_row = QHBoxLayout()
         source_row.addWidget(self.call_source, 1)
@@ -743,8 +765,14 @@ class SettingsDialog(QDialog):
         form.addRow("", self.audio_now)
         form.addRow(self.use_mic)
         form.addRow(self.audio_labels[1], self.mic_source)
+        form.addRow(self.engine_label, self.stt_engine)
         form.addRow(self.audio_labels[2], self.whisper_model)
         form.addRow(self.audio_labels[3], self.whisper_device)
+        key_row = QHBoxLayout()
+        key_row.addWidget(self.deepgram_key, 1)
+        key_row.addWidget(self.deepgram_test)
+        form.addRow(self.dg_key_label, key_row)
+        form.addRow(self.dg_model_label, self.deepgram_model)
         self.speech_note = self._hint()
         outer.addWidget(self.speech_note)
         outer.addStretch(1)
@@ -758,7 +786,36 @@ class SettingsDialog(QDialog):
         self._bind_combo(self.mic_source, "mic_source")
         self._bind_combo(self.whisper_model, "whisper_model")
         self._bind_combo(self.whisper_device, "whisper_device")
+        self.stt_engine.activated.connect(lambda _i: self._set_engine())
+        self.deepgram_key.editingFinished.connect(lambda: self._set("deepgram_key", self.deepgram_key.text()))
+        self.deepgram_model.lineEdit().editingFinished.connect(self._set_deepgram_model)
+        self.deepgram_model.activated.connect(lambda _i: self._set_deepgram_model())
+        self.deepgram_test.clicked.connect(self._test_deepgram)
         self.refresh_sources.clicked.connect(self.refresh_audio)
+
+    def _set_engine(self) -> None:
+        self._set("stt_engine", self.stt_engine.currentData())
+        self._sync_engine()
+
+    def _sync_engine(self) -> None:
+        """Only the controls of the chosen engine are active, and the note describes its trade-off."""
+        deepgram = self.rt.settings.stt_engine == "deepgram"
+        for widget in (self.whisper_model, self.whisper_device, self.audio_labels[2], self.audio_labels[3]):
+            widget.setEnabled(not deepgram)
+        for widget in (self.deepgram_key, self.deepgram_model, self.deepgram_test, self.dg_key_label, self.dg_model_label):
+            widget.setEnabled(deepgram)
+        self.speech_note.setText(self.t("deepgram_note" if deepgram else "speech_note"))
+
+    def _set_deepgram_model(self) -> None:
+        self._set("deepgram_model", self.deepgram_model.currentText().strip() or DEEPGRAM_MODELS[0])
+
+    def _test_deepgram(self) -> None:
+        key = self.deepgram_key.text().strip() or self.rt.settings.deepgram_key or os.getenv("DEEPGRAM_API_KEY", "")
+        self.say("…")
+        self.run(
+            lambda: check_key(key),
+            lambda _result, error: self.say(error, error=True) if error else self.say(self.t("deepgram_ok")),
+        )
 
     def refresh_audio(self) -> None:
         self.audio_now.setText(
@@ -1010,12 +1067,19 @@ class SettingsDialog(QDialog):
             (self.answer_style, settings.answer_style), (self.answer_layout, settings.answer_layout),
             (self.whisper_model, settings.whisper_model),
             (self.whisper_device, settings.whisper_device),
+            (self.stt_engine, settings.stt_engine),
         ):
             with QSignalBlocker(combo):
                 self._select(combo, value)
-        for field, value in ((self.gateway_url, settings.gateway_url), (self.gateway_key, settings.gateway_key)):
+        for field, value in (
+            (self.gateway_url, settings.gateway_url), (self.gateway_key, settings.gateway_key),
+            (self.deepgram_key, settings.deepgram_key),
+        ):
             with QSignalBlocker(field):
                 field.setText(value)
+        with QSignalBlocker(self.deepgram_model):
+            self.deepgram_model.setCurrentText(settings.deepgram_model)
+        self._sync_engine()
         with QSignalBlocker(self.model_id):
             self.model_id.setCurrentText(settings.model or "auto")
         self._sync_provider()
@@ -1059,7 +1123,13 @@ class SettingsDialog(QDialog):
         self.refresh_sources.setText(self.t("refresh"))
         for label, key in zip(self.audio_labels, ("call_source", "mic_source", "whisper_model", "whisper_device")):
             label.setText(self.t(key))
-        self.speech_note.setText(self.t("speech_note"))
+        self.engine_label.setText(self.t("engine"))
+        self.dg_key_label.setText(self.t("deepgram_key"))
+        self.dg_model_label.setText(self.t("deepgram_model"))
+        self.deepgram_test.setText(self.t("deepgram_test"))
+        self.stt_engine.setItemText(0, self.t("engine_whisper"))
+        self.stt_engine.setItemText(1, self.t("engine_deepgram"))
+        self._sync_engine()
         for label, key in zip(self.model_labels, ("gateway_url", "gateway_key", "model_id")):
             label.setText(self.t(key))
         self.load_models.setText(self.t("load_models"))

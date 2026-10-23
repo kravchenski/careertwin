@@ -21,6 +21,17 @@ side's consent. Check the rules for each interview and tell the interviewer when
 expected to. The tool never hides itself from screen sharing, and it only suggests: you
 decide what to say.
 
+## Speech recognition: Whisper or Deepgram
+
+By default speech is recognised by Whisper on your computer: nothing leaves it, but a computer without a graphics
+card needs a second or two per sentence. *Settings → Audio & speech → Speech recognition → Deepgram* sends each
+sentence of the call (and of your microphone, when it is on) to Deepgram instead, which is quick on any computer.
+That means the voices leave the computer, so check that this is acceptable for the interview. The live captions send
+the growing sentence again every 1.5 s, so the audio Deepgram bills is about three to four times the speech. A wrong
+key or an empty account is reported once, in the window, not with every caption. The request and the error handling
+are tested against a mock and the error replies were checked against the real service with a dummy key; a real key
+has not been tried.
+
 ## Run it
 
 ```bash
@@ -78,7 +89,7 @@ it reads.
 | **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
 | **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed), answer layout (main answer only, or lines plus the detailed answer) and whether to show the detailed answer. |
-| **Audio & speech** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
+| **Audio & speech** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone, the speech engine and its settings. *Whisper* runs on this computer (model `tiny` to `large-v3-turbo`, device); *Deepgram* is cloud recognition with an API key (also read from `DEEPGRAM_API_KEY`), the model `nova-3` or `nova-2`, and *Test the key*. |
 | **AI model** | The *Provider* (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio, or your own address), its API key and the model; *Load models* lists what the provider offers and *Test connection* checks it. Choosing another provider clears the key and the model, so a key is never sent to the wrong server. Cloud providers receive your CV, ABOUT text and each question. Leave everything empty to use `.env` (`SWITCHYARD_*`) and auto routing on a local Switchyard. |
 | **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
 | **Window** | Keep on top, frameless or framed, opacity, text size, saving transcripts, and *Reset all settings*. |
