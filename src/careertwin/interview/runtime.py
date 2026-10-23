@@ -6,6 +6,7 @@ imports Qt, so the whole behaviour is testable without a display.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -142,6 +143,22 @@ class Runtime:
                 language=self._language(),
                 device=self.settings.whisper_device,
             )
+        )
+
+    @classmethod
+    def audio_choices(cls) -> tuple[list[str], list[str]]:
+        """(outputs whose sound can be heard, microphones): what the two pickers offer."""
+        if sys.platform == "win32":
+            try:
+                from careertwin.interview import audio_windows
+
+                return audio_windows.list_outputs(), audio_windows.list_microphones()
+            except AudioError:
+                return [], []
+        names = cls.audio_sources()
+        return (
+            sorted(name for name in names if name.endswith(".monitor")),
+            sorted(name for name in names if not name.endswith(".monitor")),
         )
 
     @staticmethod

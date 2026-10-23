@@ -168,3 +168,15 @@ def test_listening_briefly_reports_the_loudest_sample(monkeypatch):
     fake = Fake()
     monkeypatch.setattr(audio, "open_source", lambda name: fake)
     assert audio.listen_briefly("x", seconds=10) == 900 and fake.closed
+
+
+def test_the_pickers_offer_outputs_for_the_call_and_microphones_for_you(monkeypatch, sc):
+    from careertwin.interview.runtime import Runtime
+
+    monkeypatch.setattr("sys.platform", "win32")
+    assert Runtime.audio_choices() == (
+        ["Speakers (Realtek)", "Headset (Jabra)"], ["Microphone (Realtek)", "Headset (Jabra)"],
+    )
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(Runtime, "audio_sources", staticmethod(lambda: ["b.monitor", "usb", "a.monitor"]))
+    assert Runtime.audio_choices() == (["a.monitor", "b.monitor"], ["usb"])

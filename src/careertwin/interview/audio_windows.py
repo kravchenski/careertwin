@@ -71,13 +71,23 @@ def find_device(sc: ModuleType, name: str, *, loopback: bool):
     raise AudioError(f"No {'output' if loopback else 'microphone'} called {name!r}. Pick one in Settings → Audio.")
 
 
-def list_sources() -> list[str]:
-    """Names of the outputs (heard in loopback) and then the microphones."""
+def list_outputs() -> list[str]:
+    """Names of the outputs; each can be heard in loopback."""
     sc = _soundcard()
     with com_apartment():
-        names = [speaker.name for speaker in sc.all_speakers()]
-        names += [mic.name for mic in sc.all_microphones() if mic.name not in names]
-    return names
+        return [speaker.name for speaker in sc.all_speakers()]
+
+
+def list_microphones() -> list[str]:
+    sc = _soundcard()
+    with com_apartment():
+        return [mic.name for mic in sc.all_microphones()]
+
+
+def list_sources() -> list[str]:
+    """The outputs, then the microphones whose names are not already listed."""
+    names = list_outputs()
+    return names + [name for name in list_microphones() if name not in names]
 
 
 def default_sources() -> Sources:

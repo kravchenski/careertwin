@@ -757,9 +757,7 @@ class SettingsDialog(QDialog):
         self.audio_now.setText(
             self.t("listening_to", name=self.rt.current_source) if self.rt.current_source else ""
         )
-        sources = self.rt.audio_sources()
-        monitors = sorted(name for name in sources if name.endswith(".monitor"))
-        inputs = sorted(name for name in sources if not name.endswith(".monitor"))
+        monitors, inputs = self.rt.audio_choices()
         for combo, default, names, current in (
             (self.call_source, self.t("default_output"), monitors, self.rt.settings.call_source),
             (self.mic_source, self.t("default_mic"), inputs, self.rt.settings.mic_source),
