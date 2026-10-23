@@ -79,7 +79,7 @@ it reads.
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
 | **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed), answer layout (main answer only, or lines plus the detailed answer) and whether to show the detailed answer. |
 | **Audio & speech** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
-| **AI model** | Gateway URL, API key and model, *Load models* to pick from what your gateway offers, and *Test connection*. Leave them empty to use `.env` (`SWITCHYARD_*`) and auto routing. |
+| **AI model** | The *Provider* (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio, or your own address), its API key and the model; *Load models* lists what the provider offers and *Test connection* checks it. Choosing another provider clears the key and the model, so a key is never sent to the wrong server. Cloud providers receive your CV, ABOUT text and each question. Leave everything empty to use `.env` (`SWITCHYARD_*`) and auto routing on a local Switchyard. |
 | **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
 | **Window** | Keep on top, frameless or framed, opacity, text size, saving transcripts, and *Reset all settings*. |
 
