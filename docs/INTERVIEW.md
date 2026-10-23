@@ -38,10 +38,13 @@ The install is editable (it runs this checkout; re-run the script when dependenc
 `dist/windows/CareerTwin-Interview-windows-x64.zip`, on Linux without Wine: uv fetches the Windows
 wheels and the program runs on the python.org embeddable Python. Unzip it anywhere writable and start
 *Start CareerTwin Interview.bat*; your data lives in its `data` folder. In this version the window,
-settings, documents and typed questions work, but **listening to the call and the screenshot button do
-not** (call audio is captured through Pulse/PipeWire), so *Listen to the call* is off by default there.
-The build is checked under Wine only: the doctor runs and the window renders, but it has not been run
-on a real Windows machine.
+settings, documents, typed questions, listening and screenshots work. The call is heard by recording
+what the default output plays (WASAPI loopback through the `soundcard` package; pin another output in
+*Settings → Audio*), and a screenshot copies the primary screen or all screens (GDI, no extra package).
+Speech recognition runs on the CPU there. The build is checked under Wine only: the doctor runs, the
+window renders, devices open and frames arrive at the right pace and the screen is read with the right
+colours, but Wine plays no real sound into the recorder, so capture of an actual call has not been
+tried on a real Windows machine: run *Check setup* there first.
 
 **Everything is set up in the window.** Open ☰ → *Settings…* (or click the dim *Context* line
 at the bottom). Changes apply at once and are saved, so the next start is already configured.

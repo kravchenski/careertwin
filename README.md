@@ -60,8 +60,8 @@ entry with an icon. The install is editable, so it runs the code of this checkou
 effect at once; run the script again when dependencies change. `./scripts/uninstall.sh` removes it and
 keeps your data. It needs `uv` and `libpulse` (`parec`, `pactl`); `grim` is optional for screenshots.
 
-A portable Windows build of the interview window is made with `make windows` (typed questions work;
-listening to the call does not yet): see [docs/INTERVIEW.md](docs/INTERVIEW.md).
+A portable Windows build of the interview window is made with `make windows` (call audio through WASAPI
+loopback and GDI screenshots; checked under Wine only): see [docs/INTERVIEW.md](docs/INTERVIEW.md).
 
 ## The three ways in
 
