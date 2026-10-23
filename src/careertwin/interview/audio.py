@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -25,7 +26,14 @@ class Sources:
     microphone: str
 
 
+WINDOWS_MESSAGE = (
+    "Listening to the call is not available on Windows yet: type or paste the questions."
+)
+
+
 def _pactl(*args: str) -> str:
+    if sys.platform == "win32":
+        raise AudioError(WINDOWS_MESSAGE)
     if not shutil.which("pactl"):
         raise AudioError("`pactl` not found. Install pipewire-pulse (or pulseaudio-utils).")
     result = subprocess.run(["pactl", *args], capture_output=True, text=True, timeout=10)
@@ -54,6 +62,8 @@ class ParecSource:
         self.process: subprocess.Popen[bytes] | None = None
 
     def frames(self) -> Iterator[np.ndarray]:
+        if sys.platform == "win32":
+            raise AudioError(WINDOWS_MESSAGE)
         if not shutil.which("parec"):
             raise AudioError("`parec` not found. Install pipewire-pulse (or pulseaudio-utils).")
         self.process = subprocess.Popen(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -43,6 +44,8 @@ def available_tool() -> str | None:
 def capture_png(tool: str = "auto") -> bytes:
     """Return the whole screen as PNG bytes using `tool` (or the best available one)."""
     installed = available_tools()
+    if not installed and sys.platform == "win32":
+        raise ScreenshotError("Screenshots are not available on Windows yet.")
     if not installed:
         raise ScreenshotError(
             "No screenshot tool. Install grim (Wayland, e.g. niri or sway) or spectacle, "
