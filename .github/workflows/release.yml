@@ -157,8 +157,10 @@ jobs:
           app="$mount/CareerTwin Interview.app"
           codesign --verify --deep --strict "$app"
           home=$(mktemp -d)
-          # The Python inside the app imports its packages and draws a window without a display.
-          QT_QPA_PLATFORM=offscreen PYTHONPATH="$app/Contents/Resources/site-packages" PYTHONNOUSERSITE=1 \
+          # The Python inside the app imports its packages and draws a window without a display. The
+          # launcher normally says where the data goes; the dmg itself is read-only.
+          CAREERTWIN_DATA_DIR="$home/data" QT_QPA_PLATFORM=offscreen \
+            PYTHONPATH="$app/Contents/Resources/site-packages" PYTHONNOUSERSITE=1 \
             "$app/Contents/Resources/python/bin/python3" -c "import PySide6.QtWidgets, faster_whisper, httpx; from careertwin.interview.overlay import Bridge, OverlayWindow, create_app; app = create_app([]); w = OverlayWindow(Bridge()); w.show(); app.processEvents(); print('window', w.grab().width(), 'px')"
           # The launcher the Finder runs: it must create the data folder and start the program.
           HOME="$home" QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/careertwin-interview" --help

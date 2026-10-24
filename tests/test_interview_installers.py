@@ -141,6 +141,7 @@ def test_the_mac_and_windows_checks_start_the_same_window_the_user_will_see():
     for needle in ("OverlayWindow(Bridge())", "faster_whisper", "QT_QPA_PLATFORM", "offscreen"):
         assert WORKFLOW.count(needle) >= 2, needle
     assert "--help" in WORKFLOW and "last-run.log" in WORKFLOW
+    assert WORKFLOW.count("CAREERTWIN_DATA_DIR") >= 1  # the dmg is read-only: the check must say where the data goes
 
 
 def test_the_release_notes_do_not_promise_what_was_not_tried():
