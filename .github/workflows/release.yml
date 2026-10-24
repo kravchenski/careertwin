@@ -1,7 +1,8 @@
 name: Release
 
-# A tag like v0.2.0 builds the portable Windows package and publishes it as a GitHub release.
-# Run it by hand (Actions -> Release -> Run workflow) to get the zip as a build artifact only.
+# A tag like v0.2.0 builds the portable Windows zip, a Windows setup program (.exe) and a macOS
+# disk image (.dmg), checks each one, and publishes them as a GitHub release. Run it by hand
+# (Actions -> Release -> Run workflow) to get the files as build artifacts only.
 on:
   push:
     tags: ["v*"]
@@ -10,7 +11,8 @@ on:
     paths:
       - .github/workflows/release.yml
       - scripts/build_windows.sh
-      - packaging/windows/**
+      - scripts/build_macos.sh
+      - packaging/**
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,6 +23,7 @@ permissions:
 
 jobs:
   windows:
+    name: Windows zip
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -54,39 +57,156 @@ jobs:
       - name: Name the archive after the version
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="${GITHUB_SHA::7}"; fi
-          name="CareerTwin-Interview-$label-windows-x64.zip"
           mkdir -p release
-          mv dist/windows/CareerTwin-Interview-windows-x64.zip "release/$name"
-          (cd release && sha256sum "$name" | tee SHA256SUMS.txt)
+          mv dist/windows/CareerTwin-Interview-windows-x64.zip "release/CareerTwin-Interview-$label-windows-x64.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x64
+          name: windows-zip
           path: release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-installer:
+    name: Windows setup
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+          path: portable
+
+      - name: Unpack the portable package
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem portable -Filter *.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath build
+          if (-not (Test-Path build\CareerTwin-Interview\start.pyw)) { throw "the zip has no CareerTwin-Interview folder" }
+
+      - name: Build the setup program
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup is not installed" }
+          $label = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA.Substring(0, 7) }
+          & $iscc "/DAppVersion=$label" "/DSourceDir=$PWD\build\CareerTwin-Interview" "/O$PWD\release" packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+          Get-ChildItem release | Format-Table Name, Length
+
+      - name: Install it, start it, uninstall it
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem release -Filter '*-setup.exe' | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'ct-install'
+          $run = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$dir", "/LOG=$PWD\setup.log"
+          if ($run.ExitCode -ne 0) { Get-Content setup.log -Tail 40; throw "setup exited with $($run.ExitCode)" }
+
+          foreach ($file in 'python\pythonw.exe', 'start.pyw', 'careertwin-interview.ico', 'site-packages\careertwin\interview\app.py') {
+            if (-not (Test-Path "$dir\$file")) { throw "the installation lacks $file" }
+          }
+          $link = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\CareerTwin Interview.lnk"
+          if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
+          $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
+          if ($shortcut.TargetPath -notlike '*python\pythonw.exe' -or $shortcut.Arguments -notlike '*start.pyw*') {
+            throw "the shortcut starts the wrong thing: $($shortcut.TargetPath) $($shortcut.Arguments)"
+          }
+
+          # What the installed program imports, and a real window drawn without a display.
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          & "$dir\python\python.exe" -c "import PySide6.QtWidgets, faster_whisper, soundcard, httpx; from careertwin.interview.overlay import Bridge, OverlayWindow, create_app; app = create_app([]); w = OverlayWindow(Bridge()); w.show(); app.processEvents(); print('window', w.grab().width(), 'px')"
+          if ($LASTEXITCODE -ne 0) { throw "the installed program does not start" }
+
+          $unins = Get-ChildItem $dir -Filter 'unins*.exe' | Select-Object -First 1
+          Start-Process -FilePath $unins.FullName -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\python"); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path "$dir\python") { throw "uninstalling left the program behind" }
+          if (Test-Path $link) { throw "uninstalling left the Start menu shortcut" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup
+          path: release/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: macOS dmg
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build the app and the dmg
+        run: ./scripts/build_macos.sh
+
+      - name: Open the dmg and start the app inside it
+        run: |
+          dmg=$(ls dist/macos/*.dmg)
+          mount="$RUNNER_TEMP/ct-dmg"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
+          app="$mount/CareerTwin Interview.app"
+          codesign --verify --deep --strict "$app"
+          home=$(mktemp -d)
+          # The Python inside the app imports its packages and draws a window without a display. The
+          # launcher normally says where the data goes; the dmg itself is read-only.
+          CAREERTWIN_DATA_DIR="$home/data" QT_QPA_PLATFORM=offscreen \
+            PYTHONPATH="$app/Contents/Resources/site-packages" PYTHONNOUSERSITE=1 \
+            "$app/Contents/Resources/python/bin/python3" -c "import PySide6.QtWidgets, faster_whisper, httpx; from careertwin.interview.overlay import Bridge, OverlayWindow, create_app; app = create_app([]); w = OverlayWindow(Bridge()); w.show(); app.processEvents(); print('window', w.grab().width(), 'px')"
+          # The launcher the Finder runs: it must create the data folder and start the program.
+          HOME="$home" QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/careertwin-interview" --help
+          grep -q usage "$home/Library/Application Support/CareerTwin Interview/last-run.log"
+          hdiutil detach "$mount"
+
+      - name: Name the dmg after the version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="${GITHUB_SHA::7}"; fi
+          mkdir -p release
+          mv dist/macos/*.dmg "release/CareerTwin-Interview-$label-macos-$(uname -m).dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: release/*.dmg
           if-no-files-found: error
           retention-days: 14
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: windows
+    needs: [windows, windows-installer, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: windows-x64
           path: release
+          merge-multiple: true
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          (cd release && sha256sum -- * | tee SHA256SUMS.txt)
+          notes="**Windows:** run the \`-setup.exe\` (no administrator rights needed), or unzip the \`.zip\` and start it with \`Start CareerTwin Interview.bat\`. Windows may warn that the publisher is unknown: choose More info, then Run anyway.
+
+          **macOS (Apple silicon):** open the \`.dmg\`, drag the app to Applications, then right-click it and choose Open the first time. The app is not signed by Apple. Call audio is not on the Mac yet; typed questions, screenshots and project defense are expected to work (the build is checked by GitHub's machine, not tried by hand on a Mac).
+
+          Check a download against \`SHA256SUMS.txt\`."
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release/* --clobber
           else
             prerelease=""
             case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes $prerelease
+            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes --notes "$notes" $prerelease
           fi

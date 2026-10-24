@@ -30,14 +30,14 @@ make docker    # backend + SearXNG in containers
 
 ## Releases
 
-Pushing a tag builds the portable Windows package and attaches it to a GitHub release together with `SHA256SUMS.txt`:
+Pushing a tag builds the portable Windows zip, a Windows setup program (`.exe`, Inno Setup, built on a Windows runner) and a macOS disk image (`.dmg`, built on a macOS runner), and attaches them to a GitHub release together with `SHA256SUMS.txt`. Before publishing, the workflow installs the setup on its Windows machine, imports the packages and draws the window from the installed program, then uninstalls it; on the macOS machine it mounts the dmg, checks the signature and does the same from the app inside:
 
 ```bash
 # set version in pyproject.toml to 0.2.0 and merge it, then:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release. To get the zip without releasing, run *Release* by hand from the Actions tab and download the `windows-x64` artifact (kept for 14 days). Locally the same package comes from `make windows`.
+The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release. To get the files without releasing, run *Release* by hand from the Actions tab and download the artifacts `windows-zip`, `windows-setup` and `macos-dmg` (kept for 14 days). A change to `packaging/` or the build scripts runs the same build on a pull request without publishing. Locally, `make windows` makes the zip and `./scripts/build_macos.sh` the Mac app and dmg (on a Mac; `SKIP_NATIVE=1` stops before the icon, signing and dmg, which only macOS can do). Neither installer is signed, which is why Windows and macOS warn on the first start.
 
 ## Project Structure
 

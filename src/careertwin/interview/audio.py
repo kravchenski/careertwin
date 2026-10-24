@@ -31,6 +31,10 @@ class Sources:
 
 
 def _pactl(*args: str) -> str:
+    if sys.platform == "darwin":
+        raise AudioError(
+            "Call audio is not available on macOS yet. Type a question, or use the Screenshot button."
+        )
     if not shutil.which("pactl"):
         raise AudioError("`pactl` not found. Install pipewire-pulse (or pulseaudio-utils).")
     result = subprocess.run(["pactl", *args], capture_output=True, text=True, timeout=10)
