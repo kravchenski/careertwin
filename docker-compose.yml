@@ -2,12 +2,11 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: docker/Dockerfile
     container_name: careertwin-backend
     network_mode: host
     volumes:
       - ./src:/app/src:ro
-      - ./web/api:/app/web/api
       - ./ABOUT.md:/app/ABOUT.md:rw
       - careertwin-data:/app/data
     environment:
@@ -15,7 +14,8 @@ services:
       - CAREERTWIN_DB_PATH=/app/data/careertwin.db
       - OUTPUT_DIR=/app/data/outputs
       - CACHE_DIR=/app/data/cache
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8080,http://localhost:4200}
+      - SCREENSHOT_DIR=/app/data/screenshots
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       - LMSTUDIO_BASE_URL=${LMSTUDIO_BASE_URL:-http://127.0.0.1:1234/api/v1/chat}
       - LMSTUDIO_API_BASE=${LMSTUDIO_API_BASE:-http://127.0.0.1:1234}
       - LMSTUDIO_MODEL=${LMSTUDIO_MODEL:-qwythos-9b-v2}
@@ -42,22 +42,6 @@ services:
       retries: 5
       start_period: 40s
     restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: careertwin-frontend
-    ports:
-      - "8080:80"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - careertwin
 
   searxng:
     image: searxng/searxng:latest

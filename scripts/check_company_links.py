@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Checks every company's `careers` URL and website domain in
-web/api/companies.json for reachability.
+src/careertwin/jobs/data/companies.json for reachability.
 
 Deliberately dependency-light (httpx + stdlib only) and framework-agnostic so
 any AI coding agent (Claude Code, OpenCode, MimoCode, Pi, etc.) can invoke it
@@ -27,7 +27,7 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parent.parent
-COMPANIES_FILE = ROOT / "web" / "api" / "companies.json"
+COMPANIES_FILE = ROOT / "src" / "careertwin" / "jobs" / "data" / "companies.json"
 TIMEOUT = 12.0
 USER_AGENT = "Mozilla/5.0 (compatible; CareerTwinLinkChecker/1.0)"
 

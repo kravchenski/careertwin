@@ -3,30 +3,26 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "web" / "api"))
-
-import database
-from automation import salary
-from automation.documents import contact, extract_facts
-from automation.models import Settings
-from automation.store import Store
-from candidate_context import (
+from careertwin import db as database
+from careertwin.api.routes import studio
+from careertwin.api.schemas import StudioSubmit
+from careertwin.automation import salary
+from careertwin.automation.documents import contact, extract_facts
+from careertwin.automation.models import Settings
+from careertwin.automation.store import Store
+from careertwin.profile.context import (
     build_context,
     context_path,
     read_context,
     studio_snapshot,
     write_context,
 )
-from database import StudioSubmit
-from graph_builder import _build_manual_graph
-from routes import studio
+from careertwin.profile.graph_builder import _build_manual_graph
 
 PROFILE = {
     "fullName": "Test Candidate",
@@ -81,7 +77,7 @@ PREFS = {
 @pytest.fixture
 def db(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "studio.db")
-    database._init_db()
+    database.init_db()
     value = Store()
     value.initialize()
     return value
@@ -106,7 +102,7 @@ async def test_all_answers_publish_and_agents_refresh_without_restart(db):
     assert "Mode: AUTO" in content
     assert "Willing to relocate: No" in content
     assert "120000" not in content
-    with database._db_conn() as connection:
+    with database.db_conn() as connection:
         row = connection.execute(
             "SELECT full_name, email, skills FROM user_profiles WHERE username='default'"
         ).fetchone()

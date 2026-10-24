@@ -2,8 +2,8 @@
 
 from careertwin.rendering.design_dna import DesignDNA, DesignDNAEngine
 from careertwin.rendering.trends import (
-    DesignTrendScraper,
     DesignTrend,
+    DesignTrendScraper,
 )
 
 

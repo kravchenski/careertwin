@@ -37,6 +37,9 @@ dev = [
     "ruff>=0.5",
 ]
 
+[project.scripts]
+careertwin = "careertwin.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

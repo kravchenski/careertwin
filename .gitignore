@@ -224,9 +224,6 @@ llm_browser_demo.py
 
 # Runtime data
 data/*.db
-web/api/*.db
-web/api/cache/
-web/api/screenshots/
 
 # Claude Code config
 .claude/
@@ -237,4 +234,3 @@ web/api/screenshots/
 ABOUT.md
 data/outputs/
 node_modules/
-.angular/

@@ -1,36 +1,22 @@
-.PHONY: all dev dev-backend dev-frontend dev-docker test lint build clean
+.PHONY: dev api test lint lint-fix docker clean
 
-all: dev
+dev: api
 
-dev:
-	@bash start.sh
-
-dev-backend:
-	cd web/api && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-dev-frontend:
-	cd web/frontend && npm run start -- --host 0.0.0.0 --port 4200
-
-dev-docker:
-	docker compose up --build
+api:
+	uv run uvicorn careertwin.api.app:app --reload --host 127.0.0.1 --port 8000
 
 test:
-	uv run pytest tests/ -v --tb=short
+	uv run pytest tests/ -v --tb=short -m "not integration"
 
 lint:
-	uv run ruff check src/ tests/ web/api/
+	uv run ruff check src/ tests/
 
 lint-fix:
-	uv run ruff check --fix src/ tests/ web/api/
+	uv run ruff check --fix src/ tests/
 
-typecheck:
-	uv run mypy src/ web/api/ --ignore-missing-imports || true
-
-build:
-	docker compose build
+docker:
+	docker compose up --build
 
 clean:
-	rm -rf web/frontend/node_modules web/frontend/.angular
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name .ruff_cache -exec rm -rf {} +
-	find . -type d -name .pytest_cache -exec rm -rf {} +
+	find . -type d -name __pycache__ -not -path "./.venv/*" -exec rm -rf {} +
+	rm -rf .ruff_cache .pytest_cache
