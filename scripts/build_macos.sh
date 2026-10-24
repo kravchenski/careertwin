@@ -94,7 +94,18 @@ mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 cp packaging/macos/README-macOS.txt "$STAGE/README.txt"
-hdiutil create -volname "$NAME" -srcfolder "$STAGE" -ov -format UDZO \
-    "$OUT/CareerTwin-Interview-$VERSION-macos-$ARCH.dmg" >/dev/null
+# hdiutil fails now and then with "Resource busy" while macOS indexes the new files: try again.
+for attempt in 1 2 3 4 5; do
+    if hdiutil create -volname "$NAME" -srcfolder "$STAGE" -ov -format UDZO \
+        "$OUT/CareerTwin-Interview-$VERSION-macos-$ARCH.dmg" >/dev/null; then
+        break
+    fi
+    if [ "$attempt" = 5 ]; then
+        echo "hdiutil kept failing" >&2
+        exit 1
+    fi
+    echo "hdiutil failed (attempt $attempt), trying again" >&2
+    sleep $((attempt * 5))
+done
 rm -rf "$STAGE"
 du -sh "$APP" "$OUT"/*.dmg

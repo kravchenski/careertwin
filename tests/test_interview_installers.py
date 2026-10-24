@@ -76,6 +76,7 @@ def test_the_mac_app_has_what_macos_needs_to_start_it():
                 "NSMicrophoneUsageDescription", "LSMinimumSystemVersion"):
         assert f"<key>{key}</key>" in MAC_SCRIPT
     assert "codesign --force --deep --sign -" in MAC_SCRIPT and "hdiutil create" in MAC_SCRIPT
+    assert "for attempt in 1 2 3 4 5" in MAC_SCRIPT  # hdiutil is flaky on the runners
     assert 'ln -s /Applications' in MAC_SCRIPT and "iconutil -c icns" in MAC_SCRIPT
     assert "Application Support/CareerTwin Interview" in MAC_SCRIPT  # data survives replacing the app
     assert (ROOT / "packaging/macos/README-macOS.txt").read_text().count("Right-click") == 1
