@@ -11,7 +11,11 @@ from typing import Any
 from careertwin.db import db_conn
 from careertwin.profile.context import context_path, read_context
 from careertwin.settings import OUTPUT_DIR
+from careertwin.vault import redact, redact_data
 
+from .mail import MailStore
+from .monitor import WatchStore
+from .stats import stats
 from .store import Store
 
 
@@ -38,6 +42,7 @@ class ExcelAgent:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = Path(str(self.path) + ".tmp")
             temporary.write_bytes(workbook(self.store))
+            temporary.chmod(0o600)  # it holds the answers, the history and the whole ABOUT.md
             os.replace(temporary, self.path)
 
         try:
@@ -58,12 +63,13 @@ class ExcelAgent:
 
 
 def safe(value: Any) -> str:
-    value = str(value if value is not None else "")
-    return "'" + value if value.startswith(("=", "+", "-", "@")) else value
+    """A cell that a spreadsheet would run as a formula is written as text (OWASP: = + - @, tab, CR)."""
+    value = redact(str(value if value is not None else ""))
+    return "'" + value if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
 
 
 def chunks(value: Any) -> list[str]:
-    text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    text = json.dumps(redact_data(value), ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
     return [safe(text[i : i + 30000]) for i in range(0, len(text), 30000)] or [""]
 
 
@@ -72,8 +78,10 @@ def workbook(store: Store) -> bytes:
     from openpyxl.styles import Font
 
     book = Workbook()
-    jobs = book.active
-    jobs.title = "Applications"
+    dashboard = book.active
+    dashboard.title = "Dashboard"
+    fill_dashboard(dashboard, stats(store))
+    jobs = book.create_sheet("Applications")
     jobs.append(
         [
             "ID",
@@ -156,13 +164,23 @@ def workbook(store: Store) -> bytes:
         for question, answer in store.answers(job_id).items():
             for index, part in enumerate(chunks(answer), 1):
                 known.append([job_id, safe(question), index, part])
+    letters = book.create_sheet("Mail")
+    letters.append(["Date", "Direction", "Kind", "State", "Job ID", "From", "To", "Subject", "Summary"])
+    for row in reversed(MailStore().list(limit=5000)):  # bodies stay out: the log is for counting, not for reading
+        letters.append([safe(value) for value in (row["created_at"], row["direction"], row["kind"], row["state"], row["job_id"], row["from_addr"], row["to_addr"], row["subject"], row["summary"])])
+    companies = book.create_sheet("Companies")
+    companies.append(["Company", "Careers page", "ATS", "Open vacancies", "Last visit", "Last success", "Failures in a row", "Last error"])
+    for row in WatchStore().targets(enabled_only=False):
+        companies.append([safe(row["name"]), safe(row["careers_url"]), safe(row["ats"]), row["open_count"], safe(row["last_checked"] or ""), safe(row["last_ok"] or ""), row["failures"], safe(row["last_error"])])
     shared = book.create_sheet("Candidate context")
     shared.append(["ABOUT.md absolute path", "SHA256", "Part", "Current shared context"])
-    content = read_context()
+    content = redact(read_context())
     checksum = hashlib.sha256(content.encode()).hexdigest()
     for index, part in enumerate(chunks(content), 1):
         shared.append([safe(str(context_path().resolve())), checksum, index, part])
     for sheet in book:
+        if sheet.title == "Dashboard":
+            continue
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions
         for cell in sheet[1]:
@@ -174,3 +192,51 @@ def workbook(store: Store) -> bytes:
     output = io.BytesIO()
     book.save(output)
     return output.getvalue()
+
+
+def fill_dashboard(sheet, numbers: dict[str, Any]) -> None:
+    """The first sheet: how the search is going, in numbers and one chart."""
+    from openpyxl.chart import BarChart, Reference
+    from openpyxl.styles import Font
+
+    bold = Font(bold=True)
+
+    def put(label: str, value: Any = "") -> None:
+        sheet.append([safe(label), value if isinstance(value, (int, float)) else safe(value)])
+        sheet.cell(sheet.max_row, 1).font = bold if value == "" else Font()
+
+    put("CareerTwin dashboard", "")
+    sheet.cell(1, 1).font = Font(bold=True, size=14)
+    sheet.append([])
+    put("Vacancies in the pipeline", numbers["jobs"])
+    put("Applied", numbers["applied"])
+    put("Received a reply", numbers["replied"])
+    put("Reply rate", "" if numbers["reply_rate"] is None else f"{numbers['reply_rate']:.0%}")
+    put("Median days to the first reply", "" if numbers["median_days_to_reply"] is None else numbers["median_days_to_reply"])
+    put("Interviews, offers, hired", numbers["interviews"])
+    put("Rejections", numbers["rejections"])
+    put("Submitted today", numbers["submitted_today"])
+    put("Companies watched / failing", f"{numbers['monitor']['watching']} / {numbers['monitor']['failing']}")
+    put("Mail received / sent / drafts waiting", f"{numbers['mail']['received']} / {numbers['mail']['sent']} / {numbers['mail']['drafts']}")
+    sheet.append([])
+    put("By state")
+    for state, count in numbers["by_state"].items():
+        put(state, count)
+    sheet.append([])
+    put("By source")
+    sheet.append(["Source", "Found", "Applied"])
+    for source, row in numbers["by_source"].items():
+        sheet.append([safe(source), row["found"], row["applied"]])
+    sheet.append([])
+    put("Last days")
+    header = sheet.max_row + 1
+    sheet.append(["Date", "Found", "Submitted", "Replies"])
+    for day in numbers["timeline"]:
+        sheet.append([day["date"], day["found"], day["submitted"], day["replies"]])
+    chart = BarChart()
+    chart.title, chart.height, chart.width = "Found, submitted and replies per day", 8, 18
+    chart.add_data(Reference(sheet, min_col=2, max_col=4, min_row=header, max_row=sheet.max_row), titles_from_data=True)
+    chart.set_categories(Reference(sheet, min_col=1, min_row=header + 1, max_row=sheet.max_row))
+    sheet.add_chart(chart, "E3")
+    sheet.column_dimensions["A"].width = 42
+    sheet.column_dimensions["B"].width = 18

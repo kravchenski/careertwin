@@ -16,6 +16,8 @@ from careertwin.automation.mail import MailError, config as mail_config, configu
 from careertwin.automation.excel import workbook
 from careertwin.automation.models import Answer, Outcome, Settings, Vacancy
 from careertwin.automation.monitor import Target
+from careertwin.automation.stats import attention as attention_items
+from careertwin.automation.stats import stats as pipeline_stats
 from careertwin.net import validate_public_url
 from careertwin.automation.sources import SOURCES
 
@@ -335,3 +337,15 @@ async def monitor_run(everything: bool = False):
         raise HTTPException(423, str(exc)) from exc
     engine.monitoring = asyncio.create_task(engine._monitor_round_now(engine.store.settings(), everything))
     return {"status": "started"}
+
+
+@router.get("/summary")
+async def summary():
+    """Counts for a glance: the funnel, the reply rate, today's submissions, mail and the monitor."""
+    return pipeline_stats(engine.store)
+
+
+@router.get("/attention")
+async def attention():
+    """Everything that waits for you: forms ready to send, drafts to approve, replies to read, questions."""
+    return attention_items(engine.store)

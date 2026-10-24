@@ -268,6 +268,20 @@ async def submit_application(job_id: str, confirm: bool = False) -> dict[str, An
     return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": "submit"})
 
 
+@tool("What the pipeline looks like in numbers")
+async def get_summary() -> dict[str, Any]:
+    """The funnel by state, applications sent, reply rate, median days to a reply, today's submissions,
+    mail and monitor counts. Report these; do not invent others."""
+    return await _client().get("/v1/automation/summary")
+
+
+@tool("Everything that waits for the candidate")
+async def what_needs_me() -> list[dict[str, Any]]:
+    """Forms ready to send, email drafts to approve, replies to read, questions the forms asked,
+    most urgent first. Tell the candidate what is waiting; do not act on any of it for them."""
+    return await _client().get("/v1/automation/attention")
+
+
 @tool("Companies the monitor watches and their health")
 async def list_monitored_companies() -> dict[str, Any]:
     """The companies whose career sites are watched, when each was last read, how many vacancies
