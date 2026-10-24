@@ -747,3 +747,27 @@ fn a_failed_download_is_explained_in_settings() {
     harness.run_steps(3);
     harness.get_by_label_contains("Could not download Kokoro: could not reach huggingface.co");
 }
+
+#[test]
+fn the_sphere_is_not_redrawn_on_every_frame() {
+    // a sphere that only breathes must be cheap: thirty frames in a row make one picture, not thirty
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    for _ in 0..30 {
+        harness.step();
+    }
+    let renders = harness.state().core.orb_renders;
+    assert!(renders >= 1, "the sphere is on the home page");
+    assert!(renders <= 3, "{renders} pictures for thirty frames: the processor would be doing the work for nothing");
+}
+
+#[test]
+fn a_call_redraws_the_sphere_a_few_times_a_second_not_every_frame() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    let wired = live(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    for _ in 0..40 {
+        harness.step();
+    }
+    let renders = harness.state().core.orb_renders;
+    assert!((1..=4).contains(&renders), "{renders} pictures for forty frames");
+}

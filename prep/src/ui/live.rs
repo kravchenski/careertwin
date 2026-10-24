@@ -201,7 +201,9 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     let tr = core.tr;
     let now = Instant::now();
     let ctx = ui.ctx().clone();
-    ctx.request_repaint_after(Duration::from_millis(33));
+    // the words light up as they are spoken, so a speaking interviewer needs smooth frames
+    let tick = if view.state == State::Speaking { 33 } else { 100 };
+    ctx.request_repaint_after(Duration::from_millis(tick));
     view.poll(&core.store, now);
     if view.finished {
         return Some(Nav::CallEnded);
@@ -247,7 +249,12 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
         };
         let params = orb::Params { time: core.started.elapsed().as_secs_f32(), level: view.orb_level, spin };
         let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), orb_size), Sense::hover());
-        core.paint_orb(ui, Rect::from_center_size(area.center(), Vec2::splat(orb_size)), &params);
+        let fps = match view.state {
+            State::Speaking => 24.0,
+            State::Listening => 20.0,
+            _ => 12.0,
+        };
+        core.paint_orb(ui, Rect::from_center_size(area.center(), Vec2::splat(orb_size)), &params, fps);
         ui.vertical_centered(|ui| {
             ui.label(RichText::new(status_text(core, view)).font(theme::serif_italic(21.0)).color(MUTED));
         });

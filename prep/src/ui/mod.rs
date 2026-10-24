@@ -146,6 +146,9 @@ pub struct Core {
     pub downloads: Vec<Download>,
     /// The sphere's picture, drawn again every frame it is on screen.
     orb: Option<egui::TextureHandle>,
+    orb_made: Option<(Instant, usize)>,
+    /// How many times the sphere's picture was made; the tests check that it is not every frame.
+    pub orb_renders: usize,
 }
 
 impl Core {
@@ -153,18 +156,31 @@ impl Core {
         crate::session::now()
     }
 
-    /// Paints the sphere in `rect`; the picture is made fresh from `params`.
-    pub fn paint_orb(&mut self, ui: &Ui, rect: Rect, params: &orb::Params) {
-        let image = orb::render(params);
+    /// Paints the sphere in `rect`. The picture is made fresh from `params` at most `fps` times a
+    /// second (a few times a second when the window is in the background); in between, the last
+    /// one is painted again, so a sphere that only breathes costs the processor almost nothing.
+    pub fn paint_orb(&mut self, ui: &Ui, rect: Rect, params: &orb::Params, fps: f32) {
         let context = ui.ctx();
-        match &mut self.orb {
-            Some(texture) => texture.set(image, egui::TextureOptions::LINEAR),
-            None => self.orb = Some(context.load_texture("orb", image, egui::TextureOptions::LINEAR)),
+        let focused = context.input(|i| i.viewport().focused.unwrap_or(true));
+        let interval = std::time::Duration::from_secs_f32(1.0 / if focused { fps.max(1.0) } else { 2.0 });
+        let size = (rect.width() * 0.85).round().clamp(128.0, 256.0) as usize;
+        let now = Instant::now();
+        let stale = self.orb_made.is_none_or(|(at, made)| made != size || now.duration_since(at) >= interval);
+        if stale {
+            let image = orb::render_at(params, size);
+            match &mut self.orb {
+                Some(texture) => texture.set(image, egui::TextureOptions::LINEAR),
+                None => self.orb = Some(context.load_texture("orb", image, egui::TextureOptions::LINEAR)),
+            }
+            self.orb_made = Some((now, size));
+            self.orb_renders += 1;
         }
         if let Some(texture) = &self.orb {
             let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
             ui.painter().image(texture.id(), rect, uv, egui::Color32::WHITE);
         }
+        let wait = self.orb_made.map_or(interval, |(at, _)| interval.saturating_sub(now.duration_since(at)));
+        context.request_repaint_after(wait.max(std::time::Duration::from_millis(1)));
     }
 
     /// Fetches the models the offline engines need, if they are chosen and not on disk yet.
@@ -442,6 +458,8 @@ impl PrepApp {
                 models: Vec::new(),
                 downloads: Vec::new(),
                 orb: None,
+                orb_made: None,
+                orb_renders: 0,
             },
             screen: Screen::Home,
             history: history::HistoryState::default(),

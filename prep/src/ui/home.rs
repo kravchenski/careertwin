@@ -64,8 +64,7 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
             let seconds = core.started.elapsed().as_secs_f32();
             let breath = 0.10 + 0.06 * (seconds * 1.4).sin();
             let rect = Rect::from_min_size(egui::pos2(column.right() - sphere, header_top - 8.0), Vec2::splat(sphere));
-            core.paint_orb(ui, rect, &orb::Params { time: seconds, level: breath, spin: 0.8 });
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+            core.paint_orb(ui, rect, &orb::Params { time: seconds, level: breath, spin: 0.8 }, 10.0);
             let used = ui.cursor().top() - header_top;
             if used < sphere - 24.0 {
                 ui.add_space(sphere - 24.0 - used);
