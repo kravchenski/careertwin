@@ -298,3 +298,16 @@ def test_the_system_prompt_asks_for_words_to_say_not_advice():
     assert "first person" in SYSTEM and "No bluff" in SYSTEM
     assert "say the greeting" in KIND_HINTS[Kind.SMALL_TALK].lower().replace("small talk: ", "")
     assert all("lines" in hint for hint in STYLE_HINTS.values())
+
+
+def test_definition_questions_get_an_explanation_not_a_greeting(about):
+    from careertwin.interview.prompts import SYSTEM, user_prompt
+
+    brief = InterviewBrief.load()
+    prompt = user_prompt(
+        brief, "что такое pytohn", Kind.DEFINITION, ["Interviewer: hi", "Interviewer: Tell me about yourself"], "ru"
+    )
+    assert "TYPE: definition" in prompt and "line one defines it" in prompt
+    assert "INTERVIEW LANGUAGE: Russian" in prompt and "Interviewer: hi" in prompt
+    assert "Answer ONLY the question asked now" in SYSTEM and "never repeat an earlier greeting" in SYSTEM
+    assert "pytohn" in SYSTEM and "No greeting, no self-introduction" in SYSTEM

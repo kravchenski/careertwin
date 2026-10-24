@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -73,6 +74,10 @@ STRINGS = {
         "opacity": "Opacity", "font_scale": "Text size", "save_transcripts": "Save transcripts to data/interviews",
         "reset": "Reset all settings", "reset_ask": "Restore every setting to its default?",
         "bad_value": "Not saved: {error}", "close": "Close", "pick_files": "Choose documents",
+        "interview": "Interview", "new_interview": "New", "rename_interview": "Rename",
+        "delete_interview": "Delete", "interview_name": "Interview name",
+        "interview_hint": "Each interview keeps its own vacancy, CV and notes. ABOUT.md is shared.",
+        "delete_ask": "Delete this interview with its vacancy, notes and documents?",
     },
     "ru": {
         "title": "Настройки", "docs": "Документы", "vacancy": "Вакансия", "about": "Обо мне",
@@ -110,6 +115,10 @@ STRINGS = {
         "opacity": "Прозрачность", "font_scale": "Размер текста", "save_transcripts": "Сохранять расшифровки в data/interviews",
         "reset": "Сбросить все настройки", "reset_ask": "Вернуть все настройки по умолчанию?",
         "bad_value": "Не сохранено: {error}", "close": "Закрыть", "pick_files": "Выберите документы",
+        "interview": "Интервью", "new_interview": "Новое", "rename_interview": "Переименовать",
+        "delete_interview": "Удалить", "interview_name": "Название интервью",
+        "interview_hint": "У каждого интервью своя вакансия, резюме и заметки. ABOUT.md общий.",
+        "delete_ask": "Удалить это интервью вместе с вакансией, заметками и документами?",
     },
     "pl": {
         "title": "Ustawienia", "docs": "Dokumenty", "vacancy": "Oferta", "about": "O mnie",
@@ -147,6 +156,10 @@ STRINGS = {
         "opacity": "Przezroczystość", "font_scale": "Rozmiar tekstu", "save_transcripts": "Zapisuj transkrypcje w data/interviews",
         "reset": "Przywróć wszystkie ustawienia", "reset_ask": "Przywrócić domyślne wartości wszystkich ustawień?",
         "bad_value": "Nie zapisano: {error}", "close": "Zamknij", "pick_files": "Wybierz dokumenty",
+        "interview": "Rozmowa", "new_interview": "Nowa", "rename_interview": "Zmień nazwę",
+        "delete_interview": "Usuń", "interview_name": "Nazwa rozmowy",
+        "interview_hint": "Każda rozmowa ma własną ofertę, CV i notatki. ABOUT.md jest wspólny.",
+        "delete_ask": "Usunąć tę rozmowę razem z ofertą, notatkami i dokumentami?",
     },
 }
 
@@ -219,6 +232,24 @@ class SettingsDialog(QDialog):
         self._finished.connect(self._on_finished)
 
         layout = QVBoxLayout(self)
+        picker = QHBoxLayout()
+        self.interview_label = QLabel()
+        self.interview_combo = QComboBox()
+        self.interview_combo.setMinimumWidth(260)
+        self.new_interview = QPushButton()
+        self.rename_interview = QPushButton()
+        self.delete_interview = QPushButton()
+        picker.addWidget(self.interview_label)
+        picker.addWidget(self.interview_combo, 1)
+        for button in (self.new_interview, self.rename_interview, self.delete_interview):
+            picker.addWidget(button)
+        layout.addLayout(picker)
+        self.interview_hint = self._hint()
+        layout.addWidget(self.interview_hint)
+        self.interview_combo.activated.connect(self._switch_interview)
+        self.new_interview.clicked.connect(self._new_interview)
+        self.rename_interview.clicked.connect(self._rename_interview)
+        self.delete_interview.clicked.connect(self._delete_interview)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
         footer = QHBoxLayout()
@@ -318,6 +349,46 @@ class SettingsDialog(QDialog):
             combo.addItem(str(value) or "—", value)
             index = combo.count() - 1
         combo.setCurrentIndex(index)
+
+    # ---- interviews --------------------------------------------------------
+
+    def refresh_interviews(self) -> None:
+        with QSignalBlocker(self.interview_combo):
+            self.interview_combo.clear()
+            for interview_id, name in self.rt.context.interviews():
+                self.interview_combo.addItem(name, interview_id)
+            self._select(self.interview_combo, self.rt.context.current.id)
+
+    def interview_changed(self, problems: list[str] | None = None) -> None:
+        """The active interview changed: show its context everywhere."""
+        self.refresh()
+        self.win.refresh_controls()
+        if problems:
+            self.say(problems[0], error=True)
+
+    def _switch_interview(self, _index: int) -> None:
+        self.interview_changed(self.rt.context.switch_interview(self.interview_combo.currentData()))
+
+    def _new_interview(self) -> None:
+        name, ok = QInputDialog.getText(self, self.t("new_interview"), self.t("interview_name"))
+        if ok:
+            self.interview_changed(self.rt.context.new_interview(name))
+            self.tabs.setCurrentIndex(self.TABS.index("vacancy"))
+
+    def _rename_interview(self) -> None:
+        name, ok = QInputDialog.getText(
+            self, self.t("rename_interview"), self.t("interview_name"),
+            text=self.rt.context.interview_name(),
+        )
+        if ok and name.strip():
+            self.rt.context.rename_interview(name)
+            self.refresh_interviews()
+            self.win.refresh_controls()
+
+    def _delete_interview(self) -> None:
+        answer = QMessageBox.question(self, self.t("delete_interview"), self.t("delete_ask"))
+        if answer == QMessageBox.StandardButton.Yes:
+            self.interview_changed(self.rt.context.delete_interview())
 
     # ---- documents ---------------------------------------------------------
 
@@ -425,6 +496,7 @@ class SettingsDialog(QDialog):
         except Exception as exc:
             self.say(str(exc), error=True)
             return
+        self.refresh_interviews()
         self.after_context_change()
         self.refresh_vacancy()
         self.say(self.t("saved"))
@@ -445,6 +517,7 @@ class SettingsDialog(QDialog):
         if error:
             self.say(error, error=True)
             return
+        self.refresh_interviews()
         self.after_context_change()
         self.refresh_vacancy()
         self.say(self.t("saved"))
@@ -726,6 +799,7 @@ class SettingsDialog(QDialog):
     def refresh(self) -> None:
         """Show the current settings and context in every control."""
         settings = self.rt.settings
+        self.refresh_interviews()
         self.refresh_docs()
         self.refresh_vacancy()
         self.refresh_about()
@@ -771,6 +845,11 @@ class SettingsDialog(QDialog):
         for index, key in enumerate(self.TABS):
             self.tabs.setTabText(index, self.t(key).replace("&", "&&"))
         self.close_button.setText(self.t("close"))
+        self.interview_label.setText(self.t("interview"))
+        self.new_interview.setText(self.t("new_interview"))
+        self.rename_interview.setText(self.t("rename_interview"))
+        self.delete_interview.setText(self.t("delete_interview"))
+        self.interview_hint.setText(self.t("interview_hint"))
         self.docs_intro.setText(self.t("docs_intro"))
         self.add_button.setText(self.t("add_files"))
         self.vacancy_intro.setText(self.t("vacancy_intro"))

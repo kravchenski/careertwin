@@ -13,6 +13,7 @@ class Kind(StrEnum):
     SALARY = "salary"
     LOGISTICS = "logistics"
     CANDIDATE_QUESTIONS = "candidate_questions"
+    DEFINITION = "definition"
     TECHNICAL = "technical"
     SMALL_TALK = "small_talk"
 
@@ -38,6 +39,12 @@ _PATTERNS: list[tuple[Kind, re.Pattern[str]]] = [
         r"where do you see yourself|why are you leaving|"
         r"почему (вы )?(хотите|выбрали|ушли|уходите)|что вас привлекает|"
         r"dlaczego (chcesz|wybrałeś|wybrałaś|odchodzisz)", re.I)),
+    (Kind.DEFINITION, re.compile(
+        r"^(so,? )?(what is|what are|what's|what does .+ mean|explain|define|describe how|"
+        r"how does .+ work|difference between|what's the difference|why use)\b(?! your| you\b)|"
+        r"что так(ое|ая|ие|ой)|что значит|объясни|расскажи(те)? (про|о том, что)|в чём разница|чем отличается|"
+        r"как работает|"
+        r"co to (jest|są)|czym (jest|są)|wyjaśnij|jaka jest różnica|czym się różni|jak działa", re.I)),
     (Kind.LOGISTICS, re.compile(
         r"notice period|when can you start|available to start|work permit|visa|relocat|"
         r"remote|on-?site|hybrid|time ?zone|"

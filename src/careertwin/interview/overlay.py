@@ -68,6 +68,8 @@ STRINGS = {
         "no_context": "No context yet",
         "no_context_hint": "Open Settings → Docs and add your CV, or write about yourself in About me.",
         "shot_off": "Screenshots are turned off in Settings",
+        "interview_menu": "Interview", "new_interview": "New interview…",
+        "no_vacancy_hint": "No vacancy yet: Settings → Vacancy to paste it, then Documents for the CV you sent.",
     },
     "ru": {
         "ask": "Спросить", "screenshot": "Скриншот", "get_answer": "Получить ответ",
@@ -85,6 +87,8 @@ STRINGS = {
         "no_context": "Контекста пока нет",
         "no_context_hint": "Откройте Настройки → Документы и добавьте резюме или напишите о себе во вкладке «Обо мне».",
         "shot_off": "Скриншоты выключены в настройках",
+        "interview_menu": "Интервью", "new_interview": "Новое интервью…",
+        "no_vacancy_hint": "Вакансии пока нет: Настройки → Вакансия, чтобы вставить её, затем Документы для резюме, которое вы отправляли.",
     },
     "pl": {
         "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "get_answer": "Odpowiedz",
@@ -102,6 +106,8 @@ STRINGS = {
         "no_context": "Brak kontekstu",
         "no_context_hint": "Otwórz Ustawienia → Dokumenty i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
         "shot_off": "Zrzuty ekranu są wyłączone w ustawieniach",
+        "interview_menu": "Rozmowa", "new_interview": "Nowa rozmowa…",
+        "no_vacancy_hint": "Brak oferty: Ustawienia → Oferta, aby ją wkleić, potem Dokumenty dla wysłanego CV.",
     },
 }
 MENU_LANGUAGES = ["en", "ru", "pl", "uk", "de", "fr", "es", "it", "pt", "cs"]
@@ -512,6 +518,9 @@ class OverlayWindow(QWidget):
             self.language_actions[code] = action
         for item in (self.act_settings, self.act_context):
             self.menu.addAction(item)
+        self.interview_menu = QMenu(self)
+        self.interview_menu.aboutToShow.connect(self._fill_interview_menu)
+        self.interview_menu_action = self.menu.addMenu(self.interview_menu)
         self.menu.addSeparator()
         for item in (self.act_transcript, self.act_full, self.act_pin):
             self.menu.addAction(item)
@@ -519,6 +528,40 @@ class OverlayWindow(QWidget):
         self.menu.addSeparator()
         self.menu.addAction(self.act_quit)
         self.menu_button.setMenu(self.menu)
+
+    def _fill_interview_menu(self) -> None:
+        """List the saved interviews so one click switches vacancy, CV and notes together."""
+        self.interview_menu.clear()
+        if not self.runtime:
+            return
+        context = self.runtime.context
+        group = QActionGroup(self.interview_menu)
+        for interview_id, name in context.interviews():
+            action = QAction(name, self.interview_menu, checkable=True)
+            action.setChecked(interview_id == context.current.id)
+            action.triggered.connect(lambda _c=False, key=interview_id: self.switch_interview(key))
+            group.addAction(action)
+            self.interview_menu.addAction(action)
+        self.interview_menu.addSeparator()
+        new = self.interview_menu.addAction(self.tr_("new_interview"))
+        new.triggered.connect(self._new_interview)
+
+    def switch_interview(self, interview_id: str) -> None:
+        if not self.runtime:
+            return
+        problems = self.runtime.context.switch_interview(interview_id)
+        self.refresh_controls()
+        if self.settings_dialog is not None:
+            self.settings_dialog.refresh()
+        if problems:
+            self.show_error(problems[0])
+
+    def _new_interview(self) -> None:
+        if not self.runtime:
+            return
+        self.runtime.context.new_interview()
+        self.refresh_controls()
+        self.open_settings("vacancy")
 
     def _quick(self, name: str, value: bool) -> None:
         """A menu toggle: saved through the runtime when there is one, else applied locally."""
@@ -542,6 +585,7 @@ class OverlayWindow(QWidget):
         self.act_transcript.setText(self.tr_("transcript"))
         self.act_full.setText(self.tr_("full_answer"))
         self.act_pin.setText(self.tr_("pin"))
+        self.interview_menu_action.setText(self.tr_("interview_menu"))
         self.act_settings.setText(self.tr_("settings"))
         self.act_context.setText(self.tr_("context_menu"))
         self.act_quit.setText(self.tr_("quit"))
@@ -574,7 +618,9 @@ class OverlayWindow(QWidget):
         sources = self.runtime.context.sources() if self.runtime else self.sources
         labels = " · ".join(label for _kind, label in sources)
         hint = f"  ·  {self.tr_('drop_cv')}"
-        self.context.set_full_text(f"{self.tr_('context')}: {labels}{hint}" if labels else hint.lstrip(" ·"))
+        name = self.runtime.context.interview_name() if self.runtime else ""
+        head = f"{name} — {labels}" if name and labels else name or labels
+        self.context.set_full_text(f"{head}{hint}" if head else hint.lstrip(" ·"))
 
     def set_ui_language(self, code: str, manual: bool = False) -> None:
         """Switch the window language. Automatic switches follow the interview language and
@@ -811,6 +857,8 @@ class OverlayWindow(QWidget):
             else:
                 title = self.tr_("waiting")
                 hint = self.tr_("waiting_hint", ask=f"{self.tr_('ask')} ({KEYS['ask']})")
+                if self.runtime and not self.runtime.context.brief.job_description:
+                    hint += "  " + self.tr_("no_vacancy_hint")
             self.answer.setHtml(
                 f'<p style="color:{MUTED}; font-size:{px(16)}px">{html.escape(title)}<br>'
                 f'<span style="font-size:{px(13)}px">{html.escape(hint)}</span></p>'

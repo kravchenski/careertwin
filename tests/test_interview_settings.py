@@ -150,19 +150,19 @@ def test_documents_can_be_toggled_retyped_and_removed(home):
     assert item.kind == "about" and item.enabled
     controller.update_document(item.path, kind="cv", enabled=False)
     assert controller.brief.documents[0].kind == "cv" and "CV THE EMPLOYER" not in controller.brief.render()
-    saved = Library.load().documents[0]
+    saved = Library.load().current.documents[0]
     assert (saved.kind, saved.enabled) == ("cv", False)
     controller.update_document(item.path, enabled=True)
     assert "CV THE EMPLOYER HAS READ" in controller.brief.render()
     controller.remove_document(item.path)
     assert controller.items() == [] and not (Library.documents_dir() / "notes.txt").exists()
-    assert Library.load().documents == []
+    assert Library.load().current.documents == []
 
 
 def test_bad_files_are_reported_not_attached(home):
     _, controller = make_controller(home)
     errors = controller.add_documents([str(cv(home, "tiny.txt", "hi")), str(home / "missing.pdf")])
-    assert len(errors) == 2 and controller.items() == [] and Library.load().documents == []
+    assert len(errors) == 2 and controller.items() == [] and Library.load().current.documents == []
 
 
 def test_about_is_edited_and_saved_to_the_file(home):
@@ -195,7 +195,7 @@ def test_vacancy_from_the_pipeline_brings_its_sent_cv(home, monkeypatch):
     assert controller.vacancy_label() == "Python Developer at Example"
     assert [doc.name for doc in brief.documents] == ["sent_cv.txt"]
     controller.clear_vacancy()
-    assert controller.vacancy_label() == "" and Library.load().vacancy == {}
+    assert controller.vacancy_label() == "" and Library.load().current.vacancy == {}
 
 
 # ---- session: audio and speech model can change while it runs ---------------------------
@@ -409,3 +409,101 @@ def test_reset_restores_every_default(stack):
     stack.reset()
     assert stack.settings == InterviewSettings() and stack.coach.style == "standard"
     assert stack.session.language.current is None
+
+
+# ---- one context per interview -----------------------------------------------------------
+
+
+def test_an_old_flat_library_becomes_the_first_interview(home):
+    Library.path().parent.mkdir(parents=True)
+    Library.path().write_text(json.dumps({
+        "documents": [{"path": str(cv(home)), "kind": "cv", "enabled": True}],
+        "notes": "old notes",
+        "vacancy": {"type": "text", "title": "Dev", "company": "Acme", "text": "Python role"},
+    }))
+    library = Library.load()
+    assert len(library.interviews) == 1 and library.current.name == "Interview 1"
+    assert library.current.notes == "old notes" and library.current.vacancy["company"] == "Acme"
+    brief = InterviewBrief.load(allow_empty=True)
+    assert ContextController(brief, library).restore() == []
+    assert brief.job_title == "Dev" and [d.name for d in brief.documents] == ["Alex_CV.txt"]
+
+
+def test_each_interview_keeps_its_own_vacancy_cv_and_notes(home):
+    brief, controller = make_controller(home)
+    controller.add_documents([str(cv(home, "CV_python.txt"))])
+    controller.set_vacancy_text("Python role with FastAPI", title="Python Developer", company="Acme")
+    controller.set_notes("Ask about remote work")
+    assert controller.interview_name() == "Python Developer at Acme"
+    first_id = controller.current.id
+
+    assert controller.new_interview("Java at Beta") == []
+    assert brief.documents == [] and brief.job_description == "" and brief.notes == ""
+    assert controller.interview_name() == "Java at Beta"
+    controller.add_documents([str(cv(home, "CV_java.txt", CV_TEXT + " Java Spring Boot."))])
+    controller.set_vacancy_text("Java role with Spring", title="Java Developer", company="Beta")
+    assert controller.interview_name() == "Java at Beta"
+    assert "Spring" in brief.render() and "FastAPI" not in brief.render().split("VACANCY")[1]
+
+    assert controller.switch_interview(first_id) == []
+    assert [d.name for d in brief.documents] == ["CV_python.txt"] and brief.notes == "Ask about remote work"
+    assert brief.job_title == "Python Developer"
+
+    fresh = InterviewBrief.load(allow_empty=True)
+    ContextController(fresh, Library.load()).restore()
+    assert fresh.company == "Acme" and [d.name for d in fresh.documents] == ["CV_python.txt"]
+    assert Library.load().active == first_id and len(Library.load().interviews) == 2
+    with pytest.raises(KeyError):
+        controller.switch_interview("nope")
+
+
+def test_renaming_and_deleting_interviews(home):
+    _, controller = make_controller(home)
+    controller.rename_interview("  EPAM Python  ")
+    controller.set_vacancy_text("Role text", title="Other", company="Corp")
+    assert controller.interview_name() == "EPAM Python"
+    controller.new_interview()
+    assert controller.interview_name() == "Interview 2"
+    controller.add_documents([str(cv(home, "only_here.txt"))])
+    stored = Library.documents_dir() / "only_here.txt"
+    assert stored.exists()
+    controller.delete_interview()
+    assert controller.interview_name() == "EPAM Python" and not stored.exists()
+    controller.delete_interview()
+    assert len(controller.interviews()) == 1 and controller.interview_name() == "Interview 1"
+    assert controller.brief.documents == [] and controller.brief.job_description == ""
+
+
+def test_a_file_shared_by_two_interviews_survives_one_removal(home):
+    _, controller = make_controller(home)
+    source = cv(home, "shared.txt")
+    controller.add_documents([str(source)])
+    stored = Library.documents_dir() / "shared.txt"
+    controller.new_interview("Second")
+    controller.add_documents([str(source)])
+    controller.remove_document(str(stored.resolve()))
+    assert stored.exists()
+    controller.switch_interview(controller.interviews()[0][0])
+    assert [d.name for d in controller.brief.documents] == ["shared.txt"]
+    assert stored.exists()
+    controller.delete_interview()
+    assert not stored.exists()
+
+
+def test_pipeline_vacancy_registers_its_sent_cv_with_the_interview(home, monkeypatch):
+    from careertwin.automation.models import Vacancy
+    from careertwin.automation.store import Store
+
+    monkeypatch.setattr(db, "DB_PATH", home / "pipeline.db")
+    store = Store()
+    store.initialize()
+    job = store.add(Vacancy(url="https://example.com/jobs/9", title="Python Developer", company="Example"))
+    store.update(job["id"], package={"cv_path": str(cv(home, "sent_cv.txt"))})
+    brief, controller = make_controller(home)
+    controller.set_vacancy_job(job["id"])
+    assert controller.interview_name() == "Python Developer at Example"
+    sent = controller.items()[0]
+    controller.update_document(sent.path, enabled=False)
+    fresh = InterviewBrief.load(allow_empty=True)
+    ContextController(fresh, Library.load()).restore()
+    assert [(d.name, d.enabled) for d in fresh.documents] == [("sent_cv.txt", False)]
