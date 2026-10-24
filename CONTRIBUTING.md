@@ -30,14 +30,20 @@ make docker    # backend + SearXNG in containers
 
 ## Releases
 
-Pushing a tag builds the portable Windows zip, a Windows setup program (`.exe`, Inno Setup, built on a Windows runner) and a macOS disk image (`.dmg`, built on a macOS runner), and attaches them to a GitHub release together with `SHA256SUMS.txt`. Before publishing, the workflow installs the setup on its Windows machine, imports the packages and draws the window from the installed program, then uninstalls it; on the macOS machine it mounts the dmg, checks the signature and does the same from the app inside:
+Releases are automatic. Every push to `master` runs *Auto release* (`.github/workflows/autorelease.yml`), which reads the commit titles since the last `vX.Y.Z` tag with `scripts/next_release.py`:
 
-```bash
-# set version in pyproject.toml to 0.2.0 and merge it, then:
-git tag v0.2.0 && git push origin v0.2.0
-```
+| Since the last release | Result |
+|---|---|
+| a `feat:` commit | minor release (`0.1.2` → `0.2.0`) |
+| only `fix:` or `perf:` | patch release (`0.1.2` → `0.1.3`) |
+| a breaking change (`feat!:`, or `BREAKING CHANGE:` in the body) | minor while the major version is 0, major after |
+| only `docs:`, `chore:`, `test:`, `ci:`, `style:`, `refactor:`, `build:` | no release |
 
-The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release. To get the files without releasing, run *Release* by hand from the Actions tab and download the artifacts `windows-zip`, `windows-setup` and `macos-dmg` (kept for 14 days). A change to `packaging/` or the build scripts runs the same build on a pull request without publishing. Locally, `make windows` makes the zip and `./scripts/build_macos.sh` the Mac app and dmg (on a Mac; `SKIP_NATIVE=1` stops before the icon, signing and dmg, which only macOS can do). Neither installer is signed, which is why Windows and macOS warn on the first start.
+When there is something to release the workflow writes the version into `pyproject.toml` and `uv.lock` in a `chore: release vX.Y.Z` commit, tags it and starts *Release* on the tag. Run `python3 scripts/next_release.py` to see what the next push would do (it changes nothing without `--apply`). To skip one release put `[skip release]` in a commit message; to stop them altogether set the repository variable `AUTO_RELEASE` to `false` (Settings → Secrets and variables → Actions → Variables). Raising the version in `pyproject.toml` by hand and merging it also releases exactly that version. The workflow pushes the version commit to `master` with the workflow token, so it needs a `master` that the token may push to (a branch protection rule must let GitHub Actions bypass it).
+
+*Release* builds the portable Windows zip, a Windows setup program (`.exe`, Inno Setup, built on a Windows runner) and a macOS disk image (`.dmg`, built on a macOS runner), and attaches them to a GitHub release together with `SHA256SUMS.txt`. Before publishing, it installs the setup on its Windows machine, imports the packages and draws the window from the installed program, then uninstalls it; on the macOS machine it mounts the dmg, checks the signature and does the same from the app inside. Each build takes about ten minutes and the macOS minutes cost ten times as much on a private repository, so a flood of `fix:` commits is a flood of releases: batch them, or use `[skip release]`.
+
+You can still release by hand: set the version in `pyproject.toml`, merge it, then `git tag v0.2.0 && git push origin v0.2.0`. The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release and is never the base of an automatic version. To get the files without releasing, run *Release* by hand from the Actions tab and download the artifacts `windows-zip`, `windows-setup` and `macos-dmg` (kept for 14 days). A change to `packaging/` or the build scripts runs the same build on a pull request without publishing. Locally, `make windows` makes the zip and `./scripts/build_macos.sh` the Mac app and dmg (on a Mac; `SKIP_NATIVE=1` stops before the icon, signing and dmg, which only macOS can do). Neither installer is signed, which is why Windows and macOS warn on the first start.
 
 ## Project Structure
 

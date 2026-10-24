@@ -1,0 +1,62 @@
+name: Auto release
+
+# Every push to master that carries a feat:, fix: or perf: commit since the last release becomes a release:
+# the version is chosen from the commit titles (scripts/next_release.py), written into pyproject.toml and
+# uv.lock in a "chore: release vX.Y.Z" commit, tagged, and the Release workflow is started on that tag. That
+# workflow builds the Windows zip and setup program and the macOS dmg, checks each one and publishes them.
+#
+# docs:, chore:, test:, ci:, style:, refactor: and build: commits alone make no release; put [skip release] in a
+# commit message to skip one, or set the repository variable AUTO_RELEASE to false to stop them altogether.
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Decide, tag, build
+    permissions:
+      contents: write  # the version commit and the tag
+      actions: write   # to start Release: a push made with the workflow token starts no workflow by itself
+    if: "vars.AUTO_RELEASE != 'false' && !startsWith(github.event.head_commit.message, 'chore: release v')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0  # the tags and the whole history are what the decision reads
+
+      - name: Decide the version
+        id: next
+        run: python3 scripts/next_release.py --apply | tee -a "$GITHUB_OUTPUT"
+
+      - name: Commit the version, tag it and start the build
+        if: steps.next.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.next.outputs.version }}
+          REASON: ${{ steps.next.outputs.reason }}
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git commit -am "chore: release v$VERSION"
+            git push origin HEAD:master
+          fi
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          gh workflow run release.yml --ref "v$VERSION"
+          echo "Release v$VERSION started ($REASON). Follow it in Actions -> Release." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Nothing to release
+        if: steps.next.outputs.version == ''
+        env:
+          REASON: ${{ steps.next.outputs.reason }}
+        run: |
+          echo "No release: $REASON" >> "$GITHUB_STEP_SUMMARY"
