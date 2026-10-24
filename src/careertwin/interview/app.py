@@ -19,6 +19,7 @@ from careertwin.interview.audio import (
 )
 from careertwin.interview.brief import BriefError, InterviewBrief
 from careertwin.interview.coach import StreamingCoach, gateway_url, model_name
+from careertwin.interview import runlog
 from careertwin.interview.control import ControlServer
 from careertwin.interview.languages import normalize
 from careertwin.interview.library import ContextController, Library
@@ -236,6 +237,10 @@ def main(argv: list[str] | None = None) -> None:
     window.show()
     if problems:
         bridge.error.emit(problems[0])
+    runlog.log(
+        f"started: {sys.platform}, screenshot tools {available_tools()}, model {settings.model or 'default'}, "
+        f"screenshot model {settings.vision_model or 'same'}"
+    )
     server = ControlServer(bridge.remote.emit)
     if not server.start():
         bridge.error.emit(f"{server.error}; the screenshot key works only while this window has the focus")

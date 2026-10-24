@@ -21,6 +21,14 @@ from careertwin.graph.schema import (
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
+@pytest.fixture(autouse=True)
+def private_run_log(tmp_path, monkeypatch):
+    """No test writes into the real interview log (it sits next to the user's own data)."""
+    from careertwin.interview import runlog
+
+    monkeypatch.setattr(runlog, "path", lambda: tmp_path / "run-log" / "interview.log")
+
+
 @pytest.fixture
 def sample_profile() -> Profile:
     return Profile(

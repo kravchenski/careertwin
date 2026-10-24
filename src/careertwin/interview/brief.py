@@ -245,7 +245,16 @@ def _skill_terms(candidate: str) -> list[str]:
     if not match:
         return []
     terms: list[str] = []
-    for line in match[1].splitlines():
+    lines = match[1].splitlines()
+    for number, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            separator = all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
+            before_separator = number + 1 < len(lines) and re.fullmatch(r"\|[\s:|-]+\|?", lines[number + 1].strip())
+            if separator or before_separator:
+                continue  # the rule and the header row of a Markdown table
+            line = ", ".join(cells[1:]) if len(cells) > 1 else line  # the first cell names a level or a group
         line = line.split(":", 1)[-1]
         for part in re.split(r"[,;()|]", line):
             term = part.strip(" -*\t.")

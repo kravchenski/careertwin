@@ -174,13 +174,16 @@ Code is shown as code: in a shaded block, with its indentation, long lines wrapp
 `Ctrl ⇧ ↵` only works while the interview window has the keyboard focus, and during a call the focus is on the page with the task. Two ways to press it from there:
 
 - **Windows:** `Ctrl+Shift+Enter` is registered for the whole system when the window starts, so it works in any program (if another program already owns it, the window says so and the button still works).
-- **Linux:** bind a key in your compositor to `careertwin-interview-ctl screenshot` (`careertwin-interview-ctl ask` answers the last question the same way). In niri:
+- **Linux:** bind a key in your compositor to `careertwin-interview-ctl screenshot` (`careertwin-interview-ctl ask` answers the last question the same way). Use the key written on the Screenshot button, `Ctrl+Shift+Enter`, so the hint on the screen is true. In niri (a file of its own, included from `config.kdl`; use the full path to the command if `~/.local/bin` is not on niri's `PATH`):
 
   ```kdl
   binds {
-      Mod+Shift+Return { spawn "careertwin-interview-ctl" "screenshot"; }
+      Ctrl+Shift+Return { spawn "careertwin-interview-ctl" "screenshot"; }
+      Ctrl+Shift+KP_Enter { spawn "careertwin-interview-ctl" "screenshot"; }
   }
   ```
+
+  That key then belongs to the compositor everywhere, so a program that uses `Ctrl+Shift+Enter` for itself no longer gets it.
 
   Under niri the command captures only the monitor that has the focus, so a task shown on one monitor is sent without the other half of a dual-monitor desktop.
 
@@ -262,6 +265,8 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
   listens to. *Automatic* (the default) follows the output that is playing, so plugging in a headset
   or starting the call on another output is picked up within a few seconds. If it still hears
   nothing, pin the right output in Settings → Audio (*Refresh* after joining a call).
+- **Something failed:** the reason is written out in red above the answer (the status dots are too narrow for it), and every screenshot step and error is kept in `data/interview/interview.log`, because the launcher starts the program without a console. An orange line with scissors means the model ran out of room and the answer stops early: ask again, or pick a model with longer answers.
+- **The screenshot key does nothing in other windows:** `Ctrl+Shift+Enter` works only inside the interview window until the compositor binds it (see *Answering the screen fast*). `careertwin-interview-ctl screenshot` in a terminal tells you whether the window is running.
 - **Screenshot is greyed out:** install `grim` (Wayland) or `spectacle`, or `maim`/`scrot` on X11,
   and check Settings → General.
 - **A document is refused:** the PDF has no text layer. Export a text PDF or attach DOCX.
