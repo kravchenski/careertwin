@@ -311,3 +311,41 @@ def test_definition_questions_get_an_explanation_not_a_greeting(about):
     assert "INTERVIEW LANGUAGE: Russian" in prompt and "Interviewer: hi" in prompt
     assert "Answer ONLY the question asked now" in SYSTEM and "never repeat an earlier greeting" in SYSTEM
     assert "pytohn" in SYSTEM and "No greeting, no self-introduction" in SYSTEM
+
+
+def test_prepare_parsers_accept_good_json_and_reject_junk():
+    import pytest
+
+    from careertwin.interview.prepare import PrepareError, parse_analysis, parse_questions
+
+    bank = parse_questions('{"questions": [{"question": " Why? ", "kind": "motivation", "outline": ["a"]}, {"x": 1}]}', 5)
+    assert bank == [{"question": "Why?", "kind": "motivation", "outline": ["a"]}]
+    for junk in ("", "not json", '{"questions": []}'):
+        with pytest.raises(PrepareError):
+            parse_questions(junk, 5)
+    review = parse_analysis('{"summary": "ok", "gaps": [{"gap": "K8s", "how_to_address": "be honest"}, {"nope": 1}]}')
+    assert review["gaps"] == [{"gap": "K8s", "how_to_address": "be honest"}] and review["strengths"] == []
+    with pytest.raises(PrepareError):
+        parse_analysis('{"strengths": ["x"]}')
+
+
+def test_coach_complete_uses_the_in_app_gateway_settings(about):
+    seen = {}
+
+    def handler(request):
+        seen.update(url=str(request.url), auth=request.headers.get("authorization"), body=json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "hello"}}]})
+
+    coach = StreamingCoach(
+        InterviewBrief.load(), url="http://gw:9/", api_key="k", model="qwen-chat",
+        transport=httpx.MockTransport(handler),
+    )
+    assert coach.complete("system", "prompt", max_tokens=50) == "hello"
+    assert seen["url"] == "http://gw:9/v1/chat/completions" and seen["auth"] == "Bearer k"
+    assert seen["body"]["model"] == "qwen-chat" and seen["body"]["max_tokens"] == 50
+    from careertwin.interview.coach import CoachError
+
+    for response in (httpx.Response(503, text="no"), httpx.Response(200, json={"choices": [{"message": {"content": " "}}]}), httpx.Response(200, text="<html>")):
+        bad = StreamingCoach(InterviewBrief.load(), transport=httpx.MockTransport(lambda r, resp=response: resp))
+        with pytest.raises(CoachError):
+            bad.complete("s", "p")

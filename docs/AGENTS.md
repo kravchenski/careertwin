@@ -82,7 +82,7 @@ so any OpenAI-compatible client can use the same tools.
 | `process_vacancy` | local | Queue `rank`, `prepare`, `fill` or `verify` |
 | `answer_question` | local | Save the candidate's answer to a form question |
 | `record_outcome` | local | Interview, offer, hired, rejected, withdrawn |
-| `prepare_interview_questions`, `suggest_interview_answer` | no | Practice questions and grounded answers for a booked interview (see [INTERVIEW.md](INTERVIEW.md)) |
+| `prepare_interview_questions`, `suggest_interview_answer`, `review_cv_for_vacancy` | no | Practice questions, grounded answers and a CV-versus-vacancy review for a booked interview (see [INTERVIEW.md](INTERVIEW.md)) |
 | `submit_application` | **employer** | Press submit on a prepared form |
 
 ## Safety

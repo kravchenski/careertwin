@@ -59,6 +59,7 @@ it reads.
 | Tab | What you set |
 |---|---|
 | **Interview picker** (above the tabs) | Switch, create, rename or delete interviews. |
+| **Prepare** | Before the call. *Question bank* lists the questions this interviewer is likely to ask for the active interview, each with first-person lines to say: definitions are explained, and where you lack experience the first line says so plainly and the rest bridges to what you did. *Review my CV for this vacancy* compares the CV with the vacancy: a summary, the real strengths to lead with, gaps with an honest way to address each, the questions those gaps invite, and concrete fixes to the CV text. Results are kept per interview while the window is open. |
 | **Documents** | Add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window. Mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it. Files are copied into `data/interview/documents/`, so moving the original does no harm. A blank or scanned PDF is refused with a reason. |
 | **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
@@ -157,9 +158,11 @@ through XWayland where the hint is honoured.
 
 ## Practice before the call
 
-The same coach is available to agents and over HTTP:
+The Prepare tab does this in the window. The same coach is available to agents and over HTTP:
 
 ```bash
+curl -s localhost:8000/v1/interview/cv-review -H 'content-type: application/json' \
+  -d '{"job_id": "<vacancy id>", "language": "en"}'   # needs the vacancy's prepared CV
 curl -s localhost:8000/v1/interview/practice -H 'content-type: application/json' \
   -d '{"job_id": "<vacancy id>", "count": 8, "language": "ru"}'
 curl -s localhost:8000/v1/interview/suggest -H 'content-type: application/json' \

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from careertwin.interview.brief import BriefError, InterviewBrief
-from careertwin.interview.coach import CoachError, practice_questions, suggest
+from careertwin.interview.coach import CoachError, cv_analysis, practice_questions, suggest
 from careertwin.interview.languages import normalize
 from careertwin.interview.questions import classify, detect_language
 
@@ -32,6 +32,12 @@ class PracticeRequest(BaseModel):
     count: int = Field(default=8, ge=3, le=15)
     focus: str = Field(default="", max_length=200)
     language: str | None = Field(default=None, max_length=20, description="Interview language, e.g. en, ru, pl")
+
+
+class ReviewRequest(BaseModel):
+    job_id: str = Field(max_length=24, description="Pipeline vacancy id; its prepared CV is reviewed")
+    username: str = Field(default="default", min_length=1, max_length=64)
+    language: str | None = Field(default=None, max_length=20, description="Language of the review")
 
 
 def _brief(username: str, job_id: str | None, notes: str = "") -> InterviewBrief:
@@ -69,3 +75,15 @@ async def practice(request: PracticeRequest) -> dict[str, Any]:
     except CoachError as exc:
         raise HTTPException(502, str(exc)) from exc
     return {"questions": items}
+
+
+@router.post("/cv-review")
+async def review_cv(request: ReviewRequest) -> dict[str, Any]:
+    """Compare the CV prepared for a vacancy with the vacancy: strengths, honest gaps, CV fixes."""
+    brief = _brief(request.username, request.job_id)
+    if not any(doc.kind == "cv" for doc in brief.documents):
+        raise HTTPException(422, "This vacancy has no prepared CV yet; run prepare on it first")
+    try:
+        return await cv_analysis(brief, normalize(request.language))
+    except CoachError as exc:
+        raise HTTPException(502, str(exc)) from exc

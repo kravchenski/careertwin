@@ -507,3 +507,17 @@ def test_pipeline_vacancy_registers_its_sent_cv_with_the_interview(home, monkeyp
     fresh = InterviewBrief.load(allow_empty=True)
     ContextController(fresh, Library.load()).restore()
     assert [(d.name, d.enabled) for d in fresh.documents] == [("sent_cv.txt", False)]
+
+
+def test_prepare_retries_once_on_broken_json_then_gives_up(stack, monkeypatch):
+    from careertwin.interview.prepare import PrepareError
+
+    good = '{"questions": [{"question": "Why us?", "kind": "motivation", "outline": ["a"]}]}'
+    replies = iter(["{not json", good])
+    monkeypatch.setattr(stack.coach, "complete", lambda *a, **k: next(replies))
+    assert stack.question_bank(3)[0]["question"] == "Why us?"
+    calls = []
+    monkeypatch.setattr(stack.coach, "complete", lambda *a, **k: calls.append(1) or "nope")
+    with pytest.raises(PrepareError):
+        stack.analyze_cv()
+    assert len(calls) == 2

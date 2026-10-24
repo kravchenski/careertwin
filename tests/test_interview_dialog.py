@@ -94,7 +94,7 @@ def test_dialog_opens_on_the_requested_tab(gui):
     gui.window.open_settings("screenshot")
     assert gui.dialog.tabs.tabText(gui.dialog.tabs.currentIndex()) == "Screenshot"
     assert [gui.dialog.tabs.tabText(i) for i in range(gui.dialog.tabs.count())] == [
-        "Documents", "Vacancy", "About me", "Language", "Audio && speech",
+        "Documents", "Vacancy", "Prepare", "About me", "Language", "Audio && speech",
         "AI model", "Screenshot", "Window",
     ]
 
@@ -335,3 +335,97 @@ def test_the_window_menu_switches_interviews(gui):
     assert gui.context.current.id == first and gui.window.context.full.startswith("First")
     gui.window._new_interview()
     assert gui.context.interview_name().startswith("Interview") and gui.dialog.tabs.currentIndex() == 1
+
+
+BANK = (
+    '{"questions": [{"question": "What is FastAPI?", "kind": "definition", '
+    '"outline": ["It is a **Python** web framework.", "I built the order API with it."]}, '
+    '{"question": "Do you know Kubernetes?", "kind": "technical", '
+    '"outline": ["I have not used it in production."]}]}'
+)
+REVIEW = (
+    '{"summary": "Strong backend fit.", "strengths": ["FastAPI at Northwind"], '
+    '"gaps": [{"gap": "Kubernetes", "how_to_address": "Say it was coursework only."}], '
+    '"likely_questions": ["Have you run Kubernetes?"], "cv_fixes": ["Add the p95 latency story."]}'
+)
+
+
+def wait_until(gui, condition, rounds=60):
+    import time
+
+    for _ in range(rounds):
+        gui.process()
+        if condition():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_prepare_tab_builds_a_question_bank_and_reviews_the_cv(gui, monkeypatch):
+    calls = []
+
+    def fake_complete(system, prompt, **kwargs):
+        calls.append((system, prompt))
+        return BANK if "questions" in system.split("Reply with JSON only:")[-1][:40] else REVIEW
+
+    monkeypatch.setattr(gui.runtime.coach, "complete", fake_complete)
+    gui.dialog.show_tab("prepare")
+    gui.dialog.add_files([gui.file("Alex_CV.txt")])
+    gui.dialog.vacancy_text.setPlainText("Senior Python role using FastAPI")
+    gui.dialog._use_text()
+    gui.runtime.update("language", "ru")
+    gui.dialog.bank_count.setValue(5)
+    gui.dialog.bank_focus.setText("system design")
+    gui.dialog.bank_build.click()
+    assert wait_until(gui, lambda: "What is FastAPI?" in gui.dialog.prepare_view.toPlainText())
+    system, prompt = calls[0]
+    assert "Write 5 questions in Russian" in prompt and "Focus on: system design" in prompt
+    assert "Senior Python role" in prompt and "Northwind" in prompt
+    text = gui.dialog.prepare_view.toPlainText()
+    assert "It is a Python web framework." in text and "**" not in text
+
+    gui.dialog.cv_review.click()
+    assert wait_until(gui, lambda: "Strong backend fit." in gui.dialog.prepare_view.toPlainText())
+    text = gui.dialog.prepare_view.toPlainText()
+    assert "Kubernetes" in text and "Say it was coursework only." in text and "Add the p95 latency story." in text
+    assert "What is FastAPI?" in text
+    assert "Review the CV against the vacancy. Write in Russian." in calls[1][1]
+
+
+def test_prepare_results_belong_to_their_interview(gui, monkeypatch):
+    monkeypatch.setattr(gui.runtime.coach, "complete", lambda system, prompt, **k: BANK)
+    gui.dialog.add_files([gui.file("Alex_CV.txt")])
+    gui.dialog.bank_build.click()
+    assert wait_until(gui, lambda: "What is FastAPI?" in gui.dialog.prepare_view.toPlainText())
+    gui.context.new_interview("Other")
+    gui.dialog.refresh()
+    assert "What is FastAPI?" not in gui.dialog.prepare_view.toPlainText()
+    gui.context.switch_interview(gui.context.interviews()[0][0])
+    gui.dialog.refresh()
+    assert "What is FastAPI?" in gui.dialog.prepare_view.toPlainText()
+
+
+def test_prepare_errors_are_shown(gui, monkeypatch):
+    from careertwin.interview.coach import CoachError
+
+    def boom(system, prompt, **kwargs):
+        raise CoachError("Switchyard is not reachable")
+
+    monkeypatch.setattr(gui.runtime.coach, "complete", boom)
+    gui.dialog.add_files([gui.file("Alex_CV.txt")])
+    gui.dialog.cv_review.click()
+    assert wait_until(gui, lambda: gui.dialog.status.objectName() == "error")
+    assert "not reachable" in gui.dialog.status.text()
+
+
+def test_prepare_needs_some_context_first(tmp_path, monkeypatch):
+    stack = Gui(tmp_path, monkeypatch, about="")
+    try:
+        calls = []
+        monkeypatch.setattr(stack.runtime.coach, "complete", lambda *a, **k: calls.append(1) or BANK)
+        stack.dialog.bank_build.click()
+        stack.dialog.cv_review.click()
+        assert stack.dialog.status.objectName() == "error" and "Add your CV" in stack.dialog.status.text()
+        assert calls == []
+    finally:
+        stack.window.close()

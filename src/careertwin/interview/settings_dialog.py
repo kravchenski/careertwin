@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import itertools
 import threading
 from collections.abc import Callable
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QTabWidget,
+    QTextBrowser,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -74,6 +76,15 @@ STRINGS = {
         "opacity": "Opacity", "font_scale": "Text size", "save_transcripts": "Save transcripts to data/interviews",
         "reset": "Reset all settings", "reset_ask": "Restore every setting to its default?",
         "bad_value": "Not saved: {error}", "close": "Close", "pick_files": "Choose documents",
+        "prepare": "Prepare",
+        "prepare_intro": "Get ready before the call. The question bank lists what this interviewer is likely to ask, with first-person lines to say. The CV review compares your CV with the vacancy.",
+        "bank_count": "Questions", "bank_focus": "Focus", "bank_focus_hint": "optional: Python, system design, behavioral…",
+        "bank_build": "Build question bank", "cv_review": "Review my CV for this vacancy",
+        "working": "Working…", "prepare_empty": "Nothing yet. Build the bank or review your CV.",
+        "bank_title": "Question bank", "review_title": "CV review", "review_summary": "Summary",
+        "review_strengths": "Lead with", "review_gaps": "Gaps and how to address them",
+        "review_questions": "Questions the gaps invite", "review_fixes": "Fixes to the CV",
+        "need_context": "Add your CV or write about yourself first.",
         "interview": "Interview", "new_interview": "New", "rename_interview": "Rename",
         "delete_interview": "Delete", "interview_name": "Interview name",
         "interview_hint": "Each interview keeps its own vacancy, CV and notes. ABOUT.md is shared.",
@@ -115,6 +126,15 @@ STRINGS = {
         "opacity": "Прозрачность", "font_scale": "Размер текста", "save_transcripts": "Сохранять расшифровки в data/interviews",
         "reset": "Сбросить все настройки", "reset_ask": "Вернуть все настройки по умолчанию?",
         "bad_value": "Не сохранено: {error}", "close": "Закрыть", "pick_files": "Выберите документы",
+        "prepare": "Подготовка",
+        "prepare_intro": "Подготовьтесь до звонка. Банк вопросов — что вас, скорее всего, спросят, с готовыми строками от первого лица. Разбор резюме сравнивает ваше резюме с вакансией.",
+        "bank_count": "Вопросов", "bank_focus": "Акцент", "bank_focus_hint": "по желанию: Python, архитектура, поведенческие…",
+        "bank_build": "Собрать банк вопросов", "cv_review": "Разобрать моё резюме под эту вакансию",
+        "working": "Работаю…", "prepare_empty": "Пока пусто. Соберите банк вопросов или разберите резюме.",
+        "bank_title": "Банк вопросов", "review_title": "Разбор резюме", "review_summary": "Итог",
+        "review_strengths": "С чего начать", "review_gaps": "Пробелы и как о них говорить",
+        "review_questions": "Вопросы, которые вызовут пробелы", "review_fixes": "Правки в резюме",
+        "need_context": "Сначала добавьте резюме или напишите о себе.",
         "interview": "Интервью", "new_interview": "Новое", "rename_interview": "Переименовать",
         "delete_interview": "Удалить", "interview_name": "Название интервью",
         "interview_hint": "У каждого интервью своя вакансия, резюме и заметки. ABOUT.md общий.",
@@ -156,6 +176,15 @@ STRINGS = {
         "opacity": "Przezroczystość", "font_scale": "Rozmiar tekstu", "save_transcripts": "Zapisuj transkrypcje w data/interviews",
         "reset": "Przywróć wszystkie ustawienia", "reset_ask": "Przywrócić domyślne wartości wszystkich ustawień?",
         "bad_value": "Nie zapisano: {error}", "close": "Zamknij", "pick_files": "Wybierz dokumenty",
+        "prepare": "Przygotowanie",
+        "prepare_intro": "Przygotuj się przed rozmową. Bank pytań to to, o co prawdopodobnie zapytają, z gotowymi zdaniami w pierwszej osobie. Przegląd CV porównuje je z ofertą.",
+        "bank_count": "Pytań", "bank_focus": "Nacisk", "bank_focus_hint": "opcjonalnie: Python, architektura, behawioralne…",
+        "bank_build": "Zbuduj bank pytań", "cv_review": "Przejrzyj moje CV pod tę ofertę",
+        "working": "Pracuję…", "prepare_empty": "Na razie pusto. Zbuduj bank pytań albo przejrzyj CV.",
+        "bank_title": "Bank pytań", "review_title": "Przegląd CV", "review_summary": "Podsumowanie",
+        "review_strengths": "Zacznij od", "review_gaps": "Braki i jak o nich mówić",
+        "review_questions": "Pytania, które wywołają braki", "review_fixes": "Poprawki w CV",
+        "need_context": "Najpierw dodaj CV albo napisz o sobie.",
         "interview": "Rozmowa", "new_interview": "Nowa", "rename_interview": "Zmień nazwę",
         "delete_interview": "Usuń", "interview_name": "Nazwa rozmowy",
         "interview_hint": "Każda rozmowa ma własną ofertę, CV i notatki. ABOUT.md jest wspólny.",
@@ -217,7 +246,7 @@ class DocRow(QWidget):
 
 
 class SettingsDialog(QDialog):
-    TABS = ("docs", "vacancy", "about", "language", "audio", "model", "screenshot", "window")
+    TABS = ("docs", "vacancy", "prepare", "about", "language", "audio", "model", "screenshot", "window")
     _finished = Signal(int, object, object)
 
     def __init__(self, window, runtime: Runtime) -> None:
@@ -227,6 +256,7 @@ class SettingsDialog(QDialog):
         self.resize(820, 660)
         self.setStyleSheet(STYLE)
         self._ready = False
+        self.prepared: dict[str, dict] = {}
         self._tasks: dict[int, Callable[[Any, str | None], None]] = {}
         self._ids = itertools.count(1)
         self._finished.connect(self._on_finished)
@@ -262,7 +292,8 @@ class SettingsDialog(QDialog):
         layout.addLayout(footer)
 
         builders = {
-            "docs": self._build_docs, "vacancy": self._build_vacancy, "about": self._build_about,
+            "docs": self._build_docs, "vacancy": self._build_vacancy, "prepare": self._build_prepare,
+            "about": self._build_about,
             "language": self._build_language, "audio": self._build_audio, "model": self._build_model,
             "screenshot": self._build_screenshot, "window": self._build_window,
         }
@@ -531,6 +562,97 @@ class SettingsDialog(QDialog):
     def refresh_vacancy(self) -> None:
         label = self.rt.context.vacancy_label()
         self.vacancy_current.setText(self.t("current", label=label) if label else self.t("no_vacancy"))
+
+    # ---- prepare -----------------------------------------------------------
+
+    def _build_prepare(self, page: QWidget) -> None:
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(18, 16, 18, 16)
+        self.prepare_intro = self._hint()
+        layout.addWidget(self.prepare_intro)
+        row = QHBoxLayout()
+        self.bank_count_label = QLabel()
+        self.bank_count = QSpinBox()
+        self.bank_count.setRange(3, 15)
+        self.bank_count.setValue(10)
+        self.bank_count.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self.bank_focus_label = QLabel()
+        self.bank_focus = QLineEdit()
+        self.bank_build = QPushButton()
+        for widget in (self.bank_count_label, self.bank_count, self.bank_focus_label):
+            row.addWidget(widget)
+        row.addWidget(self.bank_focus, 1)
+        row.addWidget(self.bank_build)
+        layout.addLayout(row)
+        row = QHBoxLayout()
+        self.cv_review = QPushButton()
+        row.addWidget(self.cv_review)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.prepare_view = QTextBrowser()
+        layout.addWidget(self.prepare_view, 1)
+        self.bank_build.clicked.connect(self._build_bank)
+        self.cv_review.clicked.connect(self._review_cv)
+
+    def _prepare_guard(self) -> bool:
+        if self.rt.context.brief.is_empty():
+            self.say(self.t("need_context"), error=True)
+            return False
+        self.say(self.t("working"))
+        return True
+
+    def _build_bank(self) -> None:
+        if not self._prepare_guard():
+            return
+        count, focus = self.bank_count.value(), self.bank_focus.text().strip()
+        key = self.rt.context.current.id
+        self.run(
+            lambda: self.rt.question_bank(count, focus),
+            lambda result, error: self._prepared(key, "bank", result, error),
+        )
+
+    def _review_cv(self) -> None:
+        if not self._prepare_guard():
+            return
+        key = self.rt.context.current.id
+        self.run(
+            self.rt.analyze_cv, lambda result, error: self._prepared(key, "review", result, error)
+        )
+
+    def _prepared(self, key: str, part: str, result: Any, error: str | None) -> None:
+        if error or result is None:
+            self.say(error or "", error=True)
+            return
+        self.prepared.setdefault(key, {})[part] = result
+        self.say(self.t("saved"))
+        self.refresh_prepare()
+
+    def refresh_prepare(self) -> None:
+        results = self.prepared.get(self.rt.context.current.id, {})
+        esc = lambda text: html.escape(str(text)).replace("**", "")  # noqa: E731
+        parts: list[str] = []
+        if review := results.get("review"):
+            parts.append(f"<h2>{esc(self.t('review_title'))}</h2><p>{esc(review['summary'])}</p>")
+            for key, title in (("strengths", "review_strengths"), ("likely_questions", "review_questions"), ("cv_fixes", "review_fixes")):
+                if review[key]:
+                    items = "".join(f"<li>{esc(item)}</li>" for item in review[key])
+                    parts.append(f"<h3>{esc(self.t(title))}</h3><ul>{items}</ul>")
+            if review["gaps"]:
+                items = "".join(
+                    f"<li><b>{esc(gap['gap'])}</b><br>{esc(gap['how_to_address'])}</li>"
+                    for gap in review["gaps"]
+                )
+                parts.append(f"<h3>{esc(self.t('review_gaps'))}</h3><ul>{items}</ul>")
+        if bank := results.get("bank"):
+            parts.append(f"<h2>{esc(self.t('bank_title'))}</h2>")
+            for item in bank:
+                kind = f" <i>({esc(item['kind'])})</i>" if item["kind"] else ""
+                lines = "".join(f"<li>{esc(line)}</li>" for line in item["outline"])
+                parts.append(f"<p><b>{esc(item['question'])}</b>{kind}</p><ul>{lines}</ul>")
+        if parts:
+            self.prepare_view.setHtml("".join(parts))
+        else:
+            self.prepare_view.setHtml(f"<p style='color:gray'>{esc(self.t('prepare_empty'))}</p>")
 
     # ---- about me ----------------------------------------------------------
 
@@ -802,6 +924,7 @@ class SettingsDialog(QDialog):
         self.refresh_interviews()
         self.refresh_docs()
         self.refresh_vacancy()
+        self.refresh_prepare()
         self.refresh_about()
         self.refresh_audio()
         self.refresh_screenshot()
@@ -857,6 +980,12 @@ class SettingsDialog(QDialog):
         self.vacancy_text.setPlaceholderText(self.t("paste_vacancy"))
         self.use_text.setText(self.t("use_text"))
         self.clear_vacancy.setText(self.t("clear"))
+        self.prepare_intro.setText(self.t("prepare_intro"))
+        self.bank_count_label.setText(self.t("bank_count"))
+        self.bank_focus_label.setText(self.t("bank_focus"))
+        self.bank_focus.setPlaceholderText(self.t("bank_focus_hint"))
+        self.bank_build.setText(self.t("bank_build"))
+        self.cv_review.setText(self.t("cv_review"))
         self.notes_label.setText(self.t("notes"))
         self.notes.setPlaceholderText(self.t("notes_hint"))
         self.about_intro.setText(self.t("about_intro"))

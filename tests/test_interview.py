@@ -477,3 +477,35 @@ def test_vocabulary_combines_vacancy_and_skills():
     assert {"Example Corp", "PostgreSQL", "FastAPI", "GitHub Actions", "Kubernetes"} <= set(words)
     assert "BSc" not in words
     assert InterviewBrief(candidate="no skills section").vocabulary() == ""
+
+
+async def test_cv_review_route_and_tool(brief, monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from careertwin import db
+    from careertwin.agentic.registry import get_tool
+    from careertwin.api.app import app
+    from careertwin.automation.models import Vacancy
+    from careertwin.automation.store import Store
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "pipeline.db")
+    store = Store()
+    store.initialize()
+    job = store.add(Vacancy(url="https://example.com/jobs/1", title="Python Developer", company="Example"))
+    seen = []
+
+    async def fake_call_ai(system, user, provider, model, **kwargs):
+        seen.append(user)
+        return json.dumps({"summary": "Good fit.", "strengths": ["FastAPI"], "gaps": [], "likely_questions": [], "cv_fixes": []})
+
+    monkeypatch.setattr("careertwin.interview.coach.call_ai", fake_call_ai)
+    client = TestClient(app)
+    missing = client.post("/v1/interview/cv-review", json={"job_id": job["id"]})
+    assert missing.status_code == 422 and "no prepared CV" in missing.json()["detail"]
+    cv = tmp_path / "sent_cv.txt"
+    cv.write_text("Alex Demo built FastAPI services on PostgreSQL at Northwind Logistics for three years, with Docker deployments and CI in GitHub Actions.")
+    store.update(job["id"], package={"cv_path": str(cv)})
+    reply = client.post("/v1/interview/cv-review", json={"job_id": job["id"], "language": "ru"})
+    assert reply.status_code == 200 and reply.json()["summary"] == "Good fit."
+    assert "Write in Russian" in seen[-1] and "sent_cv.txt" in seen[-1]
+    assert get_tool("review_cv_for_vacancy").parameters["required"] == ["job_id"]

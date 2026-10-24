@@ -9,8 +9,16 @@ from collections.abc import Iterator
 
 import httpx
 
-from careertwin.interview import languages
 from careertwin.interview.brief import InterviewBrief
+from careertwin.interview.prepare import (
+    ANALYSIS_SYSTEM,
+    QUESTIONS_SYSTEM,
+    PrepareError,
+    analysis_prompt,
+    parse_analysis,
+    parse_questions,
+    questions_prompt,
+)
 from careertwin.interview.prompts import (
     SYSTEM,
     Suggestion,
@@ -19,7 +27,7 @@ from careertwin.interview.prompts import (
     user_prompt,
 )
 from careertwin.interview.questions import classify
-from careertwin.llm import call_ai, parse_json_object
+from careertwin.llm import call_ai
 
 
 def model_name() -> str:
@@ -50,38 +58,38 @@ async def suggest(
     return parse_suggestion(text)
 
 
-PRACTICE_SYSTEM = """\
-You prepare a candidate for an interview. From the candidate context and vacancy, write the \
-questions this interviewer is most likely to ask, mixing technical, behavioral and motivation \
-questions. For each give a short outline of an honest answer using ONLY facts in the context; \
-if the context has no support, say so honestly in first person and outline a truthful \
-answer. Reply with JSON only: {"questions": [{"question": str, "kind": str, "outline": [str]}]}.\
-"""
-
-
 async def practice_questions(
     brief: InterviewBrief, count: int = 8, focus: str = "", language: str | None = None
 ) -> list[dict]:
     """Likely questions for the vacancy with answer outlines drawn from the candidate's facts."""
-    prompt = f"{brief.render()}\n\nWrite {count} questions in {languages.name(language)}."
-    if focus:
-        prompt += f" Focus on: {focus}."
     text = await call_ai(
-        PRACTICE_SYSTEM, prompt, "switchyard", model_name(), max_tokens=2000, temperature=0.4
+        QUESTIONS_SYSTEM,
+        questions_prompt(brief, count, focus, language),
+        "switchyard",
+        model_name(),
+        max_tokens=2500,
+        temperature=0.4,
     )
-    data = parse_json_object(text) if text.strip() else None
-    questions = data.get("questions") if isinstance(data, dict) else None
-    if not isinstance(questions, list) or not questions:
-        raise CoachError("The model did not return practice questions. Try again or pick another model.")
-    return [
-        {
-            "question": str(item.get("question", "")).strip(),
-            "kind": str(item.get("kind", "")).strip(),
-            "outline": [str(point) for point in item.get("outline", [])][:6],
-        }
-        for item in questions
-        if isinstance(item, dict) and item.get("question")
-    ][:count]
+    try:
+        return parse_questions(text, count)
+    except PrepareError as exc:
+        raise CoachError(str(exc)) from exc
+
+
+async def cv_analysis(brief: InterviewBrief, language: str | None = None) -> dict:
+    """Review the CV against the vacancy: strengths, honest gaps, likely questions, CV fixes."""
+    text = await call_ai(
+        ANALYSIS_SYSTEM,
+        analysis_prompt(brief, language),
+        "switchyard",
+        model_name(),
+        max_tokens=2500,
+        temperature=0.3,
+    )
+    try:
+        return parse_analysis(text)
+    except PrepareError as exc:
+        raise CoachError(str(exc)) from exc
 
 
 class StreamingCoach:
@@ -103,6 +111,33 @@ class StreamingCoach:
         self.url = url
         self.api_key = api_key
         self.style = style
+
+    def complete(self, system: str, prompt: str, *, max_tokens: int = 2500, temperature: float = 0.3) -> str:
+        """One blocking completion through the configured gateway, model and key."""
+        headers = {}
+        if key := self.api_key or os.getenv("SWITCHYARD_API_KEY"):
+            headers["Authorization"] = f"Bearer {key}"
+        base = (self.url or gateway_url()).rstrip("/")
+        body = {
+            "model": self.model or model_name(),
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        try:
+            with httpx.Client(timeout=httpx.Timeout(180, connect=5), transport=self.transport) as client:
+                response = client.post(f"{base}/v1/chat/completions", json=body, headers=headers)
+        except httpx.HTTPError as exc:
+            raise CoachError(f"Switchyard is not reachable at {base} ({type(exc).__name__})") from exc
+        if response.status_code >= 400:
+            raise CoachError(f"Switchyard returned {response.status_code}: {response.text[:200]}")
+        try:
+            text = response.json()["choices"][0]["message"]["content"] or ""
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise CoachError("Switchyard returned an unreadable answer") from exc
+        if not text.strip():
+            raise CoachError("The model returned no text. Is Switchyard running with a provider?")
+        return text
 
     def stream(
         self,
