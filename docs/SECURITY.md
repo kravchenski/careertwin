@@ -48,6 +48,7 @@ MAIL_PASSWORD=...                    # an APP PASSWORD for IMAP/SMTP, not your m
 | A **hostile line of text** freezes the program (catastrophic regex backtracking) | The redaction, experience and question patterns are bounded, and a spoken question is cut at 2000 characters; each is timed on a 300 000-character hostile input in a separate process | `test_audit_fixes.py` |
 | **Another account** connects to the interview window's control socket | The socket lives in a folder only its owner can enter (checked: owner, mode, not a link), so there is no window between `bind` and `chmod`; the API and the window create every file private by default | `test_audit_fixes.py` |
 | A **repository in a folder you analyse** runs its own hooks when git is called | Git is called with hooks and the file-system monitor switched off and without prompts | `test_audit_fixes.py` |
+| The **MCP server over HTTP** is a second door to the same tools (it holds the API token and runs them with it) | It asks for the same bearer token, the same Host and Origin rules and the same limits as the API, and listens on the loopback only | `test_mcp_security.py` |
 | A **vacancy site is hammered** | One request at a time per host, `robots.txt` respected on career pages, exponential back-off, a batch size | `test_monitor.py` |
 
 ## Everything goes through Switchyard
@@ -73,6 +74,8 @@ private files, and the workflows). Found and fixed:
   `pillow`, `urllib3` and the `certifi` root-store advisory. Upgraded, minimum versions raised, and a test keeps
   them from going back. One is left: `cryptography` 49 (fix in 50), which `pyopenssl` does not yet allow; the
   advisory concerns PKCS#7 decryption, which nothing here uses.
+* **Medium (second pass): the MCP server over HTTP accepted any local caller without a token**, so another account
+  on the machine could run the tools through it. Now behind the API's gate.
 * **Low:** the control socket race, a settings file readable for an instant before `chmod`, git run with the
   repository's own config, an unpinned CI toolchain and a workflow with no `permissions`. All fixed.
 

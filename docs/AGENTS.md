@@ -52,9 +52,10 @@ the CareerTwin MCP server. Replace `/path/to/careertwin`.
 | Agent | Command or config |
 |---|---|
 | Claude Code | `claude mcp add careertwin -- uv run --directory /path/to/careertwin careertwin-mcp` |
+| Over HTTP | `uv run careertwin mcp --transport http`, then `claude mcp add --transport http careertwin http://127.0.0.1:8765/mcp --header "Authorization: Bearer $(cat data/api-token)"`. The same token as the API is required, and the server listens on the loopback only. |
 | Codex | `~/.codex/config.toml`: `[mcp_servers.careertwin]` with `command = "uv"` and `args = ["run", "--directory", "/path/to/careertwin", "careertwin-mcp"]` |
 | OpenCode | `opencode.json`: `"mcp": { "careertwin": { "type": "local", "command": ["uv", "run", "--directory", "/path/to/careertwin", "careertwin-mcp"] } }` |
-| Any HTTP MCP client | `uv run careertwin mcp --transport http --port 8765`, then `http://127.0.0.1:8765/mcp` |
+| Any HTTP MCP client | `uv run careertwin mcp --transport http --port 8765`, then `http://127.0.0.1:8765/mcp` with the header `Authorization: Bearer <contents of data/api-token>` |
 
 The server reads `CAREERTWIN_API_URL` (default `http://127.0.0.1:8000`).
 The HTTP transport binds to localhost; keep it there.
