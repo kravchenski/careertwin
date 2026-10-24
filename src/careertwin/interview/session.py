@@ -348,7 +348,7 @@ class InterviewSession:
                 return
             if self.brief.is_empty():
                 self.cb.on_state("error")
-                self.cb.on_error("No context yet: add your CV or write about yourself in Settings → Context")
+                self.cb.on_error("No context yet: add your CV or write about yourself in Settings → Interview")
                 return
             history = self.log.history()[:-1]
             self.cb.on_state("thinking")

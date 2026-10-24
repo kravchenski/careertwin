@@ -137,7 +137,7 @@ def doctor(args: argparse.Namespace) -> int:
         response = httpx.get(f"{base}/v1/models", timeout=5)
         report(response.status_code < 400, f"AI gateway {base} answers (model {settings.model or model_name()})")
     except httpx.HTTPError:
-        report(False, f"no AI gateway answers at {base}: pick a provider in Settings → AI model")
+        report(False, f"no AI gateway answers at {base}: pick a provider in Settings → AI")
     try:
         brief = InterviewBrief.load(
             username=args.username, job=args.job, notes=args.notes, resumes=args.resume, allow_empty=True

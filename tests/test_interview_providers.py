@@ -57,7 +57,7 @@ def test_no_gateway_is_explained_without_naming_switchyard_only():
             call(make("http://127.0.0.1:3260", handler=refuse))
         message = str(caught.value)
         assert "No AI gateway answers at http://127.0.0.1:3260" in message
-        assert "Settings → AI model" in message and "ConnectError" in message
+        assert "Settings → AI" in message and "ConnectError" in message
 
 
 def test_a_providers_errors_name_it_and_say_what_to_change():

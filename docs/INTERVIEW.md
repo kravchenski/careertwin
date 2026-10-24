@@ -24,7 +24,7 @@ decide what to say.
 ## Speech recognition: Whisper or Deepgram
 
 By default speech is recognised by Whisper on your computer: nothing leaves it, but a computer without a graphics
-card needs a second or two per sentence. *Settings → Audio & speech → Speech recognition → Deepgram* sends each
+card needs a second or two per sentence. *Settings → Audio → Speech recognition → Deepgram* sends each
 sentence of the call (and of your microphone, when it is on) to Deepgram instead, which is quick on any computer.
 That means the voices leave the computer, so check that this is acceptable for the interview. The live captions send
 the growing sentence again every 1.5 s, so the audio Deepgram bills is about three to four times the speech. A wrong
@@ -79,20 +79,17 @@ it reads.
 
 ## Settings
 
-<p align="center"><img src="media/interview-settings.png" alt="The Documents tab of the settings window" width="640"></p>
+<p align="center"><img src="media/interview-settings.png" alt="The Interview tab of the settings window" width="640"></p>
 
 | Tab | What you set |
 |---|---|
 | **Interview picker** (above the tabs) | Switch, create, rename or delete interviews. |
-| **Prepare** | Before the call. *Question bank* lists the questions this interviewer is likely to ask for the active interview, each with first-person lines to say: definitions are explained, and where you lack experience the first line says so plainly and the rest bridges to what you did. *Review my CV for this vacancy* compares the CV with the vacancy: a summary, the real strengths to lead with, gaps with an honest way to address each, the questions those gaps invite, and concrete fixes to the CV text. Results are kept per interview while the window is open. |
-| **Documents** | Add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window. Mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it. Files are copied into `data/interview/documents/`, so moving the original does no harm. A blank or scanned PDF is refused with a reason. |
-| **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
+| **Interview** | One page for the active interview. *CV and documents*: add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window; mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it (files are copied into `data/interview/documents/`; a blank or scanned PDF is refused with a reason). *Vacancy and notes*: pick a vacancy from the application pipeline (the CV prepared for it is attached too) or paste its text or a link, and add notes for this interview. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
-| **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed), answer layout (main answer only, or lines plus the detailed answer) and whether to show the detailed answer. |
-| **Audio & speech** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone, the speech engine and its settings. *Whisper* runs on this computer (model `tiny` to `large-v3-turbo`, device); *Deepgram* is cloud recognition with an API key (also read from `DEEPGRAM_API_KEY`), the model `nova-3` or `nova-2`, and *Test the key*. |
-| **AI model** | The *Provider* (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio, or your own address), its API key and the model; *Load models* lists what the provider offers and *Test connection* checks it. Choosing another provider clears the key and the model, so a key is never sent to the wrong server. Cloud providers receive your CV, ABOUT text and each question. Leave everything empty to use `.env` (`SWITCHYARD_*`) and auto routing on a local Switchyard. |
-| **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
-| **Window** | Keep on top, frameless or framed, opacity, text size, saving transcripts, and *Reset all settings*. |
+| **Practice** | Before the call. *Question bank* lists the questions this interviewer is likely to ask for the active interview, each with first-person lines to say: definitions are explained, and where you lack experience the first line says so plainly and the rest bridges to what you did. *Review my CV for this vacancy* compares the CV with the vacancy: a summary, the real strengths to lead with, gaps with an honest way to address each, the questions those gaps invite, and concrete fixes to the CV text. Results are kept per interview while the window is open. |
+| **Audio** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone and the speech engine. *Whisper* runs on this computer (choose the model, `tiny` to `large-v3-turbo`; it uses the GPU when there is one and falls back to the CPU by itself); *Deepgram* is cloud recognition with an API key (also read from `DEEPGRAM_API_KEY`) and *Test the key*. |
+| **AI** | The *Provider* (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio, or your own address) and the model; *Load models* lists what the provider offers and *Test connection* checks it. A cloud provider also asks for its API key, *Other* for the address. Choosing another provider clears the key and the model, so a key is never sent to the wrong server. Cloud providers receive your CV, ABOUT text and each question. A local Switchyard needs nothing: leave the model on auto. |
+| **General** | *Answers*: interview language (auto-detect or a fixed one), answer style (concise, standard, detailed), answer layout (main answer only, or lines plus the detailed answer) and whether to show the detailed answer. *Window*: window language, keep on top, frameless or framed, opacity, text size, the Screenshot button on or off, saving transcripts, and *Reset all settings*. |
 
 Settings are stored in `data/interview/settings.json` (readable only by you; an API key you type
 here is kept in that file) and your context in `data/interview/context.json`. Command-line flags
@@ -121,7 +118,7 @@ your documents are in. Company names, technologies and job titles are never tran
 
 - *Auto-detect* (default): Whisper detects the language of each utterance and the window settles on
   the majority of the last few, so one stray sentence does not flip it.
-- A fixed language (Settings → Language, or ☰ → *Interview language*) is used for speech
+- A fixed language (Settings → General) is used for speech
   recognition and answers, and can be changed during the call.
 
 The window itself is translated into English, Russian and Polish.
@@ -139,7 +136,7 @@ The window itself is translated into English, Russian and Polish.
 | **Details** `Ctrl D` | Show or hide the detailed answer under the lines (lines layout) |
 | ☰ | Settings, switch interview, transcript, quit |
 
-**Main answer only** (Settings → Language → Answer layout) skips everything else: the model
+**Main answer only** (Settings → General → Answer layout) skips everything else: the model
 writes just one paragraph to read aloud and it starts at once, so it is also the fastest layout.
 
 In the default *lines* layout the first thing you see is the lines to say, with key terms in bold; they stream in within a few
@@ -174,7 +171,7 @@ call audio (sink monitor) ─► 20 ms frames ─► utterance segmenter ─► 
 - **Salary follows your policy** from the Studio. In `auto` mode it never states a number you did
   not choose.
 - **Transcripts** are saved to `data/interviews/` when you close the window (switch off in
-  Settings → Window). Audio is never stored.
+  Settings → General). Audio is never stored.
 
 ## Window managers
 
@@ -216,17 +213,17 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 - **No transcript:** watch the dots; if they stay dark, hover the dots to see which output the app
   listens to. *Automatic* (the default) follows the output that is playing, so plugging in a headset
   or starting the call on another output is picked up within a few seconds. If it still hears
-  nothing, pin the right output in Settings → Audio & speech (*Refresh* after joining a call).
+  nothing, pin the right output in Settings → Audio (*Refresh* after joining a call).
 - **Screenshot is greyed out:** install `grim` (Wayland) or `spectacle`, or `maim`/`scrot` on X11,
-  and check Settings → Screenshot.
+  and check Settings → General.
 - **A document is refused:** the PDF has no text layer. Export a text PDF or attach DOCX.
 - **Speech turns into text slowly:** on a CPU one Whisper pass takes about 0.8 s whatever the length of the
   question, so the delay you feel is the silence wait plus the model. With an NVIDIA GPU the installer adds
   the CUDA 12 libraries (about 1.3 GB; `CAREERTWIN_NO_GPU=1 ./scripts/install.sh` skips them) and Whisper
   runs on the GPU in half precision: on an RTX 4050 a pass dropped from 0.8 s to 0.35 s, and the text of a
-  9-second question was ready about 1 s after the speech ended (1.9 s on the CPU). Settings → Audio & speech → *Device*
-  shows `auto`, `cpu` or `cuda`; if the GPU fails to start the app falls back to the CPU by itself.
-- **Answers are slow:** the model matters most. Settings → AI model → *Load models*; in a test with a
+  9-second question was ready about 1 s after the speech ended (1.9 s on the CPU). The device is `whisper_device` in `data/interview/settings.json`
+  (`auto`, `cpu` or `cuda`); if the GPU fails to start the app falls back to the CPU by itself.
+- **Answers are slow:** the model matters most. Settings → AI → *Load models*; in a test with a
   realistic prompt `groq/openai/gpt-oss-120b` finished in about 1–4 s and `kilo/poolside/laguna-s-2.1:free` showed
   its first words in about 2 s, while `auto` varied from 1 s to 40 s. If the chosen model fails before saying
   anything (rate limit, outage), the request is repeated once on `auto`. Answers also get faster with the

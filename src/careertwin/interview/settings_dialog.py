@@ -1,8 +1,7 @@
-"""The settings window: your documents, vacancy, language, audio, model, screenshots, window."""
+"""The settings window: the interview, you, practice, audio, the AI and the window."""
 
 from __future__ import annotations
 
-import base64
 import html
 import itertools
 import os
@@ -12,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,15 +37,14 @@ from PySide6.QtWidgets import (
 from careertwin.interview import languages
 from careertwin.interview.providers import OTHER, PROVIDERS, provider_for
 from careertwin.interview.runtime import Runtime
-from careertwin.interview.settings import ANSWER_STYLES, DEVICES, WHISPER_MODELS
-from careertwin.interview.stt_deepgram import MODELS as DEEPGRAM_MODELS
+from careertwin.interview.settings import ANSWER_STYLES, WHISPER_MODELS
 from careertwin.interview.stt_deepgram import check_key
 
 STRINGS = {
     "en": {
-        "title": "Settings", "docs": "Documents", "vacancy": "Vacancy", "about": "About me",
-        "language": "Language", "audio": "Audio & speech", "model": "AI model",
-        "screenshot": "Screenshot", "window": "Window",
+        "title": "Settings",
+        "tab_interview": "Interview", "tab_about": "About me", "tab_practice": "Practice", "tab_audio": "Audio", "tab_ai": "AI", "tab_general": "General",
+        "sec_docs": "CV and documents", "sec_vacancy": "Vacancy and notes", "sec_answers": "Answers", "sec_window": "Window",
         "docs_intro": "Files the coach reads before every answer: your CV, a LinkedIn export, a cover letter, a portfolio. PDF, DOCX and text work. You can also drop files on the interview window.",
         "add_files": "Add files…", "kind_cv": "CV (the employer has it)", "kind_about": "About me (extra facts)",
         "no_docs": "No documents yet.", "remove": "Remove", "chars": "{n} characters",
@@ -67,25 +64,21 @@ STRINGS = {
         "listen": "Listen to the call", "call_source": "Call audio", "default_output": "Automatic: follows the output that plays the call", "listening_to": "Listening to: {name}",
         "refresh": "Refresh", "use_mic": "Also transcribe my microphone (use headphones)",
         "mic_source": "Microphone", "default_mic": "Default microphone",
-        "whisper_model": "Speech model", "whisper_device": "Device",
+        "whisper_model": "Speech model",
         "speech_note": "Bigger models are more accurate and slower. A new model downloads on first use.",
         "gateway_url": "Gateway URL", "gateway_key": "API key", "model_id": "Model",
         "provider": "Provider", "provider_other": "Other (own address)",
         "engine": "Speech recognition", "engine_whisper": "Whisper on this computer", "engine_deepgram": "Deepgram (cloud)",
-        "deepgram_key": "Deepgram API key", "deepgram_model": "Deepgram model", "deepgram_test": "Test the key", "deepgram_ok": "Deepgram accepts the key",
+        "deepgram_key": "Deepgram API key", "deepgram_test": "Test the key", "deepgram_ok": "Deepgram accepts the key",
         "deepgram_note": "Deepgram hears the call (and your microphone when it is on): the audio leaves this computer. Live captions send each growing sentence again, so billed audio is about 3–4 times the speech. DEEPGRAM_API_KEY in .env works too.",
         "cloud_note": "{name} gets your CV, your ABOUT text and each question with every request. Enter its API key, load the list of models and choose one.",
         "load_models": "Load models", "test": "Test connection", "models_loaded": "{n} models available",
-        "connected": "Connected: {n} models", "model_note": "Leave the URL, key and model empty to use .env (SWITCHYARD_*) and auto routing.",
-        "shot_enabled": "Enable the Screenshot button", "shot_tool": "Capture tool",
-        "shot_delay": "Wait before capture", "shot_test": "Test capture",
-        "shot_tools": "Installed: {tools}", "shot_none": "No capture tool found. Install grim (Wayland, e.g. niri or sway) or spectacle; maim or scrot on X11.",
-        "shot_ok": "Captured {w}×{h}", "shot_note": "The window turns transparent while the screen is captured. The image goes to the vision model through the gateway.",
+        "connected": "Connected: {n} models", "model_note": "Switchyard runs on this computer and needs no key. Keep the model on auto, or load the list and choose one.",
+        "shot_enabled": "Enable the Screenshot button", "shot_none": "No capture tool found. Install grim (Wayland, e.g. niri or sway) or spectacle; maim or scrot on X11.", "shot_note": "The window turns transparent while the screen is captured. The image goes to the vision model through the gateway.",
         "pinned": "Keep the window on top", "frameless": "Frameless window",
         "opacity": "Opacity", "font_scale": "Text size", "save_transcripts": "Save transcripts to data/interviews",
         "reset": "Reset all settings", "reset_ask": "Restore every setting to its default?",
         "bad_value": "Not saved: {error}", "close": "Close", "pick_files": "Choose documents",
-        "prepare": "Prepare",
         "prepare_intro": "Get ready before the call. The question bank lists what this interviewer is likely to ask, with first-person lines to say. The CV review compares your CV with the vacancy.",
         "bank_count": "Questions", "bank_focus": "Focus", "bank_focus_hint": "optional: Python, system design, behavioral…",
         "bank_build": "Build question bank", "cv_review": "Review my CV for this vacancy",
@@ -100,9 +93,9 @@ STRINGS = {
         "delete_ask": "Delete this interview with its vacancy, notes and documents?",
     },
     "ru": {
-        "title": "Настройки", "docs": "Документы", "vacancy": "Вакансия", "about": "Обо мне",
-        "language": "Язык", "audio": "Звук и речь", "model": "Модель ИИ",
-        "screenshot": "Скриншот", "window": "Окно",
+        "title": "Настройки",
+        "tab_interview": "Интервью", "tab_about": "Обо мне", "tab_practice": "Тренировка", "tab_audio": "Звук", "tab_ai": "ИИ", "tab_general": "Общие",
+        "sec_docs": "Резюме и документы", "sec_vacancy": "Вакансия и заметки", "sec_answers": "Ответы", "sec_window": "Окно",
         "docs_intro": "Файлы, которые ассистент читает перед каждым ответом: резюме, экспорт LinkedIn, сопроводительное письмо, портфолио. Подходят PDF, DOCX и текст. Файлы можно и просто перетащить на окно интервью.",
         "add_files": "Добавить файлы…", "kind_cv": "Резюме (его видел работодатель)", "kind_about": "Обо мне (дополнительные факты)",
         "no_docs": "Документов пока нет.", "remove": "Убрать", "chars": "{n} символов",
@@ -122,25 +115,21 @@ STRINGS = {
         "listen": "Слушать звонок", "call_source": "Звук звонка", "default_output": "Автоматически: следует за выходом, где играет звонок", "listening_to": "Сейчас слушаю: {name}",
         "refresh": "Обновить", "use_mic": "Расшифровывать и мой микрофон (нужны наушники)",
         "mic_source": "Микрофон", "default_mic": "Микрофон по умолчанию",
-        "whisper_model": "Модель речи", "whisper_device": "Устройство",
+        "whisper_model": "Модель речи",
         "speech_note": "Большие модели точнее и медленнее. Новая модель скачивается при первом использовании.",
         "gateway_url": "Адрес шлюза", "gateway_key": "API-ключ", "model_id": "Модель",
         "provider": "Провайдер", "provider_other": "Другой (свой адрес)",
         "engine": "Распознавание речи", "engine_whisper": "Whisper на этом компьютере", "engine_deepgram": "Deepgram (облако)",
-        "deepgram_key": "API-ключ Deepgram", "deepgram_model": "Модель Deepgram", "deepgram_test": "Проверить ключ", "deepgram_ok": "Deepgram принимает ключ",
+        "deepgram_key": "API-ключ Deepgram", "deepgram_test": "Проверить ключ", "deepgram_ok": "Deepgram принимает ключ",
         "deepgram_note": "Deepgram слышит звонок (и ваш микрофон, если он включён): звук уходит с этого компьютера. Живые субтитры отправляют растущую фразу заново, поэтому оплачиваемое аудио примерно в 3–4 раза длиннее речи. DEEPGRAM_API_KEY в .env тоже работает.",
         "cloud_note": "{name} получает ваше резюме, текст ABOUT и каждый вопрос в каждом запросе. Введите его API-ключ, загрузите список моделей и выберите одну.",
         "load_models": "Загрузить модели", "test": "Проверить связь", "models_loaded": "Доступно моделей: {n}",
-        "connected": "Связь есть: моделей {n}", "model_note": "Оставьте адрес, ключ и модель пустыми, чтобы брать .env (SWITCHYARD_*) и автоподбор.",
-        "shot_enabled": "Включить кнопку «Скриншот»", "shot_tool": "Программа снимка",
-        "shot_delay": "Пауза перед снимком", "shot_test": "Проверить снимок",
-        "shot_tools": "Установлено: {tools}", "shot_none": "Нет программы для снимков. Установите grim (Wayland, например niri или sway) или spectacle; на X11 — maim или scrot.",
-        "shot_ok": "Снимок {w}×{h}", "shot_note": "Пока снимается экран, окно становится прозрачным. Изображение уходит в модель через шлюз.",
+        "connected": "Связь есть: моделей {n}", "model_note": "Switchyard работает на этом компьютере и ключа не требует. Оставьте модель auto или загрузите список и выберите.",
+        "shot_enabled": "Включить кнопку «Скриншот»", "shot_none": "Нет программы для снимков. Установите grim (Wayland, например niri или sway) или spectacle; на X11 — maim или scrot.", "shot_note": "Пока снимается экран, окно становится прозрачным. Изображение уходит в модель через шлюз.",
         "pinned": "Держать окно поверх", "frameless": "Окно без рамки",
         "opacity": "Прозрачность", "font_scale": "Размер текста", "save_transcripts": "Сохранять расшифровки в data/interviews",
         "reset": "Сбросить все настройки", "reset_ask": "Вернуть все настройки по умолчанию?",
         "bad_value": "Не сохранено: {error}", "close": "Закрыть", "pick_files": "Выберите документы",
-        "prepare": "Подготовка",
         "prepare_intro": "Подготовьтесь до звонка. Банк вопросов — что вас, скорее всего, спросят, с готовыми строками от первого лица. Разбор резюме сравнивает ваше резюме с вакансией.",
         "bank_count": "Вопросов", "bank_focus": "Акцент", "bank_focus_hint": "по желанию: Python, архитектура, поведенческие…",
         "bank_build": "Собрать банк вопросов", "cv_review": "Разобрать моё резюме под эту вакансию",
@@ -155,9 +144,9 @@ STRINGS = {
         "delete_ask": "Удалить это интервью вместе с вакансией, заметками и документами?",
     },
     "pl": {
-        "title": "Ustawienia", "docs": "Dokumenty", "vacancy": "Oferta", "about": "O mnie",
-        "language": "Język", "audio": "Dźwięk i mowa", "model": "Model AI",
-        "screenshot": "Zrzut ekranu", "window": "Okno",
+        "title": "Ustawienia",
+        "tab_interview": "Rozmowa", "tab_about": "O mnie", "tab_practice": "Ćwiczenia", "tab_audio": "Dźwięk", "tab_ai": "AI", "tab_general": "Ogólne",
+        "sec_docs": "CV i dokumenty", "sec_vacancy": "Oferta i notatki", "sec_answers": "Odpowiedzi", "sec_window": "Okno",
         "docs_intro": "Pliki, które asystent czyta przed każdą odpowiedzią: CV, eksport z LinkedIn, list motywacyjny, portfolio. PDF, DOCX i tekst. Pliki możesz też upuścić na okno rozmowy.",
         "add_files": "Dodaj pliki…", "kind_cv": "CV (widział je pracodawca)", "kind_about": "O mnie (dodatkowe fakty)",
         "no_docs": "Brak dokumentów.", "remove": "Usuń", "chars": "{n} znaków",
@@ -177,25 +166,21 @@ STRINGS = {
         "listen": "Słuchaj rozmowy", "call_source": "Dźwięk rozmowy", "default_output": "Automatycznie: podąża za wyjściem, na którym gra rozmowa", "listening_to": "Teraz słucham: {name}",
         "refresh": "Odśwież", "use_mic": "Transkrybuj też mój mikrofon (użyj słuchawek)",
         "mic_source": "Mikrofon", "default_mic": "Domyślny mikrofon",
-        "whisper_model": "Model mowy", "whisper_device": "Urządzenie",
+        "whisper_model": "Model mowy",
         "speech_note": "Większe modele są dokładniejsze i wolniejsze. Nowy model pobiera się przy pierwszym użyciu.",
         "gateway_url": "Adres bramki", "gateway_key": "Klucz API", "model_id": "Model",
         "provider": "Dostawca", "provider_other": "Inny (własny adres)",
         "engine": "Rozpoznawanie mowy", "engine_whisper": "Whisper na tym komputerze", "engine_deepgram": "Deepgram (chmura)",
-        "deepgram_key": "Klucz API Deepgram", "deepgram_model": "Model Deepgram", "deepgram_test": "Sprawdź klucz", "deepgram_ok": "Deepgram przyjmuje klucz",
+        "deepgram_key": "Klucz API Deepgram", "deepgram_test": "Sprawdź klucz", "deepgram_ok": "Deepgram przyjmuje klucz",
         "deepgram_note": "Deepgram słyszy rozmowę (i Twój mikrofon, gdy jest włączony): dźwięk opuszcza ten komputer. Napisy na żywo wysyłają rosnące zdanie ponownie, więc płatne audio jest około 3–4 razy dłuższe niż mowa. DEEPGRAM_API_KEY w .env też działa.",
         "cloud_note": "{name} dostaje Twoje CV, tekst ABOUT i każde pytanie przy każdym zapytaniu. Wpisz jego klucz API, wczytaj listę modeli i wybierz jeden.",
         "load_models": "Wczytaj modele", "test": "Sprawdź połączenie", "models_loaded": "Dostępne modele: {n}",
-        "connected": "Połączono: modele {n}", "model_note": "Zostaw adres, klucz i model puste, aby użyć .env (SWITCHYARD_*) i automatycznego wyboru.",
-        "shot_enabled": "Włącz przycisk zrzutu ekranu", "shot_tool": "Narzędzie zrzutu",
-        "shot_delay": "Opóźnienie przed zrzutem", "shot_test": "Testuj zrzut",
-        "shot_tools": "Zainstalowane: {tools}", "shot_none": "Brak narzędzia do zrzutów. Zainstaluj grim (Wayland, np. niri lub sway) albo spectacle; na X11 maim lub scrot.",
-        "shot_ok": "Zrzut {w}×{h}", "shot_note": "Podczas zrzutu okno staje się przezroczyste. Obraz trafia do modelu przez bramkę.",
+        "connected": "Połączono: modele {n}", "model_note": "Switchyard działa na tym komputerze i nie wymaga klucza. Zostaw model auto albo wczytaj listę i wybierz.",
+        "shot_enabled": "Włącz przycisk zrzutu ekranu", "shot_none": "Brak narzędzia do zrzutów. Zainstaluj grim (Wayland, np. niri lub sway) albo spectacle; na X11 maim lub scrot.", "shot_note": "Podczas zrzutu okno staje się przezroczyste. Obraz trafia do modelu przez bramkę.",
         "pinned": "Trzymaj okno na wierzchu", "frameless": "Okno bez ramki",
         "opacity": "Przezroczystość", "font_scale": "Rozmiar tekstu", "save_transcripts": "Zapisuj transkrypcje w data/interviews",
         "reset": "Przywróć wszystkie ustawienia", "reset_ask": "Przywrócić domyślne wartości wszystkich ustawień?",
         "bad_value": "Nie zapisano: {error}", "close": "Zamknij", "pick_files": "Wybierz dokumenty",
-        "prepare": "Przygotowanie",
         "prepare_intro": "Przygotuj się przed rozmową. Bank pytań to to, o co prawdopodobnie zapytają, z gotowymi zdaniami w pierwszej osobie. Przegląd CV porównuje je z ofertą.",
         "bank_count": "Pytań", "bank_focus": "Nacisk", "bank_focus_hint": "opcjonalnie: Python, architektura, behawioralne…",
         "bank_build": "Zbuduj bank pytań", "cv_review": "Przejrzyj moje CV pod tę ofertę",
@@ -227,6 +212,7 @@ QPushButton:hover { background: rgba(188,180,255,0.28); }
 QPushButton:disabled { color: rgba(215,218,232,0.35); border-color: rgba(255,255,255,0.12); }
 QToolButton { background: transparent; border: none; color: rgba(215,218,232,0.6); padding: 2px 8px; }
 QToolButton:hover { color: #ff9a9a; }
+QLabel#section { color: #ffffff; font-size: 15px; font-weight: 600; padding-top: 6px; }
 QLabel#hint { color: rgba(215,218,232,0.55); font-size: 13px; }
 QLabel#status { color: #bcb4ff; }
 QLabel#error { color: #ff9a9a; }
@@ -265,7 +251,11 @@ class DocRow(QWidget):
 
 
 class SettingsDialog(QDialog):
-    TABS = ("docs", "vacancy", "prepare", "about", "language", "audio", "model", "screenshot", "window")
+    TABS = ("interview", "about", "practice", "audio", "ai", "general")
+    LEGACY_TABS = {
+        "docs": "interview", "vacancy": "interview", "prepare": "practice", "language": "general",
+        "model": "ai", "screenshot": "general", "window": "general",
+    }
     _finished = Signal(int, object, object)
 
     def __init__(self, window, runtime: Runtime) -> None:
@@ -311,10 +301,9 @@ class SettingsDialog(QDialog):
         layout.addLayout(footer)
 
         builders = {
-            "docs": self._build_docs, "vacancy": self._build_vacancy, "prepare": self._build_prepare,
-            "about": self._build_about,
-            "language": self._build_language, "audio": self._build_audio, "model": self._build_model,
-            "screenshot": self._build_screenshot, "window": self._build_window,
+            "interview": self._build_interview, "about": self._build_about,
+            "practice": self._build_prepare, "audio": self._build_audio,
+            "ai": self._build_model, "general": self._build_general,
         }
         for key in self.TABS:
             page = QWidget()
@@ -332,6 +321,7 @@ class SettingsDialog(QDialog):
         return text.format(**values) if values else text
 
     def show_tab(self, key: str) -> None:
+        key = self.LEGACY_TABS.get(key, key)
         self.refresh()
         self.tabs.setCurrentIndex(self.TABS.index(key) if key in self.TABS else 0)
         self.show()
@@ -386,6 +376,24 @@ class SettingsDialog(QDialog):
         label.setWordWrap(True)
         return label
 
+    def _section(self) -> QLabel:
+        label = QLabel()
+        label.setObjectName("section")
+        return label
+
+    def _scrolled(self, page: QWidget) -> QWidget:
+        """A page that scrolls instead of squeezing when the window is small."""
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        body = QWidget()
+        body.setObjectName("page")
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        return body
+
     def _bind_check(self, box: QCheckBox, name: str) -> None:
         box.toggled.connect(lambda value: self._set(name, value))
 
@@ -423,7 +431,7 @@ class SettingsDialog(QDialog):
         name, ok = QInputDialog.getText(self, self.t("new_interview"), self.t("interview_name"))
         if ok:
             self.interview_changed(self.rt.context.new_interview(name))
-            self.tabs.setCurrentIndex(self.TABS.index("vacancy"))
+            self.tabs.setCurrentIndex(self.TABS.index("interview"))
 
     def _rename_interview(self) -> None:
         name, ok = QInputDialog.getText(
@@ -442,6 +450,17 @@ class SettingsDialog(QDialog):
 
     # ---- documents ---------------------------------------------------------
 
+    def _build_interview(self, page: QWidget) -> None:
+        column = QVBoxLayout(self._scrolled(page))
+        column.setContentsMargins(18, 10, 18, 16)
+        self.docs_title, self.vacancy_title = self._section(), self._section()
+        for title, build in ((self.docs_title, self._build_docs), (self.vacancy_title, self._build_vacancy)):
+            section = QWidget()
+            build(section)
+            section.layout().setContentsMargins(0, 0, 0, 8)
+            column.addWidget(title)
+            column.addWidget(section)
+
     def _build_docs(self, page: QWidget) -> None:
         layout = QVBoxLayout(page)
         layout.setContentsMargins(18, 16, 18, 16)
@@ -454,7 +473,9 @@ class SettingsDialog(QDialog):
         self.docs_layout = QVBoxLayout(holder)
         self.docs_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(holder)
-        layout.addWidget(scroll, 1)
+        scroll.setMinimumHeight(120)
+        scroll.setMaximumHeight(210)
+        layout.addWidget(scroll)
         self.add_button = QPushButton()
         self.add_button.clicked.connect(self._choose_files)
         row = QHBoxLayout()
@@ -534,7 +555,8 @@ class SettingsDialog(QDialog):
         self.notes_label = QLabel()
         layout.addWidget(self.notes_label)
         self.notes = QPlainTextEdit()
-        layout.addWidget(self.notes, 1)
+        self.notes.setMinimumHeight(110)
+        layout.addWidget(self.notes)
         self._notes_timer = QTimer(self, singleShot=True, interval=600)
         self._notes_timer.timeout.connect(lambda: self.rt.context.set_notes(self.notes.toPlainText()))
         self.notes.textChanged.connect(self._notes_timer.start)
@@ -712,28 +734,6 @@ class SettingsDialog(QDialog):
 
     # ---- language ----------------------------------------------------------
 
-    def _build_language(self, page: QWidget) -> None:
-        outer, form = self._form(page)
-        self.interview_language = QComboBox()
-        self.ui_language = QComboBox()
-        self.answer_style = QComboBox()
-        self.answer_layout = QComboBox()
-        self.full_answer = QCheckBox()
-        self.language_labels = [QLabel() for _ in range(4)]
-        form.addRow(self.language_labels[0], self.interview_language)
-        form.addRow(self.language_labels[1], self.ui_language)
-        form.addRow(self.language_labels[2], self.answer_style)
-        form.addRow(self.language_labels[3], self.answer_layout)
-        form.addRow(self.full_answer)
-        self.language_note = self._hint()
-        outer.addWidget(self.language_note)
-        outer.addStretch(1)
-        self._bind_combo(self.interview_language, "language")
-        self._bind_combo(self.ui_language, "ui_language")
-        self._bind_combo(self.answer_style, "answer_style")
-        self._bind_combo(self.answer_layout, "answer_layout")
-        self._bind_check(self.full_answer, "show_full_answer")
-
     # ---- audio and speech --------------------------------------------------
 
     def _build_audio(self, page: QWidget) -> None:
@@ -747,15 +747,11 @@ class SettingsDialog(QDialog):
         self.stt_engine.addItem("", "whisper")
         self.stt_engine.addItem("", "deepgram")
         self.whisper_model = QComboBox()
-        self.whisper_device = QComboBox()
         self.deepgram_key = QLineEdit()
         self.deepgram_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.deepgram_model = QComboBox()
-        self.deepgram_model.setEditable(True)
-        self.deepgram_model.addItems(DEEPGRAM_MODELS)
         self.deepgram_test = QPushButton()
-        self.engine_label, self.dg_key_label, self.dg_model_label = QLabel(), QLabel(), QLabel()
-        self.audio_labels = [QLabel() for _ in range(4)]
+        self.engine_label, self.dg_key_label = QLabel(), QLabel()
+        self.audio_labels = [QLabel() for _ in range(3)]
         source_row = QHBoxLayout()
         source_row.addWidget(self.call_source, 1)
         source_row.addWidget(self.refresh_sources)
@@ -767,29 +763,23 @@ class SettingsDialog(QDialog):
         form.addRow(self.audio_labels[1], self.mic_source)
         form.addRow(self.engine_label, self.stt_engine)
         form.addRow(self.audio_labels[2], self.whisper_model)
-        form.addRow(self.audio_labels[3], self.whisper_device)
         key_row = QHBoxLayout()
         key_row.addWidget(self.deepgram_key, 1)
         key_row.addWidget(self.deepgram_test)
         form.addRow(self.dg_key_label, key_row)
-        form.addRow(self.dg_model_label, self.deepgram_model)
+        self.audio_form, self.deepgram_row = form, key_row
         self.speech_note = self._hint()
         outer.addWidget(self.speech_note)
         outer.addStretch(1)
         for name in WHISPER_MODELS:
             self.whisper_model.addItem(name, name)
-        for name in DEVICES:
-            self.whisper_device.addItem(name, name)
         self._bind_check(self.listen, "listen")
         self._bind_check(self.use_mic, "use_mic")
         self._bind_combo(self.call_source, "call_source")
         self._bind_combo(self.mic_source, "mic_source")
         self._bind_combo(self.whisper_model, "whisper_model")
-        self._bind_combo(self.whisper_device, "whisper_device")
         self.stt_engine.activated.connect(lambda _i: self._set_engine())
         self.deepgram_key.editingFinished.connect(lambda: self._set("deepgram_key", self.deepgram_key.text()))
-        self.deepgram_model.lineEdit().editingFinished.connect(self._set_deepgram_model)
-        self.deepgram_model.activated.connect(lambda _i: self._set_deepgram_model())
         self.deepgram_test.clicked.connect(self._test_deepgram)
         self.refresh_sources.clicked.connect(self.refresh_audio)
 
@@ -800,14 +790,13 @@ class SettingsDialog(QDialog):
     def _sync_engine(self) -> None:
         """Only the controls of the chosen engine are active, and the note describes its trade-off."""
         deepgram = self.rt.settings.stt_engine == "deepgram"
-        for widget in (self.whisper_model, self.whisper_device, self.audio_labels[2], self.audio_labels[3]):
+        for widget in (self.whisper_model, self.audio_labels[2]):
             widget.setEnabled(not deepgram)
-        for widget in (self.deepgram_key, self.deepgram_model, self.deepgram_test, self.dg_key_label, self.dg_model_label):
+        for widget in (self.deepgram_key, self.deepgram_test, self.dg_key_label):
             widget.setEnabled(deepgram)
+        self.audio_form.setRowVisible(self.whisper_model, not deepgram)
+        self.audio_form.setRowVisible(self.deepgram_row, deepgram)
         self.speech_note.setText(self.t("deepgram_note" if deepgram else "speech_note"))
-
-    def _set_deepgram_model(self) -> None:
-        self._set("deepgram_model", self.deepgram_model.currentText().strip() or DEEPGRAM_MODELS[0])
 
     def _test_deepgram(self) -> None:
         key = self.deepgram_key.text().strip() or self.rt.settings.deepgram_key or os.getenv("DEEPGRAM_API_KEY", "")
@@ -821,6 +810,7 @@ class SettingsDialog(QDialog):
         self.audio_now.setText(
             self.t("listening_to", name=self.rt.current_source) if self.rt.current_source else ""
         )
+        self.audio_form.setRowVisible(self.audio_now, bool(self.rt.current_source))
         monitors, inputs = self.rt.audio_choices()
         for combo, default, names, current in (
             (self.call_source, self.t("default_output"), monitors, self.rt.settings.call_source),
@@ -857,6 +847,7 @@ class SettingsDialog(QDialog):
         form.addRow(self.model_labels[0], self.gateway_url)
         form.addRow(self.model_labels[1], self.gateway_key)
         form.addRow(self.model_labels[2], model_row)
+        self.model_form = form
         row = QHBoxLayout()
         row.addWidget(self.test_gateway)
         row.addStretch(1)
@@ -900,6 +891,8 @@ class SettingsDialog(QDialog):
         provider = provider_for(self.rt.gateway())
         with QSignalBlocker(self.provider):
             self._select(self.provider, provider.id if provider else OTHER)
+        self.model_form.setRowVisible(self.gateway_url, provider is None)
+        self.model_form.setRowVisible(self.gateway_key, provider is None or provider.cloud)
         self._show_provider_note()
 
     def _show_provider_note(self) -> None:
@@ -933,95 +926,66 @@ class SettingsDialog(QDialog):
             ) if error else self.say(self.t("connected", n=len(models or []))),
         )
 
-    # ---- screenshot --------------------------------------------------------
+    # ---- general -----------------------------------------------------------
 
-    def _build_screenshot(self, page: QWidget) -> None:
-        outer, form = self._form(page)
-        self.shot_enabled = QCheckBox()
-        self.shot_tool = QComboBox()
-        self.shot_delay = QSpinBox()
-        self.shot_delay.setRange(0, 5000)
-        self.shot_delay.setSingleStep(50)
-        self.shot_delay.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.shot_delay.setSuffix(" ms")
-        self.shot_test = QPushButton()
-        self.shot_labels = [QLabel() for _ in range(2)]
-        form.addRow(self.shot_enabled)
-        form.addRow(self.shot_labels[0], self.shot_tool)
-        form.addRow(self.shot_labels[1], self.shot_delay)
-        row = QHBoxLayout()
-        row.addWidget(self.shot_test)
-        row.addStretch(1)
-        outer.addLayout(row)
-        self.shot_tools = self._hint()
-        self.shot_note = self._hint()
-        outer.addWidget(self.shot_tools)
-        outer.addWidget(self.shot_note)
-        outer.addStretch(1)
-        self._bind_check(self.shot_enabled, "screenshot_enabled")
-        self._bind_combo(self.shot_tool, "screenshot_tool")
-        self.shot_delay.valueChanged.connect(lambda value: self._set("screenshot_delay_ms", value))
-        self.shot_test.clicked.connect(self._test_capture)
-        self.shot_enabled.toggled.connect(lambda _v: self.win.refresh_controls())
-
-    def refresh_screenshot(self) -> None:
-        tools = self.rt.screenshot_tools()
-        with QSignalBlocker(self.shot_tool):
-            self.shot_tool.clear()
-            self.shot_tool.addItem(self.t("auto"), "auto")
-            for name in tools:
-                self.shot_tool.addItem(name, name)
-            self._select(self.shot_tool, self.rt.settings.screenshot_tool)
-        self.shot_tools.setText(
-            self.t("shot_tools", tools=", ".join(tools)) if tools else self.t("shot_none")
-        )
-        self.shot_test.setEnabled(bool(tools))
-
-    def _test_capture(self) -> None:
-        self.say("…")
-        self.win.setWindowOpacity(0.0)
-        QTimer.singleShot(
-            self.rt.settings.screenshot_delay_ms,
-            lambda: self.run(self.rt.capture, self._capture_done),
-        )
-
-    def _capture_done(self, data: str | None, error: str | None) -> None:
-        self.win.setWindowOpacity(self.rt.settings.opacity / 100)
-        if error or data is None:
-            self.say(error or "", error=True)
-            return
-        image = QImage.fromData(base64.b64decode(data))
-        self.say(self.t("shot_ok", w=image.width(), h=image.height()))
-
-    # ---- window ------------------------------------------------------------
-
-    def _build_window(self, page: QWidget) -> None:
-        outer, form = self._form(page)
+    def _build_general(self, page: QWidget) -> None:
+        outer, form = self._form(self._scrolled(page))
+        self.answers_title, self.window_title = self._section(), self._section()
+        self.interview_language = QComboBox()
+        self.answer_style = QComboBox()
+        self.answer_layout = QComboBox()
+        self.full_answer = QCheckBox()
+        self.language_labels = [QLabel() for _ in range(3)]
+        self.ui_language = QComboBox()
         self.pinned = QCheckBox()
         self.frameless = QCheckBox()
+        self.shot_enabled = QCheckBox()
         self.save_transcripts = QCheckBox()
         self.opacity = QSlider(Qt.Orientation.Horizontal)
         self.opacity.setRange(35, 100)
         self.font_scale = QSlider(Qt.Orientation.Horizontal)
         self.font_scale.setRange(70, 180)
-        self.window_labels = [QLabel() for _ in range(2)]
+        self.window_labels = [QLabel() for _ in range(3)]
+        self.language_note = self._hint()
+        self.shot_note = self._hint()
         self.reset_button = QPushButton()
+        form.addRow(self.answers_title)
+        form.addRow(self.language_labels[0], self.interview_language)
+        form.addRow(self.language_labels[1], self.answer_style)
+        form.addRow(self.language_labels[2], self.answer_layout)
+        form.addRow(self.full_answer)
+        form.addRow(self.language_note)
+        form.addRow(self.window_title)
+        form.addRow(self.window_labels[0], self.ui_language)
         form.addRow(self.pinned)
         form.addRow(self.frameless)
-        form.addRow(self.window_labels[0], self.opacity)
-        form.addRow(self.window_labels[1], self.font_scale)
+        form.addRow(self.window_labels[1], self.opacity)
+        form.addRow(self.window_labels[2], self.font_scale)
+        form.addRow(self.shot_enabled)
+        form.addRow(self.shot_note)
         form.addRow(self.save_transcripts)
         row = QHBoxLayout()
         row.addWidget(self.reset_button)
         row.addStretch(1)
         outer.addLayout(row)
         outer.addStretch(1)
+        self._bind_combo(self.interview_language, "language")
+        self._bind_combo(self.ui_language, "ui_language")
+        self._bind_combo(self.answer_style, "answer_style")
+        self._bind_combo(self.answer_layout, "answer_layout")
+        self._bind_check(self.full_answer, "show_full_answer")
         self._bind_check(self.pinned, "pinned")
         self._bind_check(self.frameless, "frameless")
+        self._bind_check(self.shot_enabled, "screenshot_enabled")
         self._bind_check(self.save_transcripts, "save_transcripts")
         self.opacity.valueChanged.connect(lambda value: self._set("opacity", value))
         self.font_scale.valueChanged.connect(lambda value: self._set("font_scale", value))
         self.reset_button.clicked.connect(self._reset)
+        self.shot_enabled.toggled.connect(lambda _v: self.win.refresh_controls())
+
+    def refresh_screenshot(self) -> None:
+        tools = self.rt.screenshot_tools()
+        self.shot_note.setText(self.t("shot_note") if tools else self.t("shot_none"))
 
     def _reset(self) -> None:
         if QMessageBox.question(self, self.t("reset"), self.t("reset_ask")) == QMessageBox.StandardButton.Yes:
@@ -1058,7 +1022,6 @@ class SettingsDialog(QDialog):
                 box.setChecked(getattr(settings, name))
         for widget, value in (
             (self.opacity, settings.opacity), (self.font_scale, settings.font_scale),
-            (self.shot_delay, settings.screenshot_delay_ms),
         ):
             with QSignalBlocker(widget):
                 widget.setValue(value)
@@ -1066,7 +1029,6 @@ class SettingsDialog(QDialog):
             (self.interview_language, settings.language), (self.ui_language, settings.ui_language),
             (self.answer_style, settings.answer_style), (self.answer_layout, settings.answer_layout),
             (self.whisper_model, settings.whisper_model),
-            (self.whisper_device, settings.whisper_device),
             (self.stt_engine, settings.stt_engine),
         ):
             with QSignalBlocker(combo):
@@ -1077,8 +1039,6 @@ class SettingsDialog(QDialog):
         ):
             with QSignalBlocker(field):
                 field.setText(value)
-        with QSignalBlocker(self.deepgram_model):
-            self.deepgram_model.setCurrentText(settings.deepgram_model)
         self._sync_engine()
         with QSignalBlocker(self.model_id):
             self.model_id.setCurrentText(settings.model or "auto")
@@ -1087,13 +1047,17 @@ class SettingsDialog(QDialog):
     def retranslate(self) -> None:
         self.setWindowTitle(f"{self.t('title')} · CareerTwin")
         for index, key in enumerate(self.TABS):
-            self.tabs.setTabText(index, self.t(key).replace("&", "&&"))
+            self.tabs.setTabText(index, self.t(f"tab_{key}").replace("&", "&&"))
         self.close_button.setText(self.t("close"))
         self.interview_label.setText(self.t("interview"))
         self.new_interview.setText(self.t("new_interview"))
         self.rename_interview.setText(self.t("rename_interview"))
         self.delete_interview.setText(self.t("delete_interview"))
         self.interview_hint.setText(self.t("interview_hint"))
+        self.docs_title.setText(self.t("sec_docs"))
+        self.vacancy_title.setText(self.t("sec_vacancy"))
+        self.answers_title.setText(self.t("sec_answers"))
+        self.window_title.setText(self.t("sec_window"))
         self.docs_intro.setText(self.t("docs_intro"))
         self.add_button.setText(self.t("add_files"))
         self.vacancy_intro.setText(self.t("vacancy_intro"))
@@ -1111,9 +1075,7 @@ class SettingsDialog(QDialog):
         self.notes.setPlaceholderText(self.t("notes_hint"))
         self.about_intro.setText(self.t("about_intro"))
         self.about_save.setText(self.t("save"))
-        for label, key in zip(
-            self.language_labels, ("interview_language", "ui_language", "answer_style", "answer_layout")
-        ):
+        for label, key in zip(self.language_labels, ("interview_language", "answer_style", "answer_layout")):
             label.setText(self.t(key))
         self.full_answer.setText(self.t("full_answer"))
         self.language_note.setText(self.t("language_note"))
@@ -1121,11 +1083,10 @@ class SettingsDialog(QDialog):
         self.listen.setText(self.t("listen"))
         self.use_mic.setText(self.t("use_mic"))
         self.refresh_sources.setText(self.t("refresh"))
-        for label, key in zip(self.audio_labels, ("call_source", "mic_source", "whisper_model", "whisper_device")):
+        for label, key in zip(self.audio_labels, ("call_source", "mic_source", "whisper_model")):
             label.setText(self.t(key))
         self.engine_label.setText(self.t("engine"))
         self.dg_key_label.setText(self.t("deepgram_key"))
-        self.dg_model_label.setText(self.t("deepgram_model"))
         self.deepgram_test.setText(self.t("deepgram_test"))
         self.stt_engine.setItemText(0, self.t("engine_whisper"))
         self.stt_engine.setItemText(1, self.t("engine_deepgram"))
@@ -1139,14 +1100,11 @@ class SettingsDialog(QDialog):
         self._show_provider_note()
         self.gateway_url.setPlaceholderText(self.rt.gateway())
         self.shot_enabled.setText(self.t("shot_enabled"))
-        for label, key in zip(self.shot_labels, ("shot_tool", "shot_delay")):
-            label.setText(self.t(key))
-        self.shot_test.setText(self.t("shot_test"))
-        self.shot_note.setText(self.t("shot_note"))
+        self.refresh_screenshot()
         self.pinned.setText(self.t("pinned"))
         self.frameless.setText(self.t("frameless"))
         self.save_transcripts.setText(self.t("save_transcripts"))
-        for label, key in zip(self.window_labels, ("opacity", "font_scale")):
+        for label, key in zip(self.window_labels, ("ui_language", "opacity", "font_scale")):
             label.setText(self.t(key))
         self.reset_button.setText(self.t("reset"))
         if self._ready:
