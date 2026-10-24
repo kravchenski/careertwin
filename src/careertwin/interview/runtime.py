@@ -6,6 +6,7 @@ imports Qt, so the whole behaviour is testable without a display.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -15,9 +16,9 @@ from careertwin.interview import screenshot
 from careertwin.interview.audio import (
     AudioError,
     FollowingSource,
-    ParecSource,
     default_sources,
     list_sources,
+    open_source,
 )
 from careertwin.interview.coach import StreamingCoach, gateway_url
 from careertwin.interview.languages import normalize
@@ -31,7 +32,7 @@ from careertwin.interview.prepare import (
     parse_questions,
     questions_prompt,
 )
-from careertwin.interview.session import INTERVIEWER, YOU, InterviewSession
+from careertwin.interview.session import INTERVIEWER, YOU, FrameSource, InterviewSession
 from careertwin.interview.settings import InterviewSettings
 from careertwin.interview.stt import WhisperTranscriber
 
@@ -100,18 +101,18 @@ class Runtime:
 
     # ---- audio and speech --------------------------------------------------
 
-    def build_sources(self) -> dict[str, FollowingSource | ParecSource]:
+    def build_sources(self) -> dict[str, FrameSource]:
         """The audio sources the settings ask for: call audio and optionally the microphone."""
         if not self.settings.listen:
             return {}
-        sources: dict[str, FollowingSource | ParecSource] = {}
+        sources: dict[str, FrameSource] = {}
         if self.settings.call_source:
-            sources[INTERVIEWER] = ParecSource(self.settings.call_source)
+            sources[INTERVIEWER] = open_source(self.settings.call_source)
             self._source_changed(self.settings.call_source)
         else:
             sources[INTERVIEWER] = FollowingSource(on_change=self._source_changed)
         if self.settings.use_mic:
-            sources[YOU] = ParecSource(self.settings.mic_source or default_sources().microphone)
+            sources[YOU] = open_source(self.settings.mic_source or default_sources().microphone, microphone=True)
         return sources
 
     def _source_changed(self, name: str) -> None:
@@ -126,7 +127,7 @@ class Runtime:
             self.reload_speech()
         self.session.set_sources(self._safe_sources())
 
-    def _safe_sources(self) -> dict[str, FollowingSource | ParecSource]:
+    def _safe_sources(self) -> dict[str, FrameSource]:
         try:
             return self.build_sources()
         except AudioError as exc:
@@ -142,6 +143,22 @@ class Runtime:
                 language=self._language(),
                 device=self.settings.whisper_device,
             )
+        )
+
+    @classmethod
+    def audio_choices(cls) -> tuple[list[str], list[str]]:
+        """(outputs whose sound can be heard, microphones): what the two pickers offer."""
+        if sys.platform == "win32":
+            try:
+                from careertwin.interview import audio_windows
+
+                return audio_windows.list_outputs(), audio_windows.list_microphones()
+            except AudioError:
+                return [], []
+        names = cls.audio_sources()
+        return (
+            sorted(name for name in names if name.endswith(".monitor")),
+            sorted(name for name in names if not name.endswith(".monitor")),
         )
 
     @staticmethod

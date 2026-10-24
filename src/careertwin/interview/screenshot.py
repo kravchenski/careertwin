@@ -24,10 +24,20 @@ TOOLS: list[tuple[str, list[str], bool]] = [
 ]
 
 
+# Windows captures in-process through GDI: the primary screen, or all of them side by side.
+WINDOWS_TOOLS = ("primary-screen", "all-screens")
+
+
+def _windows() -> bool:
+    return sys.platform == "win32"
+
+
 def available_tools() -> list[str]:
     """Installed capture tools that can see this session's screen, best first."""
     import os
 
+    if _windows():
+        return list(WINDOWS_TOOLS)
     wayland = bool(os.getenv("WAYLAND_DISPLAY"))
     return [
         name
@@ -44,8 +54,15 @@ def available_tool() -> str | None:
 def capture_png(tool: str = "auto") -> bytes:
     """Return the whole screen as PNG bytes using `tool` (or the best available one)."""
     installed = available_tools()
-    if not installed and sys.platform == "win32":
-        raise ScreenshotError("Screenshots are not available on Windows yet.")
+    if _windows():
+        if tool != "auto" and tool not in installed:
+            raise ScreenshotError(f"{tool} is not a Windows capture mode: {', '.join(installed)}")
+        from careertwin.interview import screenshot_windows
+
+        try:
+            return screenshot_windows.capture_png(all_screens=(tool == "all-screens"))
+        except screenshot_windows.CaptureError as exc:
+            raise ScreenshotError(str(exc)) from exc
     if not installed:
         raise ScreenshotError(
             "No screenshot tool. Install grim (Wayland, e.g. niri or sway) or spectacle, "

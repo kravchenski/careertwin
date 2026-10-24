@@ -1,4 +1,4 @@
-"""Audio capture through PulseAudio/PipeWire (`parec`), no Python audio bindings needed."""
+"""Audio capture: PulseAudio/PipeWire (`parec`) on Linux, WASAPI loopback on Windows."""
 
 from __future__ import annotations
 
@@ -10,10 +10,14 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from careertwin.interview.vad import FRAME_BYTES, SAMPLE_RATE
+
+if TYPE_CHECKING:
+    from careertwin.interview.audio_windows import WasapiSource
 
 
 class AudioError(RuntimeError):
@@ -26,14 +30,7 @@ class Sources:
     microphone: str
 
 
-WINDOWS_MESSAGE = (
-    "Listening to the call is not available on Windows yet: type or paste the questions."
-)
-
-
 def _pactl(*args: str) -> str:
-    if sys.platform == "win32":
-        raise AudioError(WINDOWS_MESSAGE)
     if not shutil.which("pactl"):
         raise AudioError("`pactl` not found. Install pipewire-pulse (or pulseaudio-utils).")
     result = subprocess.run(["pactl", *args], capture_output=True, text=True, timeout=10)
@@ -42,12 +39,24 @@ def _pactl(*args: str) -> str:
     return result.stdout.strip()
 
 
+def _windows() -> bool:
+    return sys.platform == "win32"
+
+
 def list_sources() -> list[str]:
+    if _windows():
+        from careertwin.interview import audio_windows
+
+        return audio_windows.list_sources()
     return [line.split("\t")[1] for line in _pactl("list", "short", "sources").splitlines() if "\t" in line]
 
 
 def default_sources() -> Sources:
     """The sink monitor carries the call audio; the default source is the microphone."""
+    if _windows():
+        from careertwin.interview import audio_windows
+
+        return audio_windows.default_sources()
     return Sources(
         interviewer=_pactl("get-default-sink") + ".monitor",
         microphone=_pactl("get-default-source"),
@@ -62,8 +71,6 @@ class ParecSource:
         self.process: subprocess.Popen[bytes] | None = None
 
     def frames(self) -> Iterator[np.ndarray]:
-        if sys.platform == "win32":
-            raise AudioError(WINDOWS_MESSAGE)
         if not shutil.which("parec"):
             raise AudioError("`parec` not found. Install pipewire-pulse (or pulseaudio-utils).")
         self.process = subprocess.Popen(
@@ -90,8 +97,36 @@ class ParecSource:
                 self.process.kill()
 
 
+def open_source(name: str, *, microphone: bool = False) -> ParecSource | WasapiSource:
+    """A source for a device name: a Pulse source on Linux, an output or microphone on Windows."""
+    if _windows():
+        from careertwin.interview.audio_windows import WasapiSource
+
+        return WasapiSource(name, loopback=not microphone)
+    return ParecSource(name)
+
+
+def listen_briefly(name: str = "", seconds: float = 0.6) -> int:
+    """Open the call audio for a moment and return the loudest sample heard: proof that capture works."""
+    source = open_source(name)
+    peak = 0
+    deadline = time.monotonic() + seconds
+    try:
+        for frame in source.frames():
+            peak = max(peak, int(np.abs(frame.astype(np.int32)).max()))
+            if time.monotonic() >= deadline:
+                break
+    finally:
+        source.close()
+    return peak
+
+
 def audio_state() -> tuple[str, list[str]]:
     """(monitor of the default output, monitors of the outputs that are playing something now)."""
+    if _windows():
+        from careertwin.interview import audio_windows
+
+        return audio_windows.audio_state()
     default = _pactl("get-default-sink") + ".monitor"
     try:
         sinks = json.loads(_pactl("--format=json", "list", "sinks"))
@@ -133,17 +168,19 @@ class FollowingSource:
         *,
         poll: float = 2.0,
         on_change: Callable[[str], None] | None = None,
-        state: Callable[[], tuple[str, list[str]]] = audio_state,
-        spawn: Callable[[str], ParecSource] = ParecSource,
+        state: Callable[[], tuple[str, list[str]]] | None = None,
+        spawn: Callable[[str], ParecSource | WasapiSource] | None = None,
     ):
-        self.poll, self.on_change, self._state, self._spawn = poll, on_change, state, spawn
+        self.poll, self.on_change = poll, on_change
+        self._state = state or audio_state
+        self._spawn = spawn or open_source
         self.current: str | None = None
         self._target: str | None = None
         self._pending: str | None = None
         self._last_default: str | None = None
         self._stop = threading.Event()
         self._switching = threading.Event()
-        self._source: ParecSource | None = None
+        self._source: ParecSource | WasapiSource | None = None
 
     def frames(self) -> Iterator[np.ndarray]:
         self._stop.clear()

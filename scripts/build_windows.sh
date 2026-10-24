@@ -30,7 +30,7 @@ uv pip install --quiet --no-deps --python-platform x86_64-pc-windows-msvc \
 # Only what the interview window imports: the API, agents and job pipeline stay out of the package.
 uv pip install --quiet --python-platform x86_64-pc-windows-msvc \
     --python-version "${PYTHON_VERSION%.*}" --target "$APP/site-packages" \
-    faster-whisper numpy pyside6-essentials httpx python-dotenv pypdf python-docx
+    faster-whisper numpy pyside6-essentials soundcard httpx python-dotenv pypdf python-docx
 
 cp packaging/windows/start.pyw packaging/windows/careertwin-interview.ico "$APP/"
 for file in "Start CareerTwin Interview.bat" "Check setup.bat" "Create shortcut.bat" README-Windows.txt; do
