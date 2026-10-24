@@ -1,6 +1,6 @@
 [project]
 name = "careertwin"
-version = "0.1.0"
+version = "0.1.1"
 description = "AI Career Operating System — a personal career agent that understands your experience and builds optimized documents."
 readme = "README.md"
 requires-python = ">=3.14"

@@ -30,5 +30,7 @@ This build was checked under Wine only, not on a real Windows machine. Run "Chec
 first: it opens the call audio for a moment and prints the loudest level it heard, so play
 something and run it again if it says 0.
 
-The program only suggests answers and does not hide itself from screen sharing. Check whether
-the interviewer allows AI help, and say so when you are expected to.
+The program only suggests answers. The window keeps itself out of screen captures
+(Zoom, Teams, Meet, OBS and screenshots do not include it), but a physical camera or
+a photo of the screen still sees it. Check whether the interviewer allows AI help,
+and say so when you are expected to.
