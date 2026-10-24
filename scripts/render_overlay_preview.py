@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Render the interview overlay offscreen with a sample exchange (for the docs).
 
-Usage: uv run --extra interview python scripts/render_overlay_preview.py docs/media/interview-overlay.png [language] [answer|code]
+Usage: uv run --extra interview python scripts/render_overlay_preview.py docs/media/interview-overlay.png [language] [answer|code|technical]
 
-"code" shows the answer to a screenshot of a coding task.
+"code" shows the answer to a screenshot of a coding task; "technical" shows a design question with its
+likely next questions.
 """
 
 from __future__ import annotations
@@ -166,6 +167,33 @@ CODE_REPLY = (
 )
 
 
+TECHNICAL_QUESTION = "How would you design a rate limiter for an API?"
+TECHNICAL_REPLY = (
+    "POINTS:\n"
+    "- I would assume **many instances**, so the counters must be **shared**, not per process.\n"
+    "- A **token bucket** in **Redis**: each request takes a token, an empty bucket means **429**.\n"
+    "- The bucket size sets the allowed burst, the refill rate sets the steady limit.\n"
+    "- The take must be **atomic**: one Lua script, not a read followed by a write.\n"
+    "- If Redis is down I **fail open** with a small local limit and raise an alert.\n"
+    "- I work with **FastAPI** and **Docker** for API services.\n"
+    "ANSWER:\n"
+    "I would put a token bucket per client key in Redis, because the limit has to hold across all "
+    "instances. A middleware takes a token with one atomic script and answers 429 with a Retry-After "
+    "header when the bucket is empty. The cost is one network hop per request and a dependency on "
+    "Redis, so I would fall back to a small local limit if it is unreachable, and watch the rejection "
+    "rate and the added latency.\n"
+    "KEY:\n"
+    "- **Token bucket**: allows bursts up to the bucket size and refills at a fixed rate.\n"
+    "- **Atomic take**: a Lua script keeps two instances from spending the same token.\n"
+    "- **Fail open or closed**: open keeps the API up, closed protects the backend; say which and why.\n"
+    "CONTEXT:\n"
+    "Public APIs use this to protect downstream services and to enforce per-plan quotas.\n"
+    "NEXT:\n"
+    "- What if one client uses many keys? - Limit by IP and account as well, and add a global ceiling.\n"
+    "- Why not a fixed window? - A client can send twice the limit around the window edge.\n"
+)
+
+
 def main(target: str, language: str = "en", kind: str = "answer") -> None:
     app = create_app(sys.argv[:1])
     bridge = Bridge()
@@ -183,12 +211,14 @@ def main(target: str, language: str = "en", kind: str = "answer") -> None:
         ui_language=language,
         frameless=True,
     )
-    window.resize(900, 640 if kind == "code" else 700)
+    window.resize(900, {"code": 640, "technical": 900}.get(kind, 700))
     window.apply_setting("show_full_answer", True)
     window.show()
     question, reply = SAMPLES[language if language in SAMPLES else "en"]
     if kind == "code":
         question, reply = "[screenshot]", CODE_REPLY
+    elif kind == "technical":
+        question, reply = TECHNICAL_QUESTION, TECHNICAL_REPLY
     bridge.state.emit("listening")
     bridge.level.emit("Interviewer", 0.62)
     bridge.turn.emit("Interviewer", question)

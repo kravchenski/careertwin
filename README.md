@@ -88,6 +88,8 @@ what *you* could say, line by line, built only from your `ABOUT.md`, the CV you 
   write each gets its own shape: definition and trade-off, assumptions and bottleneck, reproduce-measure-narrow-fix,
   approach with complexity and then the code. General knowledge is never passed off as your experience, and the
   detailed answer ends with the questions the interviewer will probably ask next.
+
+  <p align="center"><img src="docs/media/interview-technical.png" alt="A design question answered with assumptions, the key decision, the failure case and the likely next questions" width="560"></p>
 - **Solves what is on the screen.** Press `Ctrl+Shift+Enter` (a key bound in your compositor on Linux, built in on
   Windows) and the window answers the task you are looking at: the approach in a few lines and the solution as code;
   for a multiple-choice quiz the right option, for "what does this print" the traced output, for a bug the fixed code.
