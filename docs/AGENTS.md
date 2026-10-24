@@ -83,15 +83,24 @@ so any OpenAI-compatible client can use the same tools.
 | `answer_question` | local | Save the candidate's answer to a form question |
 | `record_outcome` | local | Interview, offer, hired, rejected, withdrawn |
 | `prepare_interview_questions`, `suggest_interview_answer`, `review_cv_for_vacancy` | no | Practice questions, grounded answers and a CV-versus-vacancy review for a booked interview (see [INTERVIEW.md](INTERVIEW.md)) |
+| `get_summary`, `what_needs_me` | no | The numbers of the search; everything waiting for the candidate |
+| `list_monitored_companies` | no | The watched companies and their health |
+| `watch_company`, `run_monitor` | local | Add a company to the monitor; visit the watched sites now |
+| `check_mail`, `list_mail` | local / no | Read the inbox once and file replies to applications; list what was filed |
+| `draft_email` | local | Prepare an application or follow-up email as a draft (nothing is sent) |
 | `submit_application` | **employer** | Press submit on a prepared form |
+| `send_email` | **employer** | Approve and send a drafted email |
 
 ## Safety
 
 - **Submitting is opt-in three times.** `submit_application` needs
   `confirm=true`, the environment variable `CAREERTWIN_AGENT_ALLOW_SUBMIT=1`,
   and, in `careertwin agent`, your answer to a prompt.
-- **Auto-submit and scheduling cannot be switched on by an agent.**
+- **Sending an email is opt-in the same three times.** `send_email` needs `confirm=true`,
+  `CAREERTWIN_AGENT_ALLOW_MAIL=1` and your yes. A draft only goes to an address the vacancy names.
+- **Auto-submit, automatic mail and scheduling cannot be switched on by an agent.**
   `update_search_settings` does not expose them.
+- **A secret never reaches the model.** See [SECURITY.md](SECURITY.md).
 - **Facts only.** Documents and form answers come from your `ABOUT` context.
   An agent saves only the answers you give it.
 - **A fit score is not a hiring probability.** It measures compatibility with
