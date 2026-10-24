@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from careertwin.automation import guard
 from careertwin.automation.engine import Engine
 from careertwin.automation.excel import workbook
 from careertwin.automation.models import Answer, Outcome, Settings, Vacancy
@@ -78,6 +79,8 @@ async def sources():
 async def run():
     try:
         engine.run()
+    except guard.Stopped as exc:
+        raise HTTPException(423, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"status": "started"}
@@ -93,6 +96,20 @@ async def stop():
         if not task.done():
             task.cancel()
     return {"status": "stopping"}
+
+
+@router.post("/kill")
+async def kill():
+    """The kill switch: nothing is submitted or sent until it is lifted. `touch data/STOP` does the same."""
+    guard.stop("stopped from the API")
+    await stop()
+    return {"stopped": True}
+
+
+@router.delete("/kill")
+async def lift_kill():
+    guard.resume()
+    return {"stopped": False}
 
 
 @router.get("/jobs")

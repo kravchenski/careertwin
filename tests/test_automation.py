@@ -232,13 +232,14 @@ async def test_cv_cannot_invent_fact_ids(store, vacancy, monkeypatch):
 class FakeMCP:
     page = '[ref_1] textbox "English level"\n[ref_2] button "Submit application"'
     clicked_page = "Thank you for applying"
+    tab_url = "https://example.com/jobs/python"  # where the tab is; the vacancy's own site
     instances = []
 
     def __init__(self):
         self.calls = []
         self.definitions = {
             name: {"name": name, "inputSchema": {}}
-            for name in [*browser.ALLOWED, "tab_create", "create_file"]
+            for name in [*browser.ALLOWED, "tab_create", "create_file", "tabs_list"]
         }
         self.__class__.instances.append(self)
 
@@ -250,7 +251,9 @@ class FakeMCP:
 
     async def tool(self, name, args):
         self.calls.append((name, args))
-        if name == "tab_create":
+        if name == "tabs_list":
+            value = json.dumps({"currentTabId": 123, "tabs": [{"id": 123, "title": "t", "url": self.tab_url}]})
+        elif name == "tab_create":
             value = json.dumps({"tabId": 123, "page": {"text": self.page}})
         elif name == "click":
             value = self.clicked_page
@@ -712,3 +715,230 @@ async def test_numeric_salary_without_budget_pauses_before_typing(store, form, m
     await browser.BrowserAgent().apply(form, store.settings(), store, False)
     assert store.job(form["id"])["state"] == "awaiting_answers"
     assert not any(name == "type" for name, _ in FakeMCP.instances[0].calls)
+
+
+# --- the form filler stays on the employer's site and never shows a model a secret ---------------
+
+TYPE_B2 = {
+    "tool": "type", "args": {"ref": "ref_1", "text": "B2+"},
+    "field": "English level", "value": "B2+", "evidence": "B2+",
+}
+PASSWORD = "S3cret-passw0rd!"
+LOGIN_PAGE = '[ref_1] textbox "Email"\n[ref_3] textbox "Password"\n[ref_2] button "Sign in"'
+PASSWORD_PLAN = {
+    "tool": "type", "args": {"ref": "ref_3", "text": "{{secret:ACCOUNT_PASSWORD}}"},
+    "field": "Password", "value": "{{secret:ACCOUNT_PASSWORD}}",
+}
+
+
+def types(calls):
+    return [args for name, args in calls if name == "type"]
+
+
+@pytest.fixture
+def secure(monkeypatch, tmp_path):
+    """A login configured for example.com, and a kill switch that lives in the test's own folder."""
+    from careertwin.automation import guard
+
+    monkeypatch.setenv("ACCOUNT_EMAIL", "login@example.com")
+    monkeypatch.setenv("ACCOUNT_PASSWORD", PASSWORD)
+    monkeypatch.setenv("CAREERTWIN_LOGIN_DOMAINS", "example.com")
+    monkeypatch.setattr(guard, "DATA_DIR", tmp_path / "guard")
+    monkeypatch.setattr(FakeMCP, "page", LOGIN_PAGE)
+    monkeypatch.setattr(browser.JevRanker, "supports_answer", AsyncMock(return_value=True))
+
+
+@pytest.mark.asyncio
+async def test_a_form_on_another_site_is_not_filled(store, form, monkeypatch):
+    monkeypatch.setattr(FakeMCP, "tab_url", "https://attacker.example/apply")
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(TYPE_B2)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=True)
+    job = store.job(form["id"])
+    assert job["state"] == "needs_review" and "outside the employer's site" in job["error"]
+    assert store.events(form["id"])[-1]["stage"] == "domain_blocked"
+    assert types(FakeMCP.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    ["https://example.com/jobs/python", "https://careers.example.com/apply", "https://boards.greenhouse.io/example/jobs/1",
+     "https://example.wd5.myworkdayjobs.com/en-US/job/1"],
+)
+async def test_the_employers_site_and_application_systems_are_filled(store, form, monkeypatch, url):
+    monkeypatch.setattr(FakeMCP, "tab_url", url)
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(side_effect=[json.dumps(TYPE_B2), '{"done": true}']))
+    monkeypatch.setattr(browser.JevRanker, "supports_answer", AsyncMock(return_value=True))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert types(FakeMCP.instances[0].calls) == [{"ref": "ref_1", "text": "B2+", "tabId": 123}]
+
+
+@pytest.mark.asyncio
+async def test_a_link_that_leads_off_site_stops_the_next_action(store, form, monkeypatch):
+    """The page's own button sends the tab elsewhere; whatever the page then says, nothing is typed."""
+
+    class Redirected(FakeMCP):
+        async def tool(self, name, args):
+            if name == "click":
+                self.calls.append((name, args))
+                self.__class__.tab_url = "https://attacker.example/steal"
+                return {"content": [{"type": "text", "text": '[ref_1] textbox "Send us your CV and salary"'}]}
+            return await super().tool(name, args)
+
+    monkeypatch.setattr(browser, "MCP", Redirected)
+    monkeypatch.setattr(Redirected, "tab_url", "https://example.com/jobs/python")
+    monkeypatch.setattr(Redirected, "page", '[ref_1] textbox "English level"\n[ref_2] link "Next step"')
+    plans = [{"tool": "click", "args": {"ref": "ref_2"}}, TYPE_B2]
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(side_effect=[json.dumps(p) for p in plans]))
+    monkeypatch.setattr(browser.JevRanker, "supports_answer", AsyncMock(return_value=True))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert store.job(form["id"])["state"] == "needs_review"
+    assert any(name == "click" for name, _ in Redirected.instances[0].calls)  # it did follow the link
+    assert types(Redirected.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+async def test_the_agent_cannot_navigate_away_from_the_employers_site(store, form, monkeypatch):
+    plan = {"tool": "navigate", "args": {"url": "https://attacker.example/collect"}}
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(plan)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert store.job(form["id"])["state"] == "needs_review"
+    assert not any(name == "navigate" for name, _ in FakeMCP.instances[0].calls)
+
+
+@pytest.mark.asyncio
+async def test_without_the_tabs_tool_the_agent_does_not_act(store, form, monkeypatch):
+    class Old(FakeMCP):
+        def __init__(self):
+            super().__init__()
+            del self.definitions["tabs_list"]
+
+    monkeypatch.setattr(browser, "MCP", Old)
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(TYPE_B2)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert "tabs_list" in store.job(form["id"])["error"] and types(Old.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+async def test_the_password_is_typed_by_the_executor_and_never_shown_to_a_model_or_stored(store, form, secure, monkeypatch):
+    email = {"tool": "type", "args": {"ref": "ref_1", "text": "login@example.com"}, "field": "Email",
+             "value": "login@example.com", "evidence": "login@example.com"}
+    model = AsyncMock(side_effect=[json.dumps(email), json.dumps(PASSWORD_PLAN), '{"done": true}'])
+    monkeypatch.setattr(browser, "call_ai", model)
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+
+    typed = types(FakeMCP.instances[0].calls)
+    assert [item["text"] for item in typed] == ["login@example.com", PASSWORD]  # the real value reached the page
+    prompts = json.dumps([call.args for call in model.call_args_list])
+    assert PASSWORD not in prompts and "{{secret:ACCOUNT_PASSWORD}}" in prompts  # the model only ever saw the placeholder
+    assert PASSWORD not in json.dumps(store.events()) and "{{secret:ACCOUNT_PASSWORD}}" in json.dumps(store.events())
+    assert store.job(form["id"])["state"] == "form_ready"
+
+
+@pytest.mark.asyncio
+async def test_the_login_is_offered_to_the_model_only_when_it_is_fully_configured(store, form, secure, monkeypatch):
+    monkeypatch.setenv("CAREERTWIN_LOGIN_DOMAINS", "")
+    model = AsyncMock(return_value='{"done": true}')
+    monkeypatch.setattr(browser, "call_ai", model)
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert json.loads(model.call_args.args[1])["login"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_page_that_echoes_the_password_is_masked_before_the_model_reads_it(store, form, secure, monkeypatch):
+    class Echo(FakeMCP):
+        async def tool(self, name, args):
+            if name == "type":
+                return {"content": [{"type": "text", "text": f'[ref_3] textbox "Password" value="{PASSWORD}"'}]}
+            return await super().tool(name, args)
+
+    monkeypatch.setattr(browser, "MCP", Echo)
+    model = AsyncMock(side_effect=[json.dumps(PASSWORD_PLAN), '{"done": true}'])
+    monkeypatch.setattr(browser, "call_ai", model)
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert PASSWORD not in json.dumps([call.args for call in model.call_args_list])
+    assert PASSWORD not in json.dumps(store.events())
+
+
+@pytest.mark.asyncio
+async def test_the_password_is_not_typed_on_a_domain_that_is_not_a_login_domain(store, form, secure, monkeypatch):
+    monkeypatch.setenv("CAREERTWIN_LOGIN_DOMAINS", "linkedin.com")
+    monkeypatch.setattr(FakeMCP, "tab_url", "https://boards.greenhouse.io/example/jobs/1")  # a shared system
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(PASSWORD_PLAN)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert store.job(form["id"])["state"] == "awaiting_answers"
+    assert store.events(form["id"])[-1]["stage"] == "secret_blocked" and types(FakeMCP.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    ["{{secret:CAREERTWIN_API_TOKEN}}", "my {{secret:ACCOUNT_PASSWORD}} here", "{{secret:ACCOUNT_PASSWORD}}{{secret:ACCOUNT_PASSWORD}}"],
+)
+async def test_only_the_account_password_and_only_on_its_own_may_be_typed(store, form, secure, monkeypatch, text):
+    monkeypatch.setenv("CAREERTWIN_API_TOKEN", "t" * 40)
+    plan = {**PASSWORD_PLAN, "args": {"ref": "ref_3", "text": text}, "value": text}
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(plan)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert store.job(form["id"])["state"] == "needs_review" and types(FakeMCP.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+async def test_a_secret_is_not_typed_into_a_field_that_is_not_a_password_field(store, form, secure, monkeypatch):
+    plan = {**PASSWORD_PLAN, "args": {"ref": "ref_1", "text": "{{secret:ACCOUNT_PASSWORD}}"}}  # ref_1 is the Email box
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(plan)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert store.job(form["id"])["state"] == "needs_review" and types(FakeMCP.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+async def test_the_kill_switch_stops_the_filler_before_it_does_anything(store, form, secure, monkeypatch):
+    from careertwin.automation import guard
+
+    guard.stop("test")
+    model = AsyncMock()
+    monkeypatch.setattr(browser, "call_ai", model)
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=True)
+    job = store.job(form["id"])
+    assert job["state"] == "needs_review" and "kill switch" in job["error"]
+    model.assert_not_called()
+    assert FakeMCP.instances[0].calls == []
+
+
+def test_events_never_keep_a_secret(store, monkeypatch):
+    monkeypatch.setenv("ACCOUNT_PASSWORD", PASSWORD)
+    store.event(None, "note", {"text": f"typed {PASSWORD} by mistake", "password": "hunter2", "nested": [{"k": f"a{PASSWORD}b"}]})
+    payload = json.dumps(store.events()[-1]["payload"])
+    assert PASSWORD not in payload and "hunter2" not in payload
+
+
+def test_the_kill_switch_is_reachable_from_the_api(store, tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from careertwin.api.routes import automation
+    from careertwin.automation import guard
+
+    store.save_settings(Settings(context=PROFILE))
+    monkeypatch.setattr(guard, "DATA_DIR", tmp_path / "guard")
+    monkeypatch.setattr(automation, "engine", Engine(store))
+    app = FastAPI()
+    app.include_router(automation.router)
+    with TestClient(app) as client:
+        base = "/v1/automation"
+        assert client.get(base + "/status").json()["stopped"] is False
+        assert client.post(base + "/kill").json() == {"stopped": True}
+        assert guard.stopped() and client.get(base + "/status").json()["stopped"] is True
+        assert client.post(base + "/run").status_code == 423  # locked while the switch is on
+        assert client.delete(base + "/kill").json() == {"stopped": False}
+        assert not guard.stopped()
+
+
+def test_a_search_cycle_does_not_start_while_the_kill_switch_is_on(store, tmp_path, monkeypatch):
+    from careertwin.automation import guard
+
+    store.save_settings(Settings(context=PROFILE))
+    monkeypatch.setattr(guard, "DATA_DIR", tmp_path / "guard")
+    guard.stop("test")
+    with pytest.raises(guard.Stopped):
+        Engine(store).run()

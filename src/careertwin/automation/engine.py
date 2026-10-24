@@ -5,6 +5,7 @@ import hashlib
 import os
 from typing import Any
 
+from . import guard
 from .browser import BrowserAgent
 from .documents import DocumentAgent
 from .excel import ExcelAgent
@@ -49,6 +50,7 @@ class Engine:
     def status(self) -> dict[str, Any]:
         return {
             "running": bool(self.cycle and not self.cycle.done()),
+            "stopped": guard.stopped(),
             "active_jobs": [key for key, task in self.tasks.items() if not task.done()],
             "last_run": self.last_run,
             "jev_configured": bool(os.getenv("TYPESAFE_API_KEY")),
@@ -62,6 +64,7 @@ class Engine:
         }
 
     def run(self) -> None:
+        guard.assert_running()
         if self.cycle and not self.cycle.done():
             raise ValueError("A search cycle is already running")
         if not self.store.settings().context.strip():
@@ -213,7 +216,7 @@ class Engine:
         while True:
             await asyncio.sleep(60)
             settings = self.store.settings()
-            if not settings.scheduled:
+            if not settings.scheduled or guard.stopped():
                 continue
             from datetime import datetime, timezone
 
