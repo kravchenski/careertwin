@@ -537,6 +537,8 @@ class OverlayWindow(QWidget):
         self.menu.addSeparator()
         self.menu.addAction(self.act_quit)
         self.menu_button.setMenu(self.menu)
+        for menu in (self.menu, self.interview_menu):
+            menu.aboutToShow.connect(lambda m=menu: capture_exclude.exclude(int(m.winId())))
 
     def _fill_interview_menu(self) -> None:
         """List the saved interviews so one click switches vacancy, CV and notes together."""

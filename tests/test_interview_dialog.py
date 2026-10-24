@@ -104,6 +104,29 @@ def test_dialog_opens_on_the_requested_tab(gui):
         assert gui.dialog.tabs.tabText(gui.dialog.tabs.currentIndex()) == tab
 
 
+def test_menu_and_dialog_ask_windows_to_stay_out_of_captures(gui, monkeypatch):
+    from careertwin.interview import capture_exclude
+
+    excluded: list[int] = []
+
+    def record(hwnd, user32=None):
+        excluded.append(hwnd)
+        return True
+
+    monkeypatch.setattr(capture_exclude, "exclude", record)
+    gui.window.menu.aboutToShow.emit()
+    gui.window.interview_menu.aboutToShow.emit()
+    gui.dialog.hide()
+    gui.dialog.show()
+    gui.process()
+
+    assert excluded == [
+        int(gui.window.menu.winId()),
+        int(gui.window.interview_menu.winId()),
+        int(gui.dialog.winId()),
+    ]
+
+
 def test_adding_a_document_updates_the_list_and_the_window(gui):
     gui.dialog.add_files([gui.file("Alex_CV.txt"), gui.file("linkedin.txt", CV_TEXT + " More facts.")])
     gui.process()

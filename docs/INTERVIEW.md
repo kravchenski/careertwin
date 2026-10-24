@@ -20,11 +20,11 @@ Many employers forbid AI help during interviews, and recording a call can need t
 side's consent. Check the rules for each interview and tell the interviewer when you are
 expected to. The window only suggests: you decide what to say.
 
-On Windows 10 (version 2004+) and 11 the window sets `WDA_EXCLUDEFROMCAPTURE` on itself, so
-Zoom, Teams, Meet, OBS and screenshots drop it from the capture entirely while you keep
-seeing it on the monitor. Older Windows builds show a black box instead; a physical camera
-or a photo of the screen is, of course, unaffected. On other systems keep the window on a
-monitor you do not share.
+On Windows 10 (version 2004+) and 11 the window sets `WDA_EXCLUDEFROMCAPTURE` on itself, its
+menus and the Settings window, so Zoom, Teams, Meet, OBS and screenshots drop it from the
+capture entirely while you keep seeing it on the monitor. Older Windows builds show a black
+box instead; a physical camera or a photo of the screen is, of course, unaffected. On other
+systems keep the window on a monitor you do not share.
 
 ## Speech recognition: Whisper or Deepgram
 

@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from careertwin.interview import i18n, languages
+from careertwin.interview import capture_exclude, i18n, languages
 from careertwin.interview import project as project_store
 from careertwin.interview.providers import OTHER, PROVIDERS, provider_for
 from careertwin.interview.runtime import Runtime
@@ -173,6 +173,11 @@ class SettingsDialog(QDialog):
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        """Ask Windows to keep the dialog out of captures, like the overlay window."""
+        super().showEvent(event)
+        capture_exclude.exclude(int(self.winId()))
 
     def say(self, text: str, error: bool = False) -> None:
         self.status.setObjectName("error" if error else "status")
