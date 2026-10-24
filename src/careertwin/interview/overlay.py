@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from careertwin.interview import screenshot
+from careertwin.interview.codeview import highlight
 from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.session import INTERVIEWER, YOU, Callbacks
@@ -322,7 +323,7 @@ class Entry:
     raw: str = ""
 
 
-_FENCE = re.compile(r"```[A-Za-z0-9_+#.-]*[ \t]*\n?(.*?)(?:```|\Z)", re.S)
+_FENCE = re.compile(r"```([A-Za-z0-9_+#.-]*)[ \t]*\n?(.*?)(?:```|\Z)", re.S)
 _CODE_LINE = re.compile(
     r"^(?:\s{2,}\S|\t|\s*(?:def |class |public |private |static |function |const |let |var |import |from \S+ import |#include|fn |func |return\b)).*",
     re.M,
@@ -335,12 +336,12 @@ def looks_like_code(text: str) -> bool:
     return len(lines) >= 3 and sum(bool(_CODE_LINE.match(line)) for line in lines) * 2 >= len(lines)
 
 
-def code_block(code: str, size: int) -> str:
-    """Code in a box that keeps its indentation (a table cell, which Qt shades reliably)."""
+def code_block(code: str, size: int, tag: str = "") -> str:
+    """Code in a shaded box: monospace, indentation kept, long lines wrapped, syntax coloured."""
     return (
         '<table width="100%" cellspacing="0" cellpadding="8" style="margin-top:6px"><tr>'
         f'<td bgcolor="#262838"><pre style="font-family:monospace; font-size:{size}px; margin:0; '
-        f'color:{TEXT}">{html.escape(code.strip(chr(10)))}</pre></td></tr></table>'
+        f'white-space:pre-wrap; color:{TEXT}">{highlight(code.strip(chr(10)), tag)}</pre></td></tr></table>'
     )
 
 
@@ -351,7 +352,7 @@ def render_answer(text: str, style: str, code_size: int) -> str:
         prose = text[position : match.start()].strip()
         if prose:
             out.append(f'<p style="{style}">{render_bold(prose)}</p>')
-        out.append(code_block(match[1], code_size))
+        out.append(code_block(match[2], code_size, match[1]))
         position = match.end()
     rest = text[position:].strip()
     if rest:
@@ -362,11 +363,39 @@ def render_answer(text: str, style: str, code_size: int) -> str:
     return "".join(out)
 
 
+INLINE_CODE = 'font-family:monospace; background-color:#2b2d3f; color:#e6c07b'
+
+
 def render_bold(text: str) -> str:
-    """Escape, then turn **key terms** into bold; a half-streamed `**` is dropped."""
-    escaped = html.escape(text)
-    escaped = re.sub(r"\*\*(.+?)\*\*", rf'<b style="color:{STRONG}">\1</b>', escaped)
-    return escaped.replace("**", "")
+    """Escape, then turn **key terms** into bold and `code` into monospace; a half-streamed `**` is dropped."""
+    out = []
+    for index, piece in enumerate(text.split("`")):
+        escaped = html.escape(piece)
+        if index % 2:  # between backticks (still open while the reply streams)
+            out.append(f'<span style="{INLINE_CODE}">{escaped}</span>')
+        else:
+            out.append(re.sub(r"\*\*(.+?)\*\*", rf'<b style="color:{STRONG}">\1</b>', escaped).replace("**", ""))
+    return "".join(out)
+
+
+def render_items(items: list[str], style: str, code_size: int) -> str:
+    """Bullet lines as a list; a line that is a fenced code block becomes a code block between lists."""
+    out, run = [], []
+
+    def flush() -> None:
+        if run:
+            out.append(f'<ul style="{style}">' + "".join(f"<li>{render_bold(item)}</li>" for item in run) + "</ul>")
+            run.clear()
+
+    for item in items:
+        match = _FENCE.fullmatch(item.strip()) if item.lstrip().startswith("```") else None
+        if match:
+            flush()
+            out.append(code_block(match[2], code_size, match[1]))
+        else:
+            run.append(item)
+    flush()
+    return "".join(out)
 
 
 class OverlayWindow(QWidget):
@@ -916,12 +945,13 @@ class OverlayWindow(QWidget):
         plain = lambda line: line.replace("**", "")  # noqa: E731
         if self.layout_mode == "main" and parts.answer:
             return plain(parts.answer)
-        lines = [f"• {plain(point)}" for point in parts.points]
-        shot = self.entries[self.index].question == "[screenshot]"
-        if parts.answer and (self.full_answer or not parts.points or shot):
-            lines.append(_FENCE.sub(lambda match: match[1].strip("\n"), parts.answer))
+        unfence = lambda text: _FENCE.sub(lambda match: match[2].strip("\n"), text)  # noqa: E731
+        lines = [unfence(point) if point.lstrip().startswith("```") else f"• {plain(point)}" for point in parts.points]
+        solution = self.entries[self.index].question == "[screenshot]" or bool(_FENCE.search(parts.answer))
+        if parts.answer and (self.full_answer or not parts.points or solution):
+            lines.append(unfence(parts.answer))
         if self.full_answer:
-            lines += [f"• {plain(line)}" for line in parts.key]
+            lines += [unfence(line) if line.lstrip().startswith("```") else f"• {plain(line)}" for line in parts.key]
             if parts.context:
                 lines.append(parts.context)
         return "\n".join(lines)
@@ -937,10 +967,9 @@ class OverlayWindow(QWidget):
         if found.answer:
             parts += [heading(16, self.tr_("details_main")), render_answer(found.answer, body, px(14))]
         if found.key:
-            items = "".join(f"<li>{render_bold(line)}</li>" for line in found.key)
-            parts += [heading(16, self.tr_("details_key")), f'<ul style="{body}">{items}</ul>']
+            parts += [heading(16, self.tr_("details_key")), render_items(found.key, body, px(14))]
         if found.context:
-            parts += [heading(16, self.tr_("details_context")), f'<p style="{body}">{render_bold(found.context)}</p>']
+            parts += [heading(16, self.tr_("details_context")), render_answer(found.context, body, px(14))]
         return "".join(parts)
 
     def _render(self) -> None:
@@ -980,13 +1009,15 @@ class OverlayWindow(QWidget):
             )
             points = []
         if points:
-            items = "".join(f"<li>{render_bold(point)}</li>" for point in points)
-            parts.append(f'<ul style="font-size:{px(16)}px">{items}</ul>')
+            parts.append(render_items(points, f"font-size:{px(16)}px", px(15)))
         if self.layout_mode == "main":
             pass
-        elif spoken and (shot or not points):
-            # What the screen asked for is the solution itself: show it under the lines, not behind Details.
+        elif spoken and (shot or not points or _FENCE.search(spoken)):
+            # Code, or what the screen asked for, is the solution itself: show it under the lines,
+            # not behind Details; the key points and context may still follow.
             parts.append(render_answer(spoken, f"font-size:{px(16)}px; color:{TEXT}", px(15)))
+            if self.full_answer and points and (found.key or found.context):
+                parts.append(self._details_html(replace(found, answer=""), px))
         elif self.full_answer and found.has_details:
             parts.append(self._details_html(found, px))
         scroll = self.answer.verticalScrollBar().value()

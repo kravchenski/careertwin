@@ -57,6 +57,8 @@ disagree, trust the context and make the first line say so honestly.
 - If the context does not support the question, the first line says so honestly in first person \
 (for example "I haven't used X in production, only in a course") and the next lines bridge to \
 the closest real experience and how the candidate learns. No bluff.
+- Code: put any code in ANSWER inside one fenced block with its language (```python), indented \
+properly, never in POINTS or KEY. Write identifiers, commands and file names in `single backticks`.
 - Behavioral questions: situation, task, action, result, with the real details, in first person.
 - Technical questions: answer directly, name the trade-off, offer to go deeper.
 - Salary: follow SALARY POLICY. Never state a number that is not in the context.
@@ -209,7 +211,21 @@ _MARKER = re.compile(r"^[ \t]*(?:\*\*)?(POINTS|ANSWER|KEY|CONTEXT)(?:\*\*)?[ \t]
 
 
 def _bullets(block: str) -> list[str]:
-    return [_BULLET.sub("", line).strip() for line in block.splitlines() if line.strip()]
+    """The lines of a list; a fenced code block stays in one piece, with its indentation."""
+    items, code = [], None
+    for line in block.splitlines():
+        if code is not None:
+            code.append(line)
+            if line.strip().startswith("```") and len(code) > 1:
+                items.append("\n".join(code))
+                code = None
+        elif line.strip().startswith("```"):
+            code = [line.strip()]
+        elif line.strip():
+            items.append(_BULLET.sub("", line).strip())
+    if code is not None:  # a block that is still streaming
+        items.append("\n".join(code))
+    return items
 
 
 def sections(text: str) -> Sections:

@@ -886,3 +886,36 @@ def test_the_project_tab_speaks_the_window_language(gui):
     assert gui.dialog.project_choose.text() == "Выбрать папку…" and "досье" in gui.dialog.project_intro.text()
     gui.choose(gui.dialog.ui_language, "pl")
     assert gui.dialog.tabs.tabText(gui.dialog.TABS.index("project")) == "Projekt"
+
+
+JAVA_ANSWER = (
+    "POINTS:\n- use a `BufferedReader` in try-with-resources\nANSWER:\nClose it with try-with-resources:\n"
+    "```java\ntry (BufferedReader reader = Files.newBufferedReader(path)) {\n    String line;\n}\n```\n"
+    "KEY:\n- **Files.lines**: gives a `Stream<String>`\nCONTEXT:\nFine for small files."
+)
+
+
+def test_code_in_an_answer_is_shown_as_code_whatever_the_details_switch_says(gui):
+    gui.window.details.setChecked(False)
+    gui.bridge.started.emit("How do I read a file in Java?")
+    gui.bridge.done.emit(JAVA_ANSWER)
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    assert "try (BufferedReader reader = Files.newBufferedReader(path)) {" in text and "    String line;" in text
+    assert "Detailed answer" not in text and "Files.lines" not in text
+    assert "```" not in text
+    gui.window.details.setChecked(True)
+    text = gui.window.answer.toPlainText()
+    assert "    String line;" in text and text.count("try (BufferedReader") == 1  # the code is not shown twice
+    assert "Key points" in text and "Files.lines" in text and "Fine for small files." in text
+    assert "`" not in text  # backticks become monospace, they are not printed
+    assert gui.window.answer_text.count("try (BufferedReader") == 1 and "```" not in gui.window.answer_text
+
+
+def test_code_inside_a_list_is_shown_in_a_block_not_as_bullets(gui):
+    gui.bridge.started.emit("Show me a loop")
+    gui.bridge.done.emit("POINTS:\n- a plain loop\n```python\nfor n in range(3):\n    print(n)\n```\n- done")
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    assert "for n in range(3):\n    print(n)" in text.replace(" ", "\n") or "    print(n)" in text
+    assert "a plain loop" in text and "done" in text and "```" not in text
