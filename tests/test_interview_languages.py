@@ -143,3 +143,26 @@ def test_the_interview_language_decides_when_the_dialogue_is_not_in_the_table(tm
     session.handle_text(INTERVIEWER, "Bize son projenizden biraz bahsedin lütfen")
     assert wait_for(lambda: coach.calls)
     session.stop()
+
+
+# ---- a heading that is still streaming ----------------------------------------------------------
+
+
+@pytest.mark.parametrize("tail", ["ANSW", "ANSWER", "A", "KE", "CONT", "**ANSWE", "context"])
+def test_a_heading_that_is_still_streaming_is_not_shown_as_a_line(tail):
+    from careertwin.interview.prompts import sections, split_partial
+
+    parts = sections(f"POINTS:\n- first line\n- second line\n{tail}")
+    assert parts.points == ["first line", "second line"] and parts.answer == ""
+    points, answer = split_partial(f"POINTS:\n- one\n{tail}")
+    assert points == ["one"] and answer == ""
+
+
+def test_real_headings_and_real_lines_are_untouched():
+    from careertwin.interview.prompts import sections
+
+    assert sections("POINTS:\n- a\nANSWER:\nfull text").answer == "full text"
+    assert sections("POINTS:\n- a\n- Answer the question\nANSWER:\nx").points == ["a", "Answer the question"]
+    assert sections("Just a plain reply without headings").answer == "Just a plain reply without headings"
+    assert sections("I will answer").answer == "I will answer"
+    assert sections("POINTS:\n- a\n- context").points == ["a", "context"]  # a bullet is never a heading
