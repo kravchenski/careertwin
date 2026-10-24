@@ -55,7 +55,7 @@ def explain(status: int, body: str) -> str:
         detail = ""
     detail = detail or body.strip()[:200]
     if status in (401, 403):
-        return "Deepgram rejected the API key: check it in Settings → Audio & speech"
+        return "Deepgram rejected the API key: check it in Settings → Audio"
     if status == 402:
         return "Deepgram says the account has no credit left"
     if status == 429:
@@ -102,7 +102,7 @@ class DeepgramTranscriber:
     def load(self) -> None:
         if not self.api_key:
             raise RuntimeError(
-                "Deepgram needs an API key: Settings → Audio & speech (or DEEPGRAM_API_KEY in .env)"
+                "Deepgram needs an API key: Settings → Audio (or DEEPGRAM_API_KEY in .env)"
             )
 
     def transcribe(self, pcm: np.ndarray, prompt: str = "") -> str:

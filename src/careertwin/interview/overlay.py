@@ -63,10 +63,10 @@ STRINGS = {
         "drop_cv": "drop a PDF here to add a CV", "cv_added": "CV added",
         "settings": "Settings…",
         "no_context": "No context yet",
-        "no_context_hint": "Open Settings → Docs and add your CV, or write about yourself in About me.",
+        "no_context_hint": "Open Settings → Interview and add your CV, or write about yourself in About me.",
         "shot_off": "Screenshots are turned off in Settings",
         "interview_menu": "Interview", "new_interview": "New interview…", "listening_to": "Listening to",
-        "no_vacancy_hint": "No vacancy yet: Settings → Vacancy to paste it, then Documents for the CV you sent.",
+        "no_vacancy_hint": "No vacancy yet: Settings → Interview to paste it and to add the CV you sent.",
     },
     "ru": {
         "ask": "Спросить", "screenshot": "Скриншот",
@@ -82,10 +82,10 @@ STRINGS = {
         "drop_cv": "перетащите PDF, чтобы добавить резюме", "cv_added": "Резюме добавлено",
         "settings": "Настройки…",
         "no_context": "Контекста пока нет",
-        "no_context_hint": "Откройте Настройки → Документы и добавьте резюме или напишите о себе во вкладке «Обо мне».",
+        "no_context_hint": "Откройте Настройки → Интервью и добавьте резюме или напишите о себе во вкладке «Обо мне».",
         "shot_off": "Скриншоты выключены в настройках",
         "interview_menu": "Интервью", "new_interview": "Новое интервью…", "listening_to": "Слушаю",
-        "no_vacancy_hint": "Вакансии пока нет: Настройки → Вакансия, чтобы вставить её, затем Документы для резюме, которое вы отправляли.",
+        "no_vacancy_hint": "Вакансии пока нет: Настройки → Интервью, чтобы вставить её и добавить резюме, которое вы отправляли.",
     },
     "pl": {
         "ask": "Zapytaj", "screenshot": "Zrzut ekranu",
@@ -101,10 +101,10 @@ STRINGS = {
         "drop_cv": "upuść tu plik PDF, aby dodać CV", "cv_added": "Dodano CV",
         "settings": "Ustawienia…",
         "no_context": "Brak kontekstu",
-        "no_context_hint": "Otwórz Ustawienia → Dokumenty i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
+        "no_context_hint": "Otwórz Ustawienia → Rozmowa i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
         "shot_off": "Zrzuty ekranu są wyłączone w ustawieniach",
         "interview_menu": "Rozmowa", "new_interview": "Nowa rozmowa…", "listening_to": "Słucham",
-        "no_vacancy_hint": "Brak oferty: Ustawienia → Oferta, aby ją wkleić, potem Dokumenty dla wysłanego CV.",
+        "no_vacancy_hint": "Brak oferty: Ustawienia → Rozmowa, aby ją wkleić i dodać wysłane CV.",
     },
 }
 KEYS = {"ask": "Ctrl ↵", "screenshot": "Ctrl ⇧ ↵", "previous": "Ctrl ←", "next": "Ctrl →"}
@@ -457,7 +457,7 @@ class OverlayWindow(QWidget):
         root.insertWidget(root.indexOf(self.answer), self.heard)
         self.context = ElidedLabel()
         self.context.setObjectName("dim")
-        self.context.clicked.connect(lambda: self.open_settings("docs"))
+        self.context.clicked.connect(lambda: self.open_settings("interview"))
         root.addWidget(self.context)
 
         self._build_menu()
@@ -502,7 +502,7 @@ class OverlayWindow(QWidget):
         self.act_settings = QAction(self)
         self.act_transcript = QAction(self, checkable=True)
         self.act_quit = QAction(self)
-        self.act_settings.triggered.connect(lambda: self.open_settings("window"))
+        self.act_settings.triggered.connect(lambda: self.open_settings("general"))
         self.act_transcript.toggled.connect(self.transcript.setVisible)
         self.act_quit.triggered.connect(self.close)
         self.menu.addAction(self.act_settings)
@@ -546,7 +546,7 @@ class OverlayWindow(QWidget):
             return
         self.runtime.context.new_interview()
         self.refresh_controls()
-        self.open_settings("vacancy")
+        self.open_settings("interview")
 
     def _quick(self, name: str, value: bool) -> None:
         """A menu toggle: saved through the runtime when there is one, else applied locally."""
@@ -655,7 +655,7 @@ class OverlayWindow(QWidget):
         for name in ("opacity", "font_scale", "show_full_answer", "answer_layout", "ui_language", "listen"):
             self.apply_setting(name, getattr(settings, name))
 
-    def open_settings(self, tab: str = "docs") -> None:
+    def open_settings(self, tab: str = "interview") -> None:
         """Show the settings dialog (created on first use) on the given tab."""
         if self.runtime is None:
             return

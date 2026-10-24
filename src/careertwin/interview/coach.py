@@ -42,7 +42,7 @@ def gateway_url() -> str:
 def unreachable(base: str, exc: Exception) -> str:
     return (
         f"No AI gateway answers at {base} ({type(exc).__name__}). "
-        "Pick a provider in Settings → AI model, or start Switchyard."
+        "Pick a provider in Settings → AI, or start Switchyard."
     )
 
 
@@ -51,9 +51,9 @@ def failed(base: str, model: str, status: int, text: str) -> str:
     provider = provider_for(base)
     message = f"{provider.label if provider else 'The AI gateway'} returned {status}: {text[:200]}"
     if status in (400, 404) and model == "auto" and not (provider and provider.id == "switchyard"):
-        message += " (choose a model in Settings → AI model: Load models)"
+        message += " (choose a model in Settings → AI: Load models)"
     if status in (401, 403):
-        message += " (check the API key in Settings → AI model)"
+        message += " (check the API key in Settings → AI)"
     return message
 
 
@@ -157,7 +157,7 @@ class StreamingCoach:
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise CoachError("The AI gateway returned an unreadable answer") from exc
         if not text.strip():
-            raise CoachError("The model returned no text. Check the model in Settings → AI model.")
+            raise CoachError("The model returned no text. Check the model in Settings → AI.")
         return text
 
     def stream(

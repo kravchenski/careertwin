@@ -137,7 +137,7 @@ def test_an_unreachable_deepgram_is_explained():
 
 def test_without_a_key_loading_says_where_to_enter_it(monkeypatch):
     monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="Settings → Audio & speech"):
+    with pytest.raises(RuntimeError, match="Settings → Audio"):
         DeepgramTranscriber("").load()
     monkeypatch.setenv("DEEPGRAM_API_KEY", "from-env")
     assert DeepgramTranscriber("").api_key == "from-env"
@@ -173,7 +173,7 @@ class Failing:
     last_language, last_probability, language = None, 0.0, None
 
     def transcribe(self, pcm, prompt=""):
-        raise DeepgramError("Deepgram rejected the API key: check it in Settings → Audio & speech")
+        raise DeepgramError("Deepgram rejected the API key: check it in Settings → Audio")
 
 
 def test_a_wrong_key_is_reported_once_not_with_every_caption(tmp_path, monkeypatch):

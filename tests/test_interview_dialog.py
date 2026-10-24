@@ -65,7 +65,7 @@ class Gui:
         self.runtime.on_window = self.window.apply_setting
         self.window.apply_settings(self.runtime.settings)
         self.window.show()
-        self.window.open_settings("docs")
+        self.window.open_settings("interview")
         self.dialog = self.window.settings_dialog
         self.process()
 
@@ -92,12 +92,13 @@ def gui(tmp_path, monkeypatch):
 
 def test_dialog_opens_on_the_requested_tab(gui):
     assert gui.dialog.isVisible() and gui.dialog.tabs.currentIndex() == 0
-    gui.window.open_settings("screenshot")
-    assert gui.dialog.tabs.tabText(gui.dialog.tabs.currentIndex()) == "Screenshot"
     assert [gui.dialog.tabs.tabText(i) for i in range(gui.dialog.tabs.count())] == [
-        "Documents", "Vacancy", "Prepare", "About me", "Language", "Audio && speech",
-        "AI model", "Screenshot", "Window",
+        "Interview", "About me", "Practice", "Audio", "AI", "General",
     ]
+    for old_name, tab in (("screenshot", "General"), ("language", "General"), ("model", "AI"),
+                          ("prepare", "Practice"), ("docs", "Interview"), ("vacancy", "Interview")):
+        gui.window.open_settings(old_name)
+        assert gui.dialog.tabs.tabText(gui.dialog.tabs.currentIndex()) == tab
 
 
 def test_adding_a_document_updates_the_list_and_the_window(gui):
@@ -139,7 +140,7 @@ def test_language_tab_changes_the_interview_and_the_window(gui):
     assert gui.window.ui == "pl" and gui.window.ask.title.text() == "Zapytaj" and gui.window.ui_locked
     gui.bridge.language.emit("en")
     assert gui.window.ui == "pl"
-    assert gui.dialog.tabs.tabText(0) == "Dokumenty"
+    assert gui.dialog.tabs.tabText(0) == "Rozmowa"
     gui.choose(gui.dialog.ui_language, "auto")
     gui.bridge.language.emit("ru")
     assert gui.window.ui == "ru"
@@ -206,10 +207,8 @@ def test_speech_engine_switches_the_active_controls_and_the_transcriber(gui, mon
     assert "leaves this computer" in dialog.speech_note.text()
     dialog.deepgram_key.setText("dg-key")
     dialog.deepgram_key.editingFinished.emit()
-    dialog.deepgram_model.setCurrentText("nova-2")
-    dialog.deepgram_model.activated.emit(0)
-    assert (settings.deepgram_key, settings.deepgram_model) == ("dg-key", "nova-2")
-    assert made[-1][:2] == ("dg-key", "nova-2")
+    assert (settings.deepgram_key, settings.deepgram_model) == ("dg-key", "nova-3")
+    assert made[-1][:2] == ("dg-key", "nova-3")
     assert InterviewSettings.load().stt_engine == "deepgram"
     gui.choose(dialog.stt_engine, "whisper")
     assert dialog.whisper_model.isEnabled() and not dialog.deepgram_key.isEnabled()
@@ -285,20 +284,16 @@ def test_the_provider_follows_the_address_that_is_typed(gui):
     assert "Groq" in gui.dialog.model_note.text()
 
 
-def test_screenshot_tab_controls_the_button(gui, monkeypatch):
+def test_the_screenshot_switch_controls_the_button(gui, monkeypatch):
     assert gui.window.shot.isEnabled()
     gui.dialog.shot_enabled.setChecked(False)
     assert not gui.window.shot.isEnabled() and "Settings" in gui.window.shot.toolTip()
     gui.dialog.shot_enabled.setChecked(True)
     assert gui.window.shot.isEnabled()
-    assert [gui.dialog.shot_tool.itemData(i) for i in range(gui.dialog.shot_tool.count())] == ["auto", "grim", "maim"]
-    gui.choose(gui.dialog.shot_tool, "maim")
-    gui.dialog.shot_delay.setValue(0)
-    assert gui.runtime.settings.screenshot_tool == "maim" and gui.runtime.settings.screenshot_delay_ms == 0
     monkeypatch.setattr(screenshot, "available_tools", lambda: [])
     gui.dialog.refresh_screenshot()
     gui.window.refresh_controls()
-    assert not gui.window.shot.isEnabled() and "grim" in gui.dialog.shot_tools.text()
+    assert not gui.window.shot.isEnabled() and "grim" in gui.dialog.shot_note.text()
 
 
 def test_screenshot_button_sends_the_capture_to_the_session(gui, monkeypatch):
@@ -317,23 +312,6 @@ def test_screenshot_button_sends_the_capture_to_the_session(gui, monkeypatch):
     for _ in range(20):
         gui.process()
     assert gui.window.last_state == ("error", "grim failed") and gui.window.windowOpacity() == 1.0
-
-
-def test_capture_test_reports_the_image_size(gui):
-    from PySide6.QtCore import QBuffer, QByteArray
-    from PySide6.QtGui import QImage
-
-    image = QImage(32, 20, QImage.Format.Format_RGB32)
-    image.fill(0)
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QBuffer.OpenModeFlag.WriteOnly)
-    image.save(buffer, "PNG")
-    buffer.close()
-    gui.dialog._capture_done(base64.b64encode(bytes(data)).decode(), None)
-    assert "32×20" in gui.dialog.status.text()
-    gui.dialog._capture_done(None, "grim failed")
-    assert gui.dialog.status.objectName() == "error"
 
 
 def test_vacancy_notes_and_about_tabs_write_through(gui):
@@ -399,7 +377,7 @@ def test_interviews_are_listed_switched_renamed_and_deleted(gui, monkeypatch):
     gui.dialog._new_interview()
     gui.process()
     assert gui.dialog.interview_combo.count() == 2 and gui.dialog.interview_combo.currentText() == "Java at Beta"
-    assert gui.context.brief.documents == [] and gui.dialog.tabs.currentIndex() == gui.dialog.TABS.index("vacancy")
+    assert gui.context.brief.documents == [] and gui.dialog.tabs.currentIndex() == gui.dialog.TABS.index("interview")
     assert gui.window.context.full.startswith("Java at Beta")
     assert "No vacancy yet" in gui.window.answer.toPlainText()
     gui.choose(gui.dialog.interview_combo, first)
@@ -426,7 +404,7 @@ def test_the_window_menu_switches_interviews(gui):
     actions[0].trigger()
     assert gui.context.current.id == first and gui.window.context.full.startswith("First")
     gui.window._new_interview()
-    assert gui.context.interview_name().startswith("Interview") and gui.dialog.tabs.currentIndex() == 1
+    assert gui.context.interview_name().startswith("Interview") and gui.dialog.tabs.currentIndex() == 0
 
 
 BANK = (
@@ -626,3 +604,42 @@ def test_only_a_press_on_the_border_resizes_the_window(gui):
     assert window._edges_at(QPoint(width - 1, height // 2)) == Qt.Edge.RightEdge
     assert window._edges_at(QPoint(width - 1, height - 1)) == Qt.Edge.RightEdge | Qt.Edge.BottomEdge
     assert window._edges_at(QPoint(3, 3)) == Qt.Edge.LeftEdge | Qt.Edge.TopEdge
+
+
+def test_the_ai_tab_asks_only_for_what_the_provider_needs(gui):
+    dialog = gui.dialog
+    form = dialog.model_form
+    assert not form.isRowVisible(dialog.gateway_url) and not form.isRowVisible(dialog.gateway_key)
+    assert not dialog.model_id.isHidden()
+    gui.choose(dialog.provider, "groq")
+    assert not form.isRowVisible(dialog.gateway_url) and form.isRowVisible(dialog.gateway_key)
+    gui.choose(dialog.provider, "ollama")
+    assert not form.isRowVisible(dialog.gateway_key)
+    gui.choose(dialog.provider, "other")
+    dialog.gateway_url.setText("https://llm.example.com")
+    dialog.gateway_url.editingFinished.emit()
+    assert form.isRowVisible(dialog.gateway_url) and form.isRowVisible(dialog.gateway_key)
+
+
+def test_the_audio_tab_shows_the_controls_of_the_chosen_engine_only(gui):
+    dialog = gui.dialog
+    assert dialog.audio_form.isRowVisible(dialog.whisper_model)
+    assert not dialog.audio_form.isRowVisible(dialog.deepgram_row)
+    gui.choose(dialog.stt_engine, "deepgram")
+    assert not dialog.audio_form.isRowVisible(dialog.whisper_model)
+    assert dialog.audio_form.isRowVisible(dialog.deepgram_row)
+    assert not hasattr(dialog, "whisper_device") and not hasattr(dialog, "deepgram_model")
+
+
+def test_the_general_tab_holds_answers_window_and_the_screenshot_switch(gui):
+    dialog = gui.dialog
+    dialog.show_tab("general")
+    page = dialog.tabs.currentWidget()
+    for widget in (dialog.interview_language, dialog.answer_layout, dialog.ui_language,
+                   dialog.pinned, dialog.shot_enabled, dialog.opacity, dialog.reset_button):
+        assert page.isAncestorOf(widget)
+    assert not hasattr(dialog, "shot_tool") and not hasattr(dialog, "shot_delay")
+    dialog.show_tab("interview")
+    page = dialog.tabs.currentWidget()
+    assert page.isAncestorOf(dialog.docs_layout.parentWidget()) and page.isAncestorOf(dialog.vacancy_text)
+    assert page.isAncestorOf(dialog.notes)
