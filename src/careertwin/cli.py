@@ -367,6 +367,12 @@ def main() -> None:
     _ = mcp.add_argument("--host", default="127.0.0.1")
     _ = mcp.add_argument("--port", type=int, default=8765)
 
+    watch = sub.add_parser("watch", help="Control the agents from this terminal: live feed, approvals, notifications")
+    _ = watch.add_argument("--once", action="store_true", help="Print the status and what waits, then exit")
+
+    security = sub.add_parser("security", help="Check how well your secrets and the API are protected")
+    _ = security.add_argument("--fix", action="store_true", help="Apply the fixes that are safe (file permissions)")
+
     agent = sub.add_parser("agent", help="Run the job-search agent on a Switchyard gateway")
     _ = agent.add_argument("task", nargs="?", help="What to do; omit for an interactive session")
     _ = agent.add_argument("--model", help="Gateway model id (default: SWITCHYARD_AGENT_MODEL)")
@@ -376,7 +382,7 @@ def main() -> None:
     args = parser.parse_args()
     command: str = args.command or ""
 
-    if command in {"serve", "mcp", "agent"}:
+    if command in {"serve", "mcp", "agent", "watch", "security"}:
         _run_service(command, args)
         return
 
@@ -431,6 +437,14 @@ def _run_service(command: str, args: argparse.Namespace) -> None:
         uvicorn.run(
             "careertwin.api.app:app", host=args.host, port=args.port, reload=args.reload
         )
+    elif command == "watch":
+        from careertwin.watch import main as watch_main
+
+        watch_main(["--once"] if args.once else [])
+    elif command == "security":
+        from careertwin.security_check import main as security_main
+
+        raise SystemExit(security_main(fix=args.fix))
     elif command == "mcp":
         from careertwin.agentic.mcp_server import main as mcp_main
 
