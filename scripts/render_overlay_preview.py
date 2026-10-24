@@ -34,6 +34,24 @@ SAMPLES = {
         "I use it for async services on FastAPI and PostgreSQL, and move heavy work into separate "
         "processes or services.",
     ),
+    "uk": (
+        "Що таке Python?",
+        "POINTS:\n"
+        "- **Python** — високорівнева інтерпретована мова з динамічною типізацією.\n"
+        "- Відома **читабельним синтаксисом** і великою стандартною бібліотекою.\n"
+        "- Її застосовують для **веббекенду**, автоматизації, даних і машинного навчання.\n"
+        "- Компроміс: вона **повільніша** за компільовані мови, а GIL обмежує потоки.\n"
+        "ANSWER:\n"
+        "Python — мова загального призначення: інтерпретована, з динамічною типізацією та наголосом на "
+        "читабельності. Величезна екосистема робить її частим вибором для бекенду, скриптів і даних.\n"
+        "KEY:\n"
+        "- **Динамічна типізація**: типи перевіряються під час виконання, код пишеться швидше.\n"
+        "- **GIL**: байткод виконує один потік за раз, тож важке виносять у процеси.\n"
+        "- **Екосистема**: FastAPI, Django, asyncio, NumPy і тисячі пакетів.\n"
+        "CONTEXT:\n"
+        "Я використовую її для async-сервісів на FastAPI і PostgreSQL, а важкі ділянки виношу в окремі "
+        "процеси або сервіси.",
+    ),
     "ru": (
         "Что такое Python?",
         "POINTS:\n"
@@ -66,7 +84,7 @@ def main(target: str, language: str = "en") -> None:
         on_screenshot=lambda: None,
         sources=[
             ("about", "ABOUT.md · 20.6k"),
-            ("cv", "Maksim_Krauchyk_CV_Python_EN.pdf · 5.2k"),
+            ("cv", "Alex_Demo_CV.pdf · 5.2k"),
             ("job", "Python Developer at Example Corp"),
         ],
         ui_language=language,

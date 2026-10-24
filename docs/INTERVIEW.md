@@ -124,7 +124,16 @@ your documents are in. Company names, technologies and job titles are never tran
 - A fixed language (Settings → General) is used for speech
   recognition and answers, and can be changed during the call.
 
-The window itself is translated into English, Russian and Polish.
+The window itself is translated into English, Russian, Polish, Ukrainian, German, French and Spanish
+(*Settings → General → Window language*, or *Follow the interview*, which switches with the language
+Whisper hears). Interviews can run in 33 languages; a language without a window translation shows
+English labels. Adding a translation is one file: [TRANSLATING.md](TRANSLATING.md).
+
+A spoken question has to be recognised as one before it is sent. The question words of English, Russian,
+Polish, Ukrainian, German, French and Spanish are built in, so a question is heard even when Whisper
+leaves out the question mark. For any other language a spoken sentence of five words or more, or one with
+a question mark, is sent as a question; a pleasantry like "yes" is not. The Ask button (`Ctrl ↵`) answers
+the last thing said in any language.
 
 ## The window
 

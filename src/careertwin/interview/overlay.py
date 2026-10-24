@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from careertwin.interview import runlog, screenshot
+from careertwin.interview import i18n, runlog, screenshot
 from careertwin.interview.codeview import highlight
 from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
@@ -52,65 +52,6 @@ STATE_COLOURS = {
     "error": QColor(255, 120, 120),
 }
 
-STRINGS = {
-    "en": {
-        "ask": "Ask", "screenshot": "Screenshot", "looking": "Looking at the screen…",
-        "placeholder": "Type a question manually…", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details",
-        "transcript": "Transcript", "opacity": "Opacity",
-        "add_cv": "Add CV…",
-        "quit": "Quit", "interviewer": "Interviewer", "you": "You",
-        "waiting": "Waiting for the interviewer…",
-        "waiting_hint": "Press {ask} to answer what was just said, or type a question above.",
-        "context": "Context", "loading": "Loading model…", "listening": "Listening",
-        "paused": "Paused", "thinking": "Thinking…", "idle": "Type a question",
-        "no_screenshot": "Screenshots need grim (Wayland), spectacle, or maim/scrot (X11)",
-        "drop_cv": "drop a PDF here to add a CV", "cv_added": "CV added",
-        "settings": "Settings…",
-        "no_context": "No context yet",
-        "no_context_hint": "Open Settings → Interview and add your CV, or write about yourself in About me.",
-        "shot_off": "Screenshots are turned off in Settings",
-        "interview_menu": "Interview", "new_interview": "New interview…", "listening_to": "Listening to",
-        "no_vacancy_hint": "No vacancy yet: Settings → Interview to paste it and to add the CV you sent.",
-    },
-    "ru": {
-        "ask": "Спросить", "screenshot": "Скриншот", "looking": "Смотрю на экран…",
-        "placeholder": "Введите вопрос вручную…", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно",
-        "transcript": "Расшифровка", "opacity": "Прозрачность",
-        "add_cv": "Добавить резюме…",
-        "quit": "Выход", "interviewer": "Интервьюер", "you": "Вы",
-        "waiting": "Жду вопрос интервьюера…",
-        "waiting_hint": "Нажмите {ask}, чтобы ответить на последнюю фразу, или введите вопрос выше.",
-        "context": "Контекст", "loading": "Загружаю модель…", "listening": "Слушаю",
-        "paused": "Пауза", "thinking": "Думаю…", "idle": "Введите вопрос",
-        "no_screenshot": "Для скриншотов нужен grim (Wayland), spectacle или maim/scrot (X11)",
-        "drop_cv": "перетащите PDF, чтобы добавить резюме", "cv_added": "Резюме добавлено",
-        "settings": "Настройки…",
-        "no_context": "Контекста пока нет",
-        "no_context_hint": "Откройте Настройки → Интервью и добавьте резюме или напишите о себе во вкладке «Обо мне».",
-        "shot_off": "Скриншоты выключены в настройках",
-        "interview_menu": "Интервью", "new_interview": "Новое интервью…", "listening_to": "Слушаю",
-        "no_vacancy_hint": "Вакансии пока нет: Настройки → Интервью, чтобы вставить её и добавить резюме, которое вы отправляли.",
-    },
-    "pl": {
-        "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "looking": "Patrzę na ekran…",
-        "placeholder": "Wpisz pytanie ręcznie…", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły",
-        "transcript": "Transkrypcja", "opacity": "Przezroczystość",
-        "add_cv": "Dodaj CV…",
-        "quit": "Zamknij", "interviewer": "Rekruter", "you": "Ty",
-        "waiting": "Czekam na pytanie rekrutera…",
-        "waiting_hint": "Naciśnij {ask}, aby odpowiedzieć na ostatnie zdanie, albo wpisz pytanie.",
-        "context": "Kontekst", "loading": "Ładuję model…", "listening": "Słucham",
-        "paused": "Pauza", "thinking": "Myślę…", "idle": "Wpisz pytanie",
-        "no_screenshot": "Zrzuty ekranu wymagają grim (Wayland), spectacle lub maim/scrot (X11)",
-        "drop_cv": "upuść tu plik PDF, aby dodać CV", "cv_added": "Dodano CV",
-        "settings": "Ustawienia…",
-        "no_context": "Brak kontekstu",
-        "no_context_hint": "Otwórz Ustawienia → Rozmowa i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
-        "shot_off": "Zrzuty ekranu są wyłączone w ustawieniach",
-        "interview_menu": "Rozmowa", "new_interview": "Nowa rozmowa…", "listening_to": "Słucham",
-        "no_vacancy_hint": "Brak oferty: Ustawienia → Rozmowa, aby ją wkleić i dodać wysłane CV.",
-    },
-}
 KEYS = {"ask": "Ctrl ↵", "screenshot": "Ctrl ⇧ ↵", "previous": "Ctrl ←", "next": "Ctrl →"}
 
 
@@ -437,7 +378,7 @@ class OverlayWindow(QWidget):
         self.font_scale = 100
         self.ui_locked = False
         self.settings_dialog = None
-        self.ui = ui_language if ui_language in STRINGS else "en"
+        self.ui = ui_language if i18n.has(ui_language) else "en"
         self.entries: list[Entry] = []
         self.index = -1
         self.full_answer = False
@@ -575,8 +516,7 @@ class OverlayWindow(QWidget):
         self._render()
 
     def tr_(self, key: str, **values: str) -> str:
-        text = STRINGS[self.ui].get(key) or STRINGS["en"][key]
-        return text.format(**values) if values else text
+        return i18n.text(self.ui, "overlay", key, **values)
 
     def _build_menu(self) -> None:
         self.menu = QMenu(self)
@@ -687,7 +627,7 @@ class OverlayWindow(QWidget):
         are ignored once the interface language is chosen in Settings."""
         if self.ui_locked and not manual:
             return
-        new = code if code in STRINGS else "en"
+        new = code if i18n.has(code) else "en"
         if new == self.ui:
             return
         self.ui = new
