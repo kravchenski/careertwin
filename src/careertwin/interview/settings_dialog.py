@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from careertwin.interview import languages
+from careertwin.interview import project as project_store
 from careertwin.interview.providers import OTHER, PROVIDERS, provider_for
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.settings import ANSWER_STYLES, WHISPER_MODELS
@@ -43,7 +44,7 @@ from careertwin.interview.stt_deepgram import check_key
 STRINGS = {
     "en": {
         "title": "Settings",
-        "tab_interview": "Interview", "tab_about": "About me", "tab_practice": "Practice", "tab_audio": "Audio", "tab_ai": "AI", "tab_general": "General",
+        "tab_interview": "Interview", "tab_about": "About me", "tab_practice": "Practice", "tab_project": "Project", "tab_audio": "Audio", "tab_ai": "AI", "tab_general": "General",
         "sec_docs": "CV and documents", "sec_vacancy": "Vacancy and notes", "sec_answers": "Answers", "sec_window": "Window",
         "docs_intro": "Files the coach reads before every answer: your CV, a LinkedIn export, a cover letter, a portfolio. PDF, DOCX and text work. You can also drop files on the interview window.",
         "add_files": "Add files…", "kind_cv": "CV (the employer has it)", "kind_about": "About me (extra facts)",
@@ -88,6 +89,16 @@ STRINGS = {
         "review_strengths": "Lead with", "review_gaps": "Gaps and how to address them",
         "review_questions": "Questions the gaps invite", "review_fixes": "Fixes to the CV",
         "need_context": "Add your CV or write about yourself first.",
+        "project_intro": "Pick the folder of a project you will defend. The AI reads it once and writes a dossier: architecture, key modules, decisions, weak spots and likely questions. After that every answer about the project comes from the dossier and the code that matches the question, so it is quick.",
+        "project_choose": "Choose folder…", "project_again": "Analyze again", "project_remove": "Remove", "project_save": "Save changes",
+        "project_none": "No project yet.", "project_stats": "{files} files · {size} · analyzed {when}",
+        "project_missing": "The folder is gone; the saved dossier still works.",
+        "project_reading": "Reading the files…", "project_asking": "Read {n} files. The AI is studying them…",
+        "project_done": "The project is ready: {n} files",
+        "project_dossier": "Dossier (edit it to correct a fact, then Save changes)",
+        "project_cloud": "{name} receives the files of this folder once, for the analysis, and the dossier with every question. Keys, tokens, passwords, .env files and binaries are left out.",
+        "project_local": "Everything stays on this computer.",
+        "project_confirm": "Send the files of “{folder}” to {name} for analysis?",
         "interview": "Interview", "new_interview": "New", "rename_interview": "Rename",
         "delete_interview": "Delete", "interview_name": "Interview name",
         "interview_hint": "Each interview keeps its own vacancy, CV and notes. ABOUT.md is shared.",
@@ -95,7 +106,7 @@ STRINGS = {
     },
     "ru": {
         "title": "Настройки",
-        "tab_interview": "Интервью", "tab_about": "Обо мне", "tab_practice": "Тренировка", "tab_audio": "Звук", "tab_ai": "ИИ", "tab_general": "Общие",
+        "tab_interview": "Интервью", "tab_about": "Обо мне", "tab_practice": "Тренировка", "tab_project": "Проект", "tab_audio": "Звук", "tab_ai": "ИИ", "tab_general": "Общие",
         "sec_docs": "Резюме и документы", "sec_vacancy": "Вакансия и заметки", "sec_answers": "Ответы", "sec_window": "Окно",
         "docs_intro": "Файлы, которые ассистент читает перед каждым ответом: резюме, экспорт LinkedIn, сопроводительное письмо, портфолио. Подходят PDF, DOCX и текст. Файлы можно и просто перетащить на окно интервью.",
         "add_files": "Добавить файлы…", "kind_cv": "Резюме (его видел работодатель)", "kind_about": "Обо мне (дополнительные факты)",
@@ -140,6 +151,16 @@ STRINGS = {
         "review_strengths": "С чего начать", "review_gaps": "Пробелы и как о них говорить",
         "review_questions": "Вопросы, которые вызовут пробелы", "review_fixes": "Правки в резюме",
         "need_context": "Сначала добавьте резюме или напишите о себе.",
+        "project_intro": "Выберите папку проекта, который будете защищать. ИИ прочитает её один раз и составит досье: архитектура, ключевые модули, решения, слабые места и вероятные вопросы. Дальше каждый ответ о проекте берётся из досье и из подходящего к вопросу кода, поэтому он быстрый.",
+        "project_choose": "Выбрать папку…", "project_again": "Проанализировать заново", "project_remove": "Убрать", "project_save": "Сохранить правки",
+        "project_none": "Проекта пока нет.", "project_stats": "{files} файлов · {size} · проанализирован {when}",
+        "project_missing": "Папки больше нет; сохранённое досье продолжает работать.",
+        "project_reading": "Читаю файлы…", "project_asking": "Прочитано файлов: {n}. ИИ изучает их…",
+        "project_done": "Проект готов: файлов {n}",
+        "project_dossier": "Досье (поправьте факт и нажмите «Сохранить правки»)",
+        "project_cloud": "{name} получает файлы этой папки один раз для анализа, а досье с каждым вопросом. Ключи, токены, пароли, файлы .env и бинарные файлы не передаются.",
+        "project_local": "Всё остаётся на этом компьютере.",
+        "project_confirm": "Отправить файлы «{folder}» в {name} для анализа?",
         "interview": "Интервью", "new_interview": "Новое", "rename_interview": "Переименовать",
         "delete_interview": "Удалить", "interview_name": "Название интервью",
         "interview_hint": "У каждого интервью своя вакансия, резюме и заметки. ABOUT.md общий.",
@@ -147,7 +168,7 @@ STRINGS = {
     },
     "pl": {
         "title": "Ustawienia",
-        "tab_interview": "Rozmowa", "tab_about": "O mnie", "tab_practice": "Ćwiczenia", "tab_audio": "Dźwięk", "tab_ai": "AI", "tab_general": "Ogólne",
+        "tab_interview": "Rozmowa", "tab_about": "O mnie", "tab_practice": "Ćwiczenia", "tab_project": "Projekt", "tab_audio": "Dźwięk", "tab_ai": "AI", "tab_general": "Ogólne",
         "sec_docs": "CV i dokumenty", "sec_vacancy": "Oferta i notatki", "sec_answers": "Odpowiedzi", "sec_window": "Okno",
         "docs_intro": "Pliki, które asystent czyta przed każdą odpowiedzią: CV, eksport z LinkedIn, list motywacyjny, portfolio. PDF, DOCX i tekst. Pliki możesz też upuścić na okno rozmowy.",
         "add_files": "Dodaj pliki…", "kind_cv": "CV (widział je pracodawca)", "kind_about": "O mnie (dodatkowe fakty)",
@@ -192,6 +213,16 @@ STRINGS = {
         "review_strengths": "Zacznij od", "review_gaps": "Braki i jak o nich mówić",
         "review_questions": "Pytania, które wywołają braki", "review_fixes": "Poprawki w CV",
         "need_context": "Najpierw dodaj CV albo napisz o sobie.",
+        "project_intro": "Wybierz folder projektu, który będziesz bronić. AI przeczyta go raz i napisze dossier: architekturę, kluczowe moduły, decyzje, słabe punkty i prawdopodobne pytania. Potem każda odpowiedź o projekcie pochodzi z dossier i z kodu pasującego do pytania, więc jest szybka.",
+        "project_choose": "Wybierz folder…", "project_again": "Analizuj ponownie", "project_remove": "Usuń", "project_save": "Zapisz zmiany",
+        "project_none": "Brak projektu.", "project_stats": "{files} plików · {size} · przeanalizowano {when}",
+        "project_missing": "Folderu już nie ma; zapisane dossier nadal działa.",
+        "project_reading": "Czytam pliki…", "project_asking": "Przeczytano plików: {n}. AI je analizuje…",
+        "project_done": "Projekt gotowy: plików {n}",
+        "project_dossier": "Dossier (popraw fakt i naciśnij „Zapisz zmiany”)",
+        "project_cloud": "{name} dostaje pliki tego folderu raz, do analizy, oraz dossier z każdym pytaniem. Klucze, tokeny, hasła, pliki .env i pliki binarne są pomijane.",
+        "project_local": "Wszystko zostaje na tym komputerze.",
+        "project_confirm": "Wysłać pliki „{folder}” do {name} do analizy?",
         "interview": "Rozmowa", "new_interview": "Nowa", "rename_interview": "Zmień nazwę",
         "delete_interview": "Usuń", "interview_name": "Nazwa rozmowy",
         "interview_hint": "Każda rozmowa ma własną ofertę, CV i notatki. ABOUT.md jest wspólny.",
@@ -254,12 +285,13 @@ class DocRow(QWidget):
 
 
 class SettingsDialog(QDialog):
-    TABS = ("interview", "about", "practice", "audio", "ai", "general")
+    TABS = ("interview", "about", "practice", "project", "audio", "ai", "general")
     LEGACY_TABS = {
         "docs": "interview", "vacancy": "interview", "prepare": "practice", "language": "general",
         "model": "ai", "screenshot": "general", "window": "general",
     }
     _finished = Signal(int, object, object)
+    _project_progress = Signal(str, int)
 
     def __init__(self, window, runtime: Runtime) -> None:
         super().__init__(window)
@@ -272,6 +304,7 @@ class SettingsDialog(QDialog):
         self._tasks: dict[int, Callable[[Any, str | None], None]] = {}
         self._ids = itertools.count(1)
         self._finished.connect(self._on_finished)
+        self._project_progress.connect(self._show_project_progress)
 
         layout = QVBoxLayout(self)
         picker = QHBoxLayout()
@@ -305,7 +338,7 @@ class SettingsDialog(QDialog):
 
         builders = {
             "interview": self._build_interview, "about": self._build_about,
-            "practice": self._build_prepare, "audio": self._build_audio,
+            "practice": self._build_prepare, "project": self._build_project, "audio": self._build_audio,
             "ai": self._build_model, "general": self._build_general,
         }
         for key in self.TABS:
@@ -737,6 +770,107 @@ class SettingsDialog(QDialog):
 
     # ---- language ----------------------------------------------------------
 
+    # ---- the project to defend -----------------------------------------------
+
+    def _build_project(self, page: QWidget) -> None:
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(18, 16, 18, 16)
+        self.project_intro = self._hint()
+        layout.addWidget(self.project_intro)
+        row = QHBoxLayout()
+        self.project_choose = QPushButton()
+        self.project_again = QPushButton()
+        self.project_remove = QPushButton()
+        self.project_path = QLabel()
+        self.project_path.setObjectName("hint")
+        self.project_path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        for button in (self.project_choose, self.project_again, self.project_remove):
+            row.addWidget(button)
+        row.addWidget(self.project_path, 1)
+        layout.addLayout(row)
+        self.project_stats = self._hint()
+        layout.addWidget(self.project_stats)
+        self.project_dossier_label = QLabel()
+        layout.addWidget(self.project_dossier_label)
+        self.project_text = QPlainTextEdit()
+        self.project_text.setTabChangesFocus(True)
+        layout.addWidget(self.project_text, 1)
+        row = QHBoxLayout()
+        self.project_save = QPushButton()
+        row.addWidget(self.project_save)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.project_note = self._hint()
+        layout.addWidget(self.project_note)
+        self.project_choose.clicked.connect(self._choose_project)
+        self.project_again.clicked.connect(lambda: self._analyze_project(self.rt.context.project_path()))
+        self.project_remove.clicked.connect(self._remove_project)
+        self.project_save.clicked.connect(self._save_project_text)
+
+    def _choose_project(self) -> None:
+        start = self.rt.context.project_path() or str(Path.home())
+        folder = QFileDialog.getExistingDirectory(self, self.t("project_choose"), start)
+        if folder:
+            self._analyze_project(folder)
+
+    def _analyze_project(self, folder: str) -> None:
+        if not folder:
+            return
+        provider = provider_for(self.rt.gateway())
+        if provider is None or provider.cloud:
+            name = provider.label if provider else self.rt.gateway()
+            ask = self.t("project_confirm", folder=Path(folder).name, name=name)
+            if QMessageBox.question(self, self.t("tab_project"), ask) != QMessageBox.StandardButton.Yes:
+                return
+        self.rt.context.set_project_path(folder)
+        self.refresh_project()
+        self._project_progress.emit("read", 0)
+        self.run(
+            lambda: self.rt.analyze_project(folder, self._project_progress.emit),
+            self._project_analyzed,
+        )
+
+    def _show_project_progress(self, stage: str, files: int) -> None:
+        self.say(self.t("project_reading") if stage == "read" else self.t("project_asking", n=files))
+
+    def _project_analyzed(self, project: Any, error: str | None) -> None:
+        if error or project is None:
+            self.say(error or "", error=True)
+            return
+        self.rt.context.attach_project(project)
+        self.win.refresh_controls()
+        self.refresh_project()
+        self.say(self.t("project_done", n=project.files))
+
+    def _save_project_text(self) -> None:
+        if project := self.rt.context.project():
+            project_store.save_dossier(project, self.project_text.toPlainText())
+            self.say(self.t("saved"))
+
+    def _remove_project(self) -> None:
+        self.rt.context.remove_project()
+        self.win.refresh_controls()
+        self.refresh_project()
+
+    def refresh_project(self) -> None:
+        project, path = self.rt.context.project(), self.rt.context.project_path()
+        self.project_path.setText(path)
+        for button in (self.project_again, self.project_remove):
+            button.setEnabled(bool(path))
+        self.project_save.setEnabled(project is not None)
+        self.project_text.setEnabled(project is not None)
+        if project is None:
+            stats = self.t("project_none")
+        else:
+            size = f"{project.characters / 1000:.0f}k" if project.characters < 1_000_000 else f"{project.characters / 1_000_000:.1f}M"
+            stats = self.t("project_stats", files=project.files, size=size, when=project.analyzed_at)
+            if path and not Path(path).is_dir():
+                stats += "  ·  " + self.t("project_missing")
+        self.project_stats.setText(stats)
+        with QSignalBlocker(self.project_text):
+            if not self.project_text.hasFocus():
+                self.project_text.setPlainText(project.dossier if project else "")
+
     # ---- audio and speech --------------------------------------------------
 
     def _build_audio(self, page: QWidget) -> None:
@@ -908,7 +1042,15 @@ class SettingsDialog(QDialog):
         self.model_form.setRowVisible(self.gateway_key, provider is None or provider.cloud)
         self._show_provider_note()
 
+    def _show_project_note(self) -> None:
+        provider = provider_for(self.rt.gateway())
+        if provider is not None and not provider.cloud:
+            self.project_note.setText(self.t("project_local"))
+        else:
+            self.project_note.setText(self.t("project_cloud", name=provider.label if provider else self.rt.gateway()))
+
     def _show_provider_note(self) -> None:
+        self._show_project_note()
         provider = provider_for(self.rt.gateway())
         note = self.t("cloud_note", name=provider.label) if provider and provider.cloud else self.t("model_note")
         self.model_note.setText(note)
@@ -1023,6 +1165,7 @@ class SettingsDialog(QDialog):
         self.refresh_vacancy()
         self.refresh_prepare()
         self.refresh_about()
+        self.refresh_project()
         self.refresh_audio()
         self.refresh_screenshot()
         with QSignalBlocker(self.notes):
@@ -1096,6 +1239,13 @@ class SettingsDialog(QDialog):
         self.cv_review.setText(self.t("cv_review"))
         self.notes_label.setText(self.t("notes"))
         self.notes.setPlaceholderText(self.t("notes_hint"))
+        self.project_intro.setText(self.t("project_intro"))
+        self.project_choose.setText(self.t("project_choose"))
+        self.project_again.setText(self.t("project_again"))
+        self.project_remove.setText(self.t("project_remove"))
+        self.project_save.setText(self.t("project_save"))
+        self.project_dossier_label.setText(self.t("project_dossier"))
+        self._show_project_note()
         self.about_intro.setText(self.t("about_intro"))
         self.about_save.setText(self.t("save"))
         for label, key in zip(self.language_labels, ("interview_language", "answer_style", "answer_layout")):

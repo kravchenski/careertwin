@@ -245,8 +245,9 @@ class StreamingCoach:
                 {"type": "image_url", "image_url": {"url": url}},
             ]
         else:
+            code = self.brief.project.retrieve(question) if self.brief.project else ""
             content = user_prompt(
-                self.brief, question, classify(question), history, language, self.style, self.layout
+                self.brief, question, classify(question), history, language, self.style, self.layout, code
             )
         body = {
             "model": model,

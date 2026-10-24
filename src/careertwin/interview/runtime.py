@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from careertwin.interview import project as project_store
 from careertwin.interview import screenshot
 from careertwin.interview.audio import (
     AudioError,
@@ -228,6 +229,14 @@ class Runtime:
             except PrepareError:
                 if attempt == attempts - 1:
                     raise
+
+    # ---- the project to defend --------------------------------------------
+
+    def analyze_project(
+        self, folder: str, progress: Callable[[str, int], None] = lambda stage, files: None
+    ) -> project_store.ProjectContext:
+        """Read a project folder and have the AI write its dossier (slow: call it off the GUI thread)."""
+        return project_store.analyze(folder, self.coach.complete, progress)
 
     # ---- screenshots -------------------------------------------------------
 

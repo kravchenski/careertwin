@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from careertwin.interview.documents import DocumentError, read_document
+from careertwin.interview.project import ProjectContext
 from careertwin.profile.context import read_context, salary_policy
 
 CONTEXT_CHARS = 26_000
@@ -50,6 +51,7 @@ class InterviewBrief:
     salary: str = "auto"
     notes: str = ""
     documents: list[Document] = field(default_factory=list)
+    project: ProjectContext | None = None
 
     username: str = "default"
 
@@ -157,6 +159,8 @@ class InterviewBrief:
         if self.job_title or self.job_description:
             head = " at ".join(part for part in (self.job_title, self.company) if part)
             items.append(("job", head or "vacancy"))
+        if self.project and self.project.dossier.strip():
+            items.append(("project", f"project {self.project.name}"))
         return items
 
     def render(self) -> str:
@@ -182,6 +186,8 @@ class InterviewBrief:
         parts.append(f"SALARY POLICY: {self.salary}")
         if self.notes:
             parts.append(f"CANDIDATE NOTES FOR THIS INTERVIEW\n{self.notes}")
+        if self.project and (dossier := self.project.for_prompt()):
+            parts.append(dossier)
         return "\n\n".join(parts)
 
     def stack_hint(self, limit: int = 8) -> str:

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from careertwin.interview import project as project_store
 from careertwin.interview.brief import BriefError, InterviewBrief
 from careertwin.interview.settings import interview_dir
 from careertwin.profile.context import write_context
@@ -35,6 +36,7 @@ class Interview:
     documents: list[SavedDocument] = field(default_factory=list)
     notes: str = ""
     vacancy: dict[str, str] = field(default_factory=dict)
+    project: str = ""
 
 
 @dataclass
@@ -89,6 +91,7 @@ class Library:
                     "documents": [vars(doc) for doc in item.documents],
                     "notes": item.notes,
                     "vacancy": item.vacancy,
+                    "project": item.project,
                 }
                 for item in self.interviews
             ],
@@ -141,6 +144,7 @@ def _read_interview(item: dict[str, Any]) -> Interview:
         documents=documents,
         notes=str(item.get("notes", "")),
         vacancy={str(k): str(v) for k, v in vacancy.items()},
+        project=str(item.get("project", "")),
     )
 
 
@@ -202,6 +206,7 @@ class ContextController:
         """Make the brief match the active interview; return a message per file that failed."""
         self.brief.documents = []
         self.brief.notes = ""
+        self.brief.project = None
         self.brief.clear_vacancy()
         return self.restore()
 
@@ -226,6 +231,8 @@ class ContextController:
                 problems.append(str(exc))
         if interview.notes and not self.brief.notes:
             self.brief.notes = interview.notes
+        if interview.project and self.brief.project is None:
+            self.brief.project = project_store.load(interview.project)
         vacancy = interview.vacancy
         if vacancy.get("type") == "text" and not self.brief.job_description:
             self.brief.set_vacancy(
@@ -291,6 +298,34 @@ class ContextController:
                 saved.kind = kind or saved.kind
                 saved.enabled = saved.enabled if enabled is None else enabled
         self.library.save()
+
+    # ---- the project to defend ---------------------------------------------
+
+    def project(self) -> project_store.ProjectContext | None:
+        return self.brief.project
+
+    def project_path(self) -> str:
+        return self.current.project
+
+    def attach_project(self, project: project_store.ProjectContext) -> None:
+        """Defend this project in the active interview."""
+        self.brief.project = project
+        self.current.project = project.path
+        self.library.save()
+
+    def set_project_path(self, path: str) -> None:
+        """Remember the folder; the analysis arrives with `attach_project`."""
+        self.current.project = path
+        self.brief.project = project_store.load(path)
+        self.library.save()
+
+    def remove_project(self) -> None:
+        path = self.current.project
+        self.brief.project = None
+        self.current.project = ""
+        self.library.save()
+        if path and not any(item.project == path for item in self.library.interviews):
+            project_store.forget(path)
 
     # ---- notes and vacancy -------------------------------------------------
 
