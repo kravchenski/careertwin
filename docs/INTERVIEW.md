@@ -66,7 +66,7 @@ it reads.
 | **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
 | **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed) and whether to show the detailed answer. |
-| **Audio & speech** | Listen to the call on or off, the call audio source, your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
+| **Audio & speech** | Listen to the call on or off, the call audio source (*Automatic* follows the output that plays the call, or pin one), your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
 | **AI model** | Gateway URL, API key and model, *Load models* to pick from what your gateway offers, and *Test connection*. Leave them empty to use `.env` (`SWITCHYARD_*`) and auto routing. |
 | **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
 | **Window** | Keep on top, frameless or framed, opacity, text size, saving transcripts, and *Reset all settings*. |
@@ -182,9 +182,10 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 
 ## Troubleshooting
 
-- **No transcript:** watch the dots; if they stay dark, pick the monitor of your output device in
-  Settings → Audio & speech. Bluetooth headsets that switch profile during a call change the sink;
-  press *Refresh* after joining.
+- **No transcript:** watch the dots; if they stay dark, hover the dots to see which output the app
+  listens to. *Automatic* (the default) follows the output that is playing, so plugging in a headset
+  or starting the call on another output is picked up within a few seconds. If it still hears
+  nothing, pin the right output in Settings → Audio & speech (*Refresh* after joining a call).
 - **Screenshot is greyed out:** install `grim` (Wayland) or `spectacle`, or `maim`/`scrot` on X11,
   and check Settings → Screenshot.
 - **A document is refused:** the PDF has no text layer. Export a text PDF or attach DOCX.

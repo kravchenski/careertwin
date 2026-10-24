@@ -384,3 +384,23 @@ def test_the_prompt_asks_for_the_four_sections_and_drops_two_when_concise():
         assert marker in SYSTEM
     assert "leave out KEY and CONTEXT" in SYSTEM
     assert "no KEY or CONTEXT" in STYLE_HINTS["concise"] and "KEY" in STYLE_HINTS["detailed"]
+
+
+def test_answers_skip_the_bookkeeping_sections_but_keep_everything_useful(about):
+    from careertwin.interview.brief import slim_for_answers
+
+    text = (
+        "# Name\n\n## Experience\n- Built FastAPI services.\n\n## Projects\n- BookSeat.\n\n"
+        "### Project catalog\n| Repo | Use |\n| --- | --- |\n| a | b |\n\n"
+        "## Matching a job ad: must-have and nice-to-have\nrules\n\n## Skills\n- Python\n\n"
+        "## Interview stories (STAR)\n- Live platforms.\n\n## Honest limits\n- English is B2+.\n\n"
+        "## CV files\n- names\n\n## Applications log\n| Acme | Java |\n"
+    )
+    slim = slim_for_answers(text)
+    for kept in ("## Experience", "## Projects", "- BookSeat.", "## Skills", "## Interview stories", "## Honest limits"):
+        assert kept in slim
+    for gone in ("Project catalog", "Matching a job ad", "CV files", "Applications log", "| Acme |"):
+        assert gone not in slim
+    about.write_text(text)
+    rendered = InterviewBrief.load().render()
+    assert "Interview stories" in rendered and "Applications log" not in rendered and "Project catalog" not in rendered

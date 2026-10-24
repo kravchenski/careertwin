@@ -60,7 +60,7 @@ STRINGS = {
         "style_concise": "Concise", "style_standard": "Standard", "style_detailed": "Detailed",
         "full_answer": "Show the detailed answer (main answer, key points, practical context)",
         "language_note": "Answers are written in the interview language. Speech recognition uses it too.",
-        "listen": "Listen to the call", "call_source": "Call audio", "default_output": "Default (system output)",
+        "listen": "Listen to the call", "call_source": "Call audio", "default_output": "Automatic: follows the output that plays the call", "listening_to": "Listening to: {name}",
         "refresh": "Refresh", "use_mic": "Also transcribe my microphone (use headphones)",
         "mic_source": "Microphone", "default_mic": "Default microphone",
         "whisper_model": "Speech model", "whisper_device": "Device",
@@ -110,7 +110,7 @@ STRINGS = {
         "style_concise": "Кратко", "style_standard": "Обычный", "style_detailed": "Подробно",
         "full_answer": "Показывать подробный ответ (основной ответ, ключевые моменты, практический контекст)",
         "language_note": "Ответы пишутся на языке интервью. Распознавание речи тоже использует его.",
-        "listen": "Слушать звонок", "call_source": "Звук звонка", "default_output": "По умолчанию (вывод системы)",
+        "listen": "Слушать звонок", "call_source": "Звук звонка", "default_output": "Автоматически: следует за выходом, где играет звонок", "listening_to": "Сейчас слушаю: {name}",
         "refresh": "Обновить", "use_mic": "Расшифровывать и мой микрофон (нужны наушники)",
         "mic_source": "Микрофон", "default_mic": "Микрофон по умолчанию",
         "whisper_model": "Модель речи", "whisper_device": "Устройство",
@@ -160,7 +160,7 @@ STRINGS = {
         "style_concise": "Zwięzły", "style_standard": "Standardowy", "style_detailed": "Szczegółowy",
         "full_answer": "Pokazuj szczegółową odpowiedź (odpowiedź główna, kluczowe punkty, kontekst praktyczny)",
         "language_note": "Odpowiedzi powstają w języku rozmowy. Rozpoznawanie mowy też go używa.",
-        "listen": "Słuchaj rozmowy", "call_source": "Dźwięk rozmowy", "default_output": "Domyślne (wyjście systemu)",
+        "listen": "Słuchaj rozmowy", "call_source": "Dźwięk rozmowy", "default_output": "Automatycznie: podąża za wyjściem, na którym gra rozmowa", "listening_to": "Teraz słucham: {name}",
         "refresh": "Odśwież", "use_mic": "Transkrybuj też mój mikrofon (użyj słuchawek)",
         "mic_source": "Mikrofon", "default_mic": "Domyślny mikrofon",
         "whisper_model": "Model mowy", "whisper_device": "Urządzenie",
@@ -729,6 +729,8 @@ class SettingsDialog(QDialog):
         source_row.addWidget(self.refresh_sources)
         form.addRow(self.listen)
         form.addRow(self.audio_labels[0], source_row)
+        self.audio_now = self._hint()
+        form.addRow("", self.audio_now)
         form.addRow(self.use_mic)
         form.addRow(self.audio_labels[1], self.mic_source)
         form.addRow(self.audio_labels[2], self.whisper_model)
@@ -749,6 +751,9 @@ class SettingsDialog(QDialog):
         self.refresh_sources.clicked.connect(self.refresh_audio)
 
     def refresh_audio(self) -> None:
+        self.audio_now.setText(
+            self.t("listening_to", name=self.rt.current_source) if self.rt.current_source else ""
+        )
         sources = self.rt.audio_sources()
         monitors = sorted(name for name in sources if name.endswith(".monitor"))
         inputs = sorted(name for name in sources if not name.endswith(".monitor"))
