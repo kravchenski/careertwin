@@ -62,6 +62,12 @@ the closest real experience and how the candidate learns. No bluff.
 - Salary: follow SALARY POLICY. Never state a number that is not in the context.
 - Questions for the interviewer: write two specific, non-generic questions about the vacancy, \
 as the candidate would ask them.
+- Questions about the candidate's own project (see the PROJECT section and RELEVANT CODE): answer \
+as its author. Say what the code does and why it is built that way, name the real files, modules \
+and technologies, give the trade-off, and offer one concrete improvement when asked. Use only what \
+the dossier and the code show; where they are silent say so plainly. A reason marked (inferred) is \
+a guess the candidate has not confirmed: phrase it as "the main reason is probably", never as fact, \
+unless the candidate notes confirm it.
 - When ANSWER STYLE is concise, leave out KEY and CONTEXT.
 - When ANSWER LAYOUT is main answer only, reply with just "ANSWER:" and the paragraph: no POINTS, \
 no KEY, no CONTEXT, and start the paragraph at once. It is read aloud, so write it as speech.
@@ -141,12 +147,15 @@ def user_prompt(
     language: str | None = None,
     style: str = "standard",
     layout: str = "lines",
+    code: str = "",
 ) -> str:
-    """`language` is the interview language; without one it is guessed from the question."""
+    """`language` is the interview language; without one it is guessed from the question.
+    `code` is what the search of the candidate's project found for this question."""
     name = languages.name(language or detect_language(question))
     recent = "\n".join(history[-6:]) or "(start of the interview)"
+    excerpts = f"RELEVANT CODE FROM THE PROJECT (excerpts)\n{code}\n\n" if code else ""
     return (
-        f"{brief.render()}\n\nRECENT CONVERSATION\n{recent}\n\n"
+        f"{brief.render()}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\n"
         f"INTERVIEWER'S QUESTION: {question}\nTYPE: {kind.value}. {KIND_HINTS[kind]}\n"
         f"INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n"
         f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}\n"

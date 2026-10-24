@@ -96,7 +96,7 @@ def gui(tmp_path, monkeypatch):
 def test_dialog_opens_on_the_requested_tab(gui):
     assert gui.dialog.isVisible() and gui.dialog.tabs.currentIndex() == 0
     assert [gui.dialog.tabs.tabText(i) for i in range(gui.dialog.tabs.count())] == [
-        "Interview", "About me", "Practice", "Audio", "AI", "General",
+        "Interview", "About me", "Practice", "Project", "Audio", "AI", "General",
     ]
     for old_name, tab in (("screenshot", "General"), ("language", "General"), ("model", "AI"),
                           ("prepare", "Practice"), ("docs", "Interview"), ("vacancy", "Interview")):
@@ -755,3 +755,134 @@ def test_the_status_dots_tell_how_long_the_screenshot_answer_took(gui):
     gui.bridge.state.emit("listening")
     gui.process()
     assert "first words after 1.3 s" in gui.window.pill.toolTip()  # and so does a new state
+
+
+# ---- the Project tab ----------------------------------------------------------
+
+
+@pytest.fixture
+def demo_project(tmp_path):
+    root = tmp_path / "demo"
+    (root / "app").mkdir(parents=True)
+    (root / "README.md").write_text("# Demo\nA tiny service that greets people.\n")
+    (root / "app" / "main.py").write_text("def greet(name):\n    return f'Hello, {name}'\n")
+    return root
+
+
+def analyse_with(gui, monkeypatch, root, dossier="## Overview\nA greeting service."):
+    from PySide6.QtWidgets import QFileDialog
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(root))
+    calls = []
+    monkeypatch.setattr(
+        gui.runtime.coach, "complete",
+        lambda system, prompt, max_tokens=0, temperature=0.3: calls.append(prompt) or dossier,
+    )
+    gui.dialog.show_tab("project")
+    gui.dialog.project_choose.click()
+    return calls
+
+
+def test_choosing_a_folder_analyses_it_and_shows_the_dossier(gui, monkeypatch, demo_project):
+    calls = analyse_with(gui, monkeypatch, demo_project)
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+    dialog = gui.dialog
+    assert len(calls) == 1 and "def greet" in calls[0]
+    assert dialog.project_text.toPlainText().startswith("## Overview") and dialog.project_text.isEnabled()
+    assert "2 files" in dialog.project_stats.text() and dialog.project_path.text() == str(demo_project)
+    assert dialog.project_again.isEnabled() and dialog.project_remove.isEnabled()
+    assert "The project is ready: 2 files" in dialog.status.text()
+    assert "project demo" in gui.window.context.full  # the dim line shows what the answers read
+    assert Library.load().current.project == str(demo_project)
+
+
+def test_a_cloud_provider_is_asked_before_the_code_is_sent(gui, monkeypatch, demo_project):
+    from PySide6.QtWidgets import QMessageBox
+
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", lambda parent, title, text, *a: asked.append(text) or QMessageBox.StandardButton.No)
+    gui.choose(gui.dialog.provider, "groq")
+    calls = analyse_with(gui, monkeypatch, demo_project)
+    gui.process()
+    assert len(asked) == 1 and "demo" in asked[0] and "Groq" in asked[0]
+    assert calls == [] and gui.context.project_path() == ""  # declined: nothing was read or sent
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    gui.dialog.project_choose.click()
+    assert wait_for(gui, lambda: gui.context.project() is not None) and len(calls) == 1
+
+
+def test_a_local_provider_is_not_asked(gui, monkeypatch, demo_project):
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: pytest.fail("asked about a local provider"))
+    analyse_with(gui, monkeypatch, demo_project)
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+
+
+def test_the_note_says_where_the_code_goes(gui):
+    dialog = gui.dialog
+    assert "stays on this computer" in dialog.project_note.text()
+    gui.choose(dialog.provider, "groq")
+    assert "Groq receives the files" in dialog.project_note.text() and ".env" in dialog.project_note.text()
+
+
+def test_a_failed_analysis_is_reported_and_the_folder_is_kept_for_another_try(gui, monkeypatch, demo_project):
+    from careertwin.interview.coach import CoachError
+
+    def fail(system, prompt, max_tokens=0, temperature=0.3):
+        raise CoachError("The provider is down")
+
+    from PySide6.QtWidgets import QFileDialog
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(demo_project))
+    monkeypatch.setattr(gui.runtime.coach, "complete", fail)
+    gui.dialog.project_choose.click()
+    assert wait_for(gui, lambda: gui.dialog.status.objectName() == "error")
+    assert "provider is down" in gui.dialog.status.text()
+    assert gui.context.project() is None and gui.context.project_path() == str(demo_project)
+    assert gui.dialog.project_again.isEnabled()
+    monkeypatch.setattr(gui.runtime.coach, "complete", lambda *a, **k: "## Overview\nOK now.")
+    gui.dialog.project_again.click()
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+
+
+def test_a_corrected_dossier_is_saved_and_used(gui, monkeypatch, demo_project):
+    from careertwin.interview import project as project_store
+
+    analyse_with(gui, monkeypatch, demo_project)
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+    gui.dialog.project_text.setPlainText("## Overview\nI built it for my uncle's shop.")
+    gui.dialog.project_save.click()
+    assert gui.context.project().dossier == "## Overview\nI built it for my uncle's shop."
+    assert project_store.load(demo_project).dossier.endswith("uncle's shop.")
+    assert "uncle's shop" in gui.context.brief.render()
+
+
+def test_removing_the_project_clears_the_tab_and_the_window(gui, monkeypatch, demo_project):
+    analyse_with(gui, monkeypatch, demo_project)
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+    gui.dialog.project_remove.click()
+    dialog = gui.dialog
+    assert gui.context.project() is None and gui.context.project_path() == ""
+    assert dialog.project_stats.text() == "No project yet." and dialog.project_text.toPlainText() == ""
+    assert not dialog.project_remove.isEnabled() and not dialog.project_save.isEnabled()
+    assert "project demo" not in gui.window.context.full
+
+
+def test_the_project_tab_follows_the_interview(gui, monkeypatch, demo_project):
+    analyse_with(gui, monkeypatch, demo_project)
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+    first = gui.context.current.id
+    gui.window._new_interview()
+    gui.dialog.refresh()
+    assert gui.dialog.project_stats.text() == "No project yet."
+    gui.window.switch_interview(first)
+    assert "2 files" in gui.dialog.project_stats.text() and "A greeting service" in gui.dialog.project_text.toPlainText()
+
+
+def test_the_project_tab_speaks_the_window_language(gui):
+    gui.choose(gui.dialog.ui_language, "ru")
+    assert gui.dialog.tabs.tabText(gui.dialog.TABS.index("project")) == "Проект"
+    assert gui.dialog.project_choose.text() == "Выбрать папку…" and "досье" in gui.dialog.project_intro.text()
+    gui.choose(gui.dialog.ui_language, "pl")
+    assert gui.dialog.tabs.tabText(gui.dialog.TABS.index("project")) == "Projekt"
