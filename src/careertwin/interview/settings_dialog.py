@@ -672,7 +672,12 @@ class SettingsDialog(QDialog):
         if project is None:
             stats = self.t("project_none")
         else:
-            size = f"{project.characters / 1000:.0f}k" if project.characters < 1_000_000 else f"{project.characters / 1_000_000:.1f}M"
+            characters = project.characters
+            size = (
+                f"{characters / 1_000_000:.1f}M" if characters >= 1_000_000
+                else f"{characters / 1000:.0f}k" if characters >= 10_000
+                else f"{characters / 1000:.1f}k"
+            )
             stats = self.t("project_stats", files=project.files, size=size, when=project.analyzed_at)
             if path and not Path(path).is_dir():
                 stats += "  ·  " + self.t("project_missing")

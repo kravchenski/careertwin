@@ -946,3 +946,14 @@ def test_the_project_and_ai_tabs_are_translated_too(gui):
     assert dialog.project_choose.text() == "Вибрати папку…" and "досьє" in dialog.project_intro.text()
     assert dialog.model_labels[3].text() == "Модель для скріншотів"
     gui.choose(dialog.ui_language, "auto")
+
+
+def test_the_size_of_a_small_project_is_not_shown_as_zero(gui, monkeypatch, demo_project):
+    analyse_with(gui, monkeypatch, demo_project)
+    assert wait_for(gui, lambda: gui.context.project() is not None)
+    assert " · 0.1k · " in gui.dialog.project_stats.text()
+    project = gui.context.project()
+    for characters, shown in ((9_999, "10.0k"), (10_000, "10k"), (250_000, "250k"), (1_500_000, "1.5M")):
+        project.characters = characters
+        gui.dialog.refresh_project()
+        assert f" · {shown} · " in gui.dialog.project_stats.text(), (characters, gui.dialog.project_stats.text())
