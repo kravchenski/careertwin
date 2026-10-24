@@ -14,6 +14,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from careertwin.agentic.client import ApiError
 from careertwin.agentic.prompts import SYSTEM_PROMPT
 from careertwin.agentic.registry import AgentTool, get_tool, openai_tool_specs
+from careertwin.vault import assert_clean, redact
 
 MAX_RESULT_CHARS = 12_000
 Confirm = Callable[[str], bool]
@@ -67,6 +68,7 @@ class AgentRunner:
         headers = {}
         if key := os.getenv("SWITCHYARD_API_KEY"):
             headers["Authorization"] = f"Bearer {key}"
+        assert_clean(json.dumps(self.messages, ensure_ascii=False), "the agent conversation")
         body = {
             "model": self.model,
             "messages": self.messages,
@@ -112,7 +114,7 @@ class AgentRunner:
             )
         except json.JSONDecodeError as exc:
             return json.dumps({"error": f"Arguments are not valid JSON: {exc}"})
-        self.on_event(f"→ {name}({_short(arguments)})")
+        self.on_event(f"→ {name}({redact(_short(arguments))})")
         if item.outward and not self._approved(item, arguments):
             self.on_event("  ✗ not approved")
             return json.dumps({"error": "The candidate did not approve this action."})
@@ -121,7 +123,7 @@ class AgentRunner:
         except (ApiError, ToolError) as exc:
             self.on_event(f"  ✗ {exc}")
             return json.dumps({"error": str(exc)})
-        text = json.dumps(value, ensure_ascii=False, default=str)
+        text = redact(json.dumps(value, ensure_ascii=False, default=str))
         self.on_event(f"  ✓ {_short(text, 160)}")
         return text
 

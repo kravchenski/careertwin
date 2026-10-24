@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from careertwin.settings import PROVIDERS
+from careertwin.vault import assert_clean
 
 
 async def call_ai(
@@ -21,6 +22,7 @@ async def call_ai(
     max_tokens: int = 2500,
     temperature: float = 0.2,
 ) -> str:
+    assert_clean(f"{system_prompt}\n{user_prompt}", "a model prompt")
     config = PROVIDERS.get(provider, PROVIDERS["lmstudio"])
     selected_model = model or config["default_model"]
     kind = config["kind"]

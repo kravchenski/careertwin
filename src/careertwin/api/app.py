@@ -25,12 +25,14 @@ from careertwin.api.routes import (
 )
 from careertwin.db import db_conn, init_db, migrate_db
 from careertwin.settings import OUTPUT_DIR, SCREENSHOT_DIR
+from careertwin.vault import install_log_redaction
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+install_log_redaction()
 logger = logging.getLogger("careertwin.api")
 
 
