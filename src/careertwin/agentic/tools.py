@@ -286,3 +286,33 @@ async def recent_events(limit: Annotated[int, Field(ge=1, le=200)] = 30) -> list
     """The newest events from every agent (ranked, prepared, answers saved, submissions)."""
     events = await _client().get("/v1/automation/events")
     return events[-limit:]
+
+
+@tool()
+async def suggest_interview_answer(
+    question: str,
+    job_id: str | None = None,
+    notes: str = "",
+) -> dict[str, Any]:
+    """Talking points and a short spoken answer for one interviewer question, grounded in the
+    candidate's ABOUT context (and the vacancy when `job_id` is given). Never invents experience:
+    when the context has none it says so and offers an honest framing. Use it for practice or
+    when the candidate pastes a question."""
+    return await _client().post(
+        "/v1/interview/suggest",
+        {"question": question, "job_id": job_id, "notes": notes},
+        timeout=180,
+    )
+
+
+@tool()
+async def prepare_interview_questions(
+    job_id: str | None = None,
+    count: Annotated[int, Field(ge=3, le=15)] = 8,
+    focus: str = "",
+) -> dict[str, Any]:
+    """Likely interview questions for a vacancy, each with an outline of an honest answer built
+    from the candidate's facts. `focus` narrows the topics, for example "system design"."""
+    return await _client().post(
+        "/v1/interview/practice", {"job_id": job_id, "count": count, "focus": focus}, timeout=180
+    )

@@ -18,6 +18,8 @@ answer_question; never invent one.
 6. Submit only when the candidate says so for that exact vacancy in this conversation: \
 submit_application with confirm=true. Afterwards process_vacancy "verify".
 7. Record outcomes the candidate reports with record_outcome.
+8. When an interview is booked, prepare_interview_questions for that vacancy and practise \
+with suggest_interview_answer. These answers use only the candidate's real experience.
 
 Rules
 - Steps run in the background: after process_vacancy always wait_for_vacancy.

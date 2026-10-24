@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, Sequence
+from typing import Callable
 
 from careertwin.jobs.api_discovery import get_company_jobs_via_discovery
 

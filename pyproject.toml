@@ -37,10 +37,16 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.5",
 ]
+interview = [
+    "faster-whisper>=1.1",
+    "numpy>=1.26",
+    "pyside6-essentials>=6.8",
+]
 
 [project.scripts]
 careertwin = "careertwin.cli:main"
 careertwin-mcp = "careertwin.agentic.mcp_server:main"
+careertwin-interview = "careertwin.interview.app:main"
 
 [build-system]
 requires = ["hatchling"]
