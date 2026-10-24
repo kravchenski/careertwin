@@ -17,7 +17,7 @@ import pytest
 
 from careertwin.interview import control, hotkey_windows, screenshot
 from careertwin.interview.brief import InterviewBrief
-from careertwin.interview.coach import StreamingCoach
+from careertwin.interview.coach import SCREENSHOT_MAX_TOKENS, StreamingCoach
 from careertwin.interview.prompts import SCREENSHOT_SYSTEM, SYSTEM, screenshot_prompt
 from careertwin.interview.session import INTERVIEWER, Callbacks, InterviewSession
 from careertwin.interview.settings import InterviewSettings
@@ -167,7 +167,7 @@ def test_the_screenshot_request_is_lean_and_goes_to_the_vision_model(brief):
     out = "".join(coach.stream("[screenshot]", ["Interviewer: earlier"], threading.Event(), "en", "data:image/jpeg;base64,QUJD"))
     assert "return [1, 2]" in out
     body = json.loads(requests[0].content)
-    assert body["model"] == "fast-vision" and body["stream"] is True and body["max_tokens"] <= 1200
+    assert body["model"] == "fast-vision" and body["stream"] is True and body["max_tokens"] == SCREENSHOT_MAX_TOKENS >= 3000
     system, user = body["messages"]
     assert system["content"] == SCREENSHOT_SYSTEM and len(system["content"]) < len(SYSTEM) / 3
     text, image = user["content"]

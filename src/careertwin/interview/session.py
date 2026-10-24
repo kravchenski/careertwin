@@ -374,6 +374,11 @@ class InterviewSession:
                 self.cb.on_error(str(exc))
                 return
             self.cb.on_state(self._idle_state())
+            if getattr(self.coach, "last_finish", None) == "length" and not cancel.is_set():
+                self.cb.on_status(
+                    "Cut off: the model ran out of room before it finished. "
+                    "Ask again, or pick a model with longer answers in Settings → AI."
+                )
             if text.strip():
                 self.log.suggestions.append((question, parse_suggestion(text).answer))
                 self.cb.on_suggestion_done(text)

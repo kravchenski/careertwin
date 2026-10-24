@@ -97,6 +97,9 @@ Rules
 - Read the task carefully: the constraints, the examples, the signature and the language the task \
 names or the editor shows. Use the CANDIDATE STACK only when the screen names no language.
 - Correct first, then efficient. Check the examples on the screen in your head before you answer.
+- Never think aloud: no discussion, no "let me try" and no comments in the code except the one \
+complexity line. Work the problem out before you write, then write only the solution. If the task is \
+hard, give the best working solution you can; never end with doubts.
 - No other headings and no explanation after the code. Code stays in English; the lines and any \
 prose are written in the interview language.
 - If the screenshot shows no task or question, write one POINTS bullet that says so.

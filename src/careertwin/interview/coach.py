@@ -33,6 +33,9 @@ from careertwin.interview.questions import classify
 from careertwin.llm import call_ai
 
 
+SCREENSHOT_MAX_TOKENS = 3500  # room for a whole solution; a short one still ends in a second or two
+
+
 def model_name() -> str:
     return os.getenv("INTERVIEW_MODEL") or os.getenv("SWITCHYARD_MODEL") or "auto"
 
@@ -131,6 +134,7 @@ class StreamingCoach:
         self.brief = brief
         self.model = model
         self.vision_model = vision_model
+        self.last_finish: str | None = None  # why the last reply ended: "stop", or "length" when cut off
         self._http: httpx.Client | None = None
         self.transport = transport
         self.url = url
@@ -238,7 +242,7 @@ class StreamingCoach:
         system, temperature, max_tokens = SYSTEM, 0.3, 1800
         if image:
             # The picture is the question: no CV, no history, so the model has little to read first.
-            system, temperature, max_tokens = SCREENSHOT_SYSTEM, 0.2, 1200
+            system, temperature, max_tokens = SCREENSHOT_SYSTEM, 0.2, SCREENSHOT_MAX_TOKENS
             url = image if image.startswith("data:") else f"data:image/png;base64,{image}"
             content: str | list[dict] = [
                 {"type": "text", "text": screenshot_prompt(self.brief, language, self.layout)},
@@ -268,15 +272,27 @@ class StreamingCoach:
                 if response.status_code >= 400:
                     response.read()
                     raise CoachError(failed(base, model, response.status_code, response.text))
-                yield from _chunks(response, cancel)
+                self.last_finish = None
+                finish: dict[str, str] = {}
+                try:
+                    yield from _chunks(response, cancel, finish)
+                finally:
+                    self.last_finish = finish.get("reason")
         except httpx.HTTPError as exc:
             raise CoachError(unreachable(base, exc)) from exc
 
 
-def _chunks(response: httpx.Response, cancel: threading.Event) -> Iterator[str]:
+def _chunks(
+    response: httpx.Response, cancel: threading.Event, finish: dict[str, str] | None = None
+) -> Iterator[str]:
+    """The text of a reply as it arrives; `finish["reason"]` is set to why the model stopped."""
+    finish = {} if finish is None else finish
     if "text/event-stream" not in response.headers.get("content-type", ""):
         data = json.loads(response.read() or b"{}")
-        message = (data.get("choices") or [{}])[0].get("message") or {}
+        choice = (data.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        if choice.get("finish_reason"):
+            finish["reason"] = choice["finish_reason"]
         if message.get("content"):
             yield message["content"]
         return
@@ -289,8 +305,10 @@ def _chunks(response: httpx.Response, cancel: threading.Event) -> Iterator[str]:
         if payload == "[DONE]":
             return
         try:
-            delta = (json.loads(payload).get("choices") or [{}])[0].get("delta") or {}
+            choice = (json.loads(payload).get("choices") or [{}])[0]
         except json.JSONDecodeError:
             continue
-        if delta.get("content"):
-            yield delta["content"]
+        if choice.get("finish_reason"):
+            finish["reason"] = choice["finish_reason"]
+        if (choice.get("delta") or {}).get("content"):
+            yield choice["delta"]["content"]

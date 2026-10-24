@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from careertwin.interview import screenshot
+from careertwin.interview import runlog, screenshot
 from careertwin.interview.codeview import highlight
 from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
@@ -425,6 +425,8 @@ class OverlayWindow(QWidget):
         self.setMinimumSize(560, 280)
         self.runtime = runtime
         self._shot_started = 0.0
+        self.error_text = ""
+        self.notice_text = ""
         session = runtime.session if runtime else None
         self._on_ask = on_ask or (session.ask if session else lambda _text: None)
         self._on_hint = on_hint or (session.hint_now if session else lambda: None)
@@ -765,17 +767,29 @@ class OverlayWindow(QWidget):
         self.last_state = (kind, text)
         self.pill.show_state(kind, text)
         self.pause.set_paused(kind == "paused")
+        if kind in {"thinking", "listening"} and self.error_text:
+            self.error_text = ""
+            self._render()
 
     def _status_text(self, text: str) -> None:
-        if text.startswith("Screenshot:"):
+        if text.startswith("Cut off:"):
+            runlog.log(text)
+            self.notice_text = text
+            self._render()
+        elif text.startswith("Screenshot:"):
+            runlog.log(text)
             self.pill.note = text  # how long the last screenshot answer took, under the status
             self.pill.show_state(self.last_state[0], self.last_state[1] or self._state_text(self.last_state[0]))
         elif self.last_state[0] in {"loading", "idle"}:
             self.pill.show_state(self.last_state[0], self._state_text(self.last_state[0]))
 
     def show_error(self, message: str) -> None:
+        """The pill is too narrow for a reason, so the whole message also shows above the answer."""
+        runlog.log(f"error: {message}")
         self.last_state = ("error", message)
         self.pill.show_state("error", message)
+        self.error_text = message
+        self._render()
 
     def _partial(self, text: str) -> None:
         """The words being spoken right now, before the question is complete."""
@@ -827,6 +841,7 @@ class OverlayWindow(QWidget):
             return
         self._shot_started = time.perf_counter()
         self.pill.note = ""
+        self.error_text = self.notice_text = ""
         self.pill.show_state("thinking", self.tr_("looking"))
         output = screenshot.focused_output() if scope == "focused" and not self.isActiveWindow() else None
         own = self.screen().name() if self.screen() else ""
@@ -837,13 +852,16 @@ class OverlayWindow(QWidget):
             QApplication.processEvents()
         delay = self.runtime.settings.screenshot_delay_ms / 1000 if hide else 0.0
         runtime = self.runtime
+        runlog.log(f"screenshot: scope={scope} output={output} hides the window={hide}")
 
         def capture() -> None:
             time.sleep(delay)
+            began = time.perf_counter()
             try:
                 data, error = runtime.capture(output), ""
+                runlog.log(f"screenshot: captured {len(data) // 1024} KB in {(time.perf_counter() - began) * 1000:.0f} ms")
             except Exception as exc:
-                data, error = None, str(exc)
+                data, error = None, f"The screenshot failed: {exc}"
             self._captured.emit(data, error, previous if hide else -1.0)
 
         threading.Thread(target=capture, name="capture", daemon=True).start()
@@ -915,6 +933,7 @@ class OverlayWindow(QWidget):
         )
 
     def begin_suggestion(self, question: str) -> None:
+        self.error_text = self.notice_text = ""
         self.entries.append(Entry(question))
         self.show_entry(len(self.entries) - 1)
 
@@ -979,6 +998,15 @@ class OverlayWindow(QWidget):
         self.next.setEnabled(0 <= self.index < total - 1)
         scale = self.font_scale / 100
         px = lambda size: round(size * scale)  # noqa: E731
+        banner = (
+            f'<p style="color:#ff9a9a; font-size:{px(15)}px; margin:0 0 8px 0">⚠ {html.escape(self.error_text)}</p>'
+            if self.error_text
+            else ""
+        ) + (
+            f'<p style="color:#ffcf7a; font-size:{px(15)}px; margin:0 0 8px 0">✂ {html.escape(self.notice_text[8:].strip())}</p>'
+            if self.notice_text
+            else ""
+        )
         if not total:
             if self.runtime and self.runtime.context.brief.is_empty():
                 title, hint = self.tr_("no_context"), self.tr_("no_context_hint")
@@ -988,7 +1016,8 @@ class OverlayWindow(QWidget):
                 if self.runtime and not self.runtime.context.brief.job_description:
                     hint += "  " + self.tr_("no_vacancy_hint")
             self.answer.setHtml(
-                f'<p style="color:{MUTED}; font-size:{px(16)}px">{html.escape(title)}<br>'
+                banner
+                + f'<p style="color:{MUTED}; font-size:{px(16)}px">{html.escape(title)}<br>'
                 f'<span style="font-size:{px(13)}px">{html.escape(hint)}</span></p>'
             )
             return
@@ -998,8 +1027,9 @@ class OverlayWindow(QWidget):
         shot = entry.question == "[screenshot]"
         title = self.tr_("screenshot") if shot else entry.question
         parts = [
+            banner,
             f'<div style="font-size:{px(19)}px; font-weight:700; color:{STRONG}">'
-            f"{html.escape(title)}</div>"
+            f"{html.escape(title)}</div>",
         ]
         if self.layout_mode == "main" and spoken:
             parts.append(

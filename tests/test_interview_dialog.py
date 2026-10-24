@@ -321,7 +321,7 @@ def test_screenshot_button_sends_the_capture_to_the_session(gui, monkeypatch):
     assert started_at and asked == [None] and gui.window.windowOpacity() == 1.0
     monkeypatch.setattr(screenshot, "capture", lambda tool="auto", output=None: (_ for _ in ()).throw(screenshot.ScreenshotError("grim failed")))
     gui.window.shot.clicked.emit()
-    assert wait_for(gui, lambda: gui.window.last_state == ("error", "grim failed"))
+    assert wait_for(gui, lambda: gui.window.last_state == ("error", "The screenshot failed: grim failed"))
     assert gui.window.windowOpacity() == 1.0
 
 
