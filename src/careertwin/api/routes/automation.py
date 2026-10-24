@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from careertwin.automation import guard
 from careertwin.automation.engine import Engine
+from careertwin.automation.mail import MailError, config as mail_config, configured as mail_configured
 from careertwin.automation.excel import workbook
 from careertwin.automation.models import Answer, Outcome, Settings, Vacancy
 from careertwin.automation.sources import SOURCES
@@ -179,3 +180,107 @@ async def export():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="CareerTwin-applications.xlsx"'},
     )
+
+
+class MailDraft(BaseModel):
+    kind: Literal["application", "follow_up"]
+    to: str | None = None
+
+
+def mail_failure(exc: Exception) -> HTTPException:
+    if isinstance(exc, guard.Stopped):
+        return HTTPException(423, str(exc))
+    if isinstance(exc, KeyError):
+        return HTTPException(404, "Not found")
+    return HTTPException(409, str(exc))
+
+
+@router.get("/mail/status")
+async def mail_status():
+    """Whether mail works and how far today's limit is used. The password is never part of the answer."""
+    if not mail_configured():
+        return {"configured": False}
+    cfg = mail_config()
+    return {
+        "configured": True,
+        "address": cfg.address,
+        "imap_host": cfg.imap_host,
+        "smtp_host": cfg.smtp_host,
+        "dry_run": cfg.dry_run,
+        "sent_today": engine.mail.mails.sent_today(),
+        "daily_limit": engine.store.settings().mail_daily_limit,
+    }
+
+
+@router.get("/mail")
+async def mail_list(job_id: str | None = None, state: str | None = None, direction: str | None = None):
+    return engine.mail.mails.list(job_id=job_id, state=state, direction=direction)
+
+
+@router.post("/mail/check")
+async def mail_check():
+    try:
+        return await engine.mail.check(engine.store.settings())
+    except (MailError, guard.Stopped) as exc:
+        raise mail_failure(exc) from exc
+
+
+@router.post("/jobs/{job_id}/mail")
+async def mail_draft(job_id: str, request: MailDraft):
+    existing(job_id)
+    try:
+        return engine.mail.draft(job_id, request.kind, engine.store.settings(), request.to)
+    except (MailError, KeyError) as exc:
+        raise mail_failure(exc) from exc
+
+
+@router.get("/mail/{mail_id}")
+async def mail_get(mail_id: str):
+    try:
+        return engine.mail.mails.get(mail_id)
+    except KeyError as exc:
+        raise mail_failure(exc) from exc
+
+
+@router.post("/mail/{mail_id}/approve")
+async def mail_approve(mail_id: str):
+    try:
+        return engine.mail.approve(mail_id)
+    except (MailError, KeyError) as exc:
+        raise mail_failure(exc) from exc
+
+
+@router.post("/mail/{mail_id}/reject")
+async def mail_reject(mail_id: str):
+    try:
+        return engine.mail.reject(mail_id)
+    except (MailError, KeyError) as exc:
+        raise mail_failure(exc) from exc
+
+
+@router.post("/mail/{mail_id}/send")
+async def mail_send(mail_id: str):
+    settings = engine.store.settings()
+    try:
+        return await engine.mail.send(mail_id, settings, auto=settings.mail_auto_send)
+    except (MailError, guard.Stopped, KeyError) as exc:
+        raise mail_failure(exc) from exc
+
+
+class MailHandled(BaseModel):
+    outcome: Literal["interview", "offer", "hired", "rejected", "withdrawn"] | None = None
+
+
+@router.post("/mail/{mail_id}/handled")
+async def mail_handled(mail_id: str, request: MailHandled):
+    """Mark a received message dealt with; optionally record the outcome it announced."""
+    try:
+        row = engine.mail.mails.get(mail_id)
+    except KeyError as exc:
+        raise mail_failure(exc) from exc
+    engine.mail.mails.update(mail_id, state="handled")
+    if request.outcome and row["job_id"]:
+        job = existing(row["job_id"])
+        engine.store.update(row["job_id"], state=request.outcome)
+        engine.store.event(row["job_id"], "user_outcome", {"status": request.outcome, "note": f"from mail {mail_id}", "previous_state": job["state"]})
+    return engine.mail.mails.get(mail_id)

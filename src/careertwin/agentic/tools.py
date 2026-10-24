@@ -268,6 +268,47 @@ async def submit_application(job_id: str, confirm: bool = False) -> dict[str, An
     return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": "submit"})
 
 
+@tool("Read the inbox for replies to applications", mutating=True)
+async def check_mail() -> dict[str, Any]:
+    """Read the candidate's mailbox once (read-only) and file the messages that are about an
+    application: interview invitations, rejections, requests for information. Returns counts by
+    kind; call list_mail for the messages."""
+    return await _client().post("/v1/automation/mail/check", timeout=120)
+
+
+@tool("Messages the mail agent filed")
+async def list_mail(
+    job_id: str | None = None, state: str | None = None, direction: str | None = None
+) -> list[dict[str, Any]]:
+    """Messages the mail agent filed, newest first. `state` is new (needs the candidate), handled,
+    draft, approved, sent. `direction` is in or out."""
+    mails = await _client().get("/v1/automation/mail", job_id=job_id, state=state, direction=direction)
+    return [{key: value for key, value in mail.items() if key != "body"} | {"body": mail["body"][:600]} for mail in mails]
+
+
+@tool("Draft an application or follow-up email", mutating=True)
+async def draft_email(
+    job_id: str, kind: Literal["application", "follow_up"], to: str | None = None
+) -> dict[str, Any]:
+    """Prepare an email for one vacancy and leave it as a draft for the candidate to approve.
+    Nothing is sent. The address must be one the vacancy names, one on the employer's domain or a
+    sender in the thread; give `to` only for an address the candidate has checked."""
+    return await _client().post(f"/v1/automation/jobs/{job_id}/mail", {"kind": kind, "to": to})
+
+
+@tool("Send a drafted email", mutating=True, outward=True)
+async def send_email(mail_id: str, confirm: bool = False) -> dict[str, Any]:
+    """Approve and send a drafted email to the employer. This cannot be undone. It runs only with
+    `confirm=true` AND when the candidate set CAREERTWIN_AGENT_ALLOW_MAIL=1. Ask the candidate first,
+    every time, and show them the draft."""
+    if not confirm:
+        raise ApiError("Not sent: ask the candidate, then call again with confirm=true.")
+    if os.getenv("CAREERTWIN_AGENT_ALLOW_MAIL") != "1":
+        raise ApiError("Not sent: sending mail from an agent is disabled (CAREERTWIN_AGENT_ALLOW_MAIL=1 enables it).")
+    await _client().post(f"/v1/automation/mail/{mail_id}/approve")
+    return await _client().post(f"/v1/automation/mail/{mail_id}/send")
+
+
 @tool("Interview, offer, hired, rejected, withdrawn", mutating=True)
 async def record_outcome(
     job_id: str,

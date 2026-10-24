@@ -17,6 +17,7 @@ from careertwin.llm import call_ai, parse_json_object
 from careertwin.net import validate_public_url
 
 from . import guard
+from .mail import MailAgent, configured as mail_configured
 from .models import Settings
 from .ranker import JevRanker
 from .salary import SALARY_FIELD, expectation
@@ -125,6 +126,7 @@ class Plan(BaseModel):
     value: str = ""
     evidence: str = ""
     message: str = ""
+    need_code: str = ""  # the site mails a one-time code: who it comes from (a name or domain)
 
 
 class BrowserAgent:
@@ -184,6 +186,7 @@ class BrowserAgent:
                 # Resume packages keep their historical snapshot; form answers use current facts.
                 facts = settings.context or job["package"]["profile"]
                 transcript: list[dict[str, Any]] = []
+                verification: dict[str, str] | None = None
                 for _ in range(100):
                     guard.assert_running()
                     known_answers = store.answers(job["id"])
@@ -209,7 +212,9 @@ If submission is disabled, stop with done=true after preparing/reviewing the for
 To sign in (only when "login" is given and the page is one of login.only_on) type login.email with
 evidence=login.email, then the exact text {{secret:ACCOUNT_PASSWORD}} (text and value identical) into the
 password field. Never type the password anywhere else and never write any other secret.
-If a code or CAPTCHA is asked, ask the user.
+If the site mails a one-time code, return need_code=<the sender or site name> and nothing else; the
+executor reads the mailbox and gives you verification.code, which you type with evidence=that code.
+If a CAPTCHA is asked, ask the user.
 Do not create accounts, send messages, answer assessments, or change the candidate profile.
 If the browser is loading, wait/read instead of repeating Submit. Output JSON only."""
                     raw = await call_ai(
@@ -223,6 +228,7 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                                 "page": page,
                                 "submission_allowed": allow_submit,
                                 "login": login,
+                                "verification": verification,
                                 "tools": [
                                     definition
                                     for name, definition in mcp.definitions.items()
@@ -240,6 +246,22 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                     if parsed is None:
                         raise ValueError("Browser agent returned invalid JSON")
                     plan = Plan.model_validate(parsed)
+                    if plan.need_code and not plan.questions:
+                        code = await MailAgent(store).wait_for_code(plan.need_code) if mail_configured() else None
+                        if code is None:
+                            store.update(job["id"], state="awaiting_answers")
+                            store.event(
+                                job["id"],
+                                "questions",
+                                {
+                                    "questions": [f"The one-time code sent by {plan.need_code}"],
+                                    "message": "No code arrived in the mailbox. Enter it, or set up mail (MAIL_PASSWORD).",
+                                },
+                            )
+                            return
+                        verification = {"code": code, "from": plan.need_code}
+                        store.event(job["id"], "verification_code_received", {"from": plan.need_code})
+                        continue
                     if plan.questions:
                         pending = []
                         for question in plan.questions:
@@ -372,6 +394,7 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                             plan.evidence in facts
                             or plan.evidence in known_answers.values()
                             or (account and plan.evidence == account)
+                            or (verification and plan.evidence == verification["code"])
                         ):
                             raise ValueError("An answer lacks a verified profile or user evidence")
                         if plan.tool == "type" and plan.value != args.get("text"):
