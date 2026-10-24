@@ -28,6 +28,17 @@ make docker    # backend + SearXNG in containers
 - No inline comments in source files
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
 
+## Releases
+
+Pushing a tag builds the portable Windows package and attaches it to a GitHub release together with `SHA256SUMS.txt`:
+
+```bash
+# set version in pyproject.toml to 0.2.0 and merge it, then:
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release. To get the zip without releasing, run *Release* by hand from the Actions tab and download the `windows-x64` artifact (kept for 14 days). Locally the same package comes from `make windows`.
+
 ## Project Structure
 
 All code lives in the `careertwin` package under `src/`:
