@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections import Counter, deque
 
+from careertwin.interview import i18n
+
 NAMES = {
     "en": "English", "ru": "Russian", "pl": "Polish", "uk": "Ukrainian", "be": "Belarusian",
     "de": "German", "fr": "French", "es": "Spanish", "it": "Italian", "pt": "Portuguese",
@@ -17,7 +19,8 @@ NATIVE = {
     "en": "English", "ru": "Русский", "pl": "Polski", "uk": "Українська", "de": "Deutsch",
     "fr": "Français", "es": "Español", "it": "Italiano", "pt": "Português", "cs": "Čeština",
 }
-UI_LANGUAGES = ("en", "ru", "pl")
+# The languages the window itself is translated into: one file each in `locales/`.
+UI_LANGUAGES = i18n.available()
 
 
 def name(code: str | None) -> str:

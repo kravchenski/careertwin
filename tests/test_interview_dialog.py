@@ -919,3 +919,30 @@ def test_code_inside_a_list_is_shown_in_a_block_not_as_bullets(gui):
     text = gui.window.answer.toPlainText()
     assert "for n in range(3):\n    print(n)" in text.replace(" ", "\n") or "    print(n)" in text
     assert "a plain loop" in text and "done" in text and "```" not in text
+
+
+def test_settings_offer_every_window_language_and_switch_to_it(gui):
+    from careertwin.interview import i18n, languages
+
+    dialog = gui.dialog
+    offered = [dialog.ui_language.itemData(i) for i in range(dialog.ui_language.count())]
+    assert offered == ["auto", *i18n.available()]
+    assert [dialog.ui_language.itemText(i) for i in range(1, dialog.ui_language.count())] == [languages.NATIVE[c] for c in i18n.available()]
+    for code, tab_title, label in (
+        ("uk", "Інтерв’ю", "Мова вікна"), ("de", "Interview", "Fenstersprache"),
+        ("fr", "Entretien", "Langue de la fenêtre"), ("es", "Entrevista", "Idioma de la ventana"),
+    ):
+        gui.choose(dialog.ui_language, code)
+        assert gui.window.ui == code and dialog.tabs.tabText(0) == tab_title
+        assert dialog.window_labels[0].text() == label
+        assert dialog.close_button.text() == i18n.text(code, "dialog", "close")
+    gui.choose(dialog.ui_language, "auto")
+
+
+def test_the_project_and_ai_tabs_are_translated_too(gui):
+    gui.choose(gui.dialog.ui_language, "uk")
+    dialog = gui.dialog
+    assert dialog.tabs.tabText(dialog.TABS.index("project")) == "Проєкт"
+    assert dialog.project_choose.text() == "Вибрати папку…" and "досьє" in dialog.project_intro.text()
+    assert dialog.model_labels[3].text() == "Модель для скріншотів"
+    gui.choose(dialog.ui_language, "auto")
