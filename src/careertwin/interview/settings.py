@@ -94,8 +94,10 @@ class InterviewSettings:
     def save(self) -> None:
         path = self.path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
-        os.chmod(path, 0o600)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # never readable, even for a moment
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(asdict(self), indent=2, ensure_ascii=False))
+        os.chmod(path, 0o600)  # an older file keeps the mode it had
 
 
 def _coerce(name: str, value: Any, current: Any) -> Any:

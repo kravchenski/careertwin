@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from careertwin.llm import call_ai, parse_json_object
+from careertwin.net import check_public_url
 from careertwin.settings import AGENT_BROWSER_LOCAL_BIN, DATA_DIR, SCREENSHOT_DIR
 
 logger = logging.getLogger("careertwin.api")
@@ -84,6 +85,10 @@ def _agent_browser_run(
 
 
 def _agent_browser_open(url: str, *, session: str, wait_ms: int = 0) -> tuple[bool, str, str]:
+    try:
+        check_public_url(url)  # a real browser would happily open 169.254.169.254 or file:///etc/passwd
+    except ValueError as exc:
+        return False, "", f"blocked: {exc}"
     ok, stdout, stderr = _agent_browser_run(["open", url], session=session, timeout=45)
     if ok and wait_ms > 0:
         _agent_browser_run(["wait", str(wait_ms)], session=session, timeout=max(10, wait_ms // 1000 + 5))

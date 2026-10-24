@@ -144,6 +144,14 @@ def install_log_redaction() -> None:
             handler.addFilter(RedactingFilter())
 
 
+def private_umask() -> None:
+    """New files and folders made by this process are visible to the user alone (POSIX). The API and the
+    interview window hold a CV, answers and keys, and the default 022 would leave them readable by every
+    other account on the machine."""
+    if os.name == "posix":
+        os.umask(0o077)
+
+
 def file_problems(path: Path) -> list[str]:
     """What is wrong with the permissions of a file that holds secrets (POSIX only)."""
     if os.name != "posix" or not path.exists():
@@ -152,6 +160,23 @@ def file_problems(path: Path) -> list[str]:
     if mode & 0o077:
         return [f"{path} is readable by other users (mode {mode:o}); run `chmod 600 {path}`"]
     return []
+
+
+def dir_problems(path: Path) -> list[str]:
+    """What is wrong with the permissions of a folder that holds private data (POSIX only)."""
+    if os.name != "posix" or not path.is_dir():
+        return []
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode & 0o077:
+        return [f"{path} can be entered by other users (mode {mode:o}); run `chmod 700 {path}`"]
+    return []
+
+
+def fix_dir(path: Path) -> bool:
+    if os.name != "posix" or not path.is_dir():
+        return False
+    path.chmod(0o700)
+    return True
 
 
 def fix_file(path: Path) -> bool:

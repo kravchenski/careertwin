@@ -366,6 +366,7 @@ def main() -> None:
     _ = mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio")
     _ = mcp.add_argument("--host", default="127.0.0.1")
     _ = mcp.add_argument("--port", type=int, default=8765)
+    _ = mcp.add_argument("--allow-remote", action="store_true", help="Listen beyond the loopback (put TLS in front of it)")
 
     watch = sub.add_parser("watch", help="Control the agents from this terminal: live feed, approvals, notifications")
     _ = watch.add_argument("--once", action="store_true", help="Print the status and what waits, then exit")
@@ -448,7 +449,10 @@ def _run_service(command: str, args: argparse.Namespace) -> None:
     elif command == "mcp":
         from careertwin.agentic.mcp_server import main as mcp_main
 
-        mcp_main(["--transport", args.transport, "--host", args.host, "--port", str(args.port)])
+        mcp_main(
+            ["--transport", args.transport, "--host", args.host, "--port", str(args.port)]
+            + (["--allow-remote"] if args.allow_remote else [])
+        )
     else:
         import asyncio
 

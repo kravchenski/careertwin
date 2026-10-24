@@ -58,6 +58,15 @@ def audit(root: Path | None = None) -> list[Finding]:
     if about.exists():
         problems = vault.file_problems(about)
         add(Finding("warn", "ABOUT.md can be read by other users", problems[0], lambda: vault.fix_file(about)) if problems else Finding("ok", "ABOUT.md is private to you"))
+    from careertwin.settings import DATA_DIR
+
+    if DATA_DIR.is_dir():
+        problems = vault.dir_problems(DATA_DIR)
+        add(
+            Finding("warn", "The data folder can be entered by other users", problems[0] + ": it holds the database, answers, CVs and keys", lambda: vault.fix_dir(DATA_DIR))
+            if problems
+            else Finding("ok", "The data folder is private to you")
+        )
     from careertwin.api.security import token_file
 
     token = token_file()

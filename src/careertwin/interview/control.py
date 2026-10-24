@@ -12,6 +12,7 @@ import argparse
 import contextlib
 import os
 import socket
+import stat
 import sys
 import tempfile
 import threading
@@ -25,12 +26,31 @@ class ControlError(RuntimeError):
     """The window did not answer."""
 
 
+def _private(path: str) -> bool:
+    """A real directory (not a link) that belongs to this user and nobody else can enter."""
+    info = os.lstat(path)
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o077
+
+
 def socket_path() -> str:
-    """Where the window listens: a socket in the runtime directory that only this user can open."""
+    """Where the window listens: a socket inside a directory that only this user can enter.
+
+    That is the runtime directory when it is private, else `<tmp>/careertwin-interview-<uid>/`, created
+    with mode 0700 and checked (a directory someone else made there, or a link, is refused): a socket in the
+    shared /tmp could otherwise be connected to by another account between `bind` and `chmod`."""
     runtime = os.environ.get("XDG_RUNTIME_DIR")
-    if runtime:
+    if runtime and os.path.isdir(runtime) and _private(runtime):
         return os.path.join(runtime, f"{NAME}.sock")
-    return os.path.join(tempfile.gettempdir(), f"{NAME}-{os.getuid()}.sock")
+    folder = os.path.join(tempfile.gettempdir(), f"{NAME}-{os.getuid()}")
+    try:
+        os.mkdir(folder, 0o700)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        raise ControlError(f"cannot create {folder}: {exc}") from exc
+    if not _private(folder):
+        raise ControlError(f"{folder} is not private to you; remove it and start the window again")
+    return os.path.join(folder, f"{NAME}.sock")
 
 
 def send(command: str, timeout: float = 2.0) -> str:
@@ -66,7 +86,11 @@ class ControlServer:
             send("ping", timeout=0.5)
             self.error = "another CareerTwin Interview window is already running"
             return False
-        path = socket_path()
+        try:
+            path = socket_path()
+        except ControlError as exc:
+            self.error = str(exc)
+            return False
         with contextlib.suppress(FileNotFoundError):
             os.unlink(path)  # nobody answers, so a file left here is from a crashed run
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

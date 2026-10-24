@@ -6,9 +6,10 @@ import asyncio
 import logging
 import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from careertwin.net import acheck_public_url
 from careertwin.db import db_conn
 from careertwin.jobs.boards import (
     ADAPTERS,
@@ -539,6 +540,10 @@ async def fetch_job_description(payload: dict):
     url = payload.get("url", "")
     if not url:
         return {"description": ""}
+    try:
+        await acheck_public_url(url if isinstance(url, str) else "")
+    except ValueError as exc:
+        raise HTTPException(422, f"That URL is not allowed: {exc}") from exc
 
     from careertwin.jobs.scanner import _fetch_job_description_crawl4ai
 

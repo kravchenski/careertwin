@@ -215,6 +215,12 @@ async def _fetch_markdown_crawl4ai(url: str, wait_for_js: bool = True) -> str:
         wait_for_js: If True, waits 1.5s for JavaScript rendering (for ATS pages)
     """
     try:
+        from careertwin.net import acheck_public_url
+
+        await acheck_public_url(url)  # the crawler resolves the name itself: refuse an internal one first
+    except ValueError:
+        return ""
+    try:
         from crawl4ai import CacheMode, CrawlerRunConfig
 
         js_code = "await new Promise(r => setTimeout(r, 1500));" if wait_for_js else ""

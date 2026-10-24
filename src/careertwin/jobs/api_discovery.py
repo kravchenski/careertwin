@@ -43,6 +43,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 
+from careertwin.net import guard_page
 from careertwin.net import safe_async_client
 
 from careertwin.db import db_conn
@@ -213,6 +214,7 @@ async def discover_jobs_api(url: str, timeout_ms: int = 20000, settle_ms: int = 
             ),
         )
         page = await context.new_page()
+        await guard_page(page)
 
         async def _on_response(response):
             try:

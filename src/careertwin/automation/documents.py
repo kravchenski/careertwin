@@ -173,9 +173,9 @@ Do not select irrelevant evidence to pad keyword coverage."""
             + "</body></html>"
         )
         pdf = folder / "cv.pdf"
-        from weasyprint import HTML
+        from careertwin.rendering.safe import html as safe_html
 
-        await asyncio.to_thread(HTML(string=document).write_pdf, str(pdf))
+        await asyncio.to_thread(safe_html(string=document).write_pdf, str(pdf))
         from pypdf import PdfReader
 
         reader = PdfReader(pdf)

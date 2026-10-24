@@ -8,9 +8,10 @@ import logging
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from careertwin.net import acheck_public_url, guard_page
 from careertwin.agents.job_matcher import JobMatcher
 from careertwin.api.schemas import (
     JobApplyRequest,
@@ -869,6 +870,16 @@ async def api_search_jobs(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def public_or_422(url: Any) -> None:
+    """A URL from a request body goes to a real browser: only a public address may."""
+    try:
+        if not isinstance(url, str):
+            raise ValueError("The URL must be text")
+        await acheck_public_url(url)
+    except ValueError as exc:
+        raise HTTPException(422, f"That URL is not allowed: {exc}") from exc
+
+
 @router.post("/v1/jobs/scrape-page")
 async def scrape_career(body: dict[str, Any]) -> dict[str, Any]:
     """Scrape any career page for job listings using Playwright."""
@@ -879,6 +890,7 @@ async def scrape_career(body: dict[str, Any]) -> dict[str, Any]:
 
     if not url:
         return {"success": False, "error": "URL is required"}
+    await public_or_422(url)
 
     jobs = await scrape_career_page(url, company)
     return {
@@ -896,6 +908,7 @@ async def fetch_description(body: dict[str, Any]) -> dict[str, Any]:
     url = body.get("url", "")
     if not url:
         return {"success": False, "error": "URL is required"}
+    await public_or_422(url)
 
     if "epam.com" in url:
         desc = await _fetch_epam_job_description(url)
@@ -907,6 +920,7 @@ async def fetch_description(body: dict[str, Any]) -> dict[str, Any]:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
             page = await browser.new_page()
+            await guard_page(page)
             try:
                 await page.goto(url, wait_until="networkidle", timeout=20000)
                 await page.wait_for_timeout(2000)

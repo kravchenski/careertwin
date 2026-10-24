@@ -76,7 +76,7 @@ class PdfRenderer:
 
     def _render_html(self, graph: CareerGraph, template_name: str) -> str:
         template_str = get_template(template_name)
-        template = Template(template_str)
+        template = Template(template_str, autoescape=True)  # the graph holds text from GitHub, resumes and pages
 
         context = {
             "full_name": graph.profile.full_name or "Your Name",
@@ -158,8 +158,9 @@ class PdfRenderer:
 
     def _html_to_pdf(self, html_path: str, pdf_path: str, config: RenderConfig) -> None:
         try:
-            from weasyprint import HTML
-            HTML(filename=html_path).write_pdf(pdf_path)
+            from careertwin.rendering.safe import html as safe_html
+
+            safe_html(filename=html_path, files=config.font_paths).write_pdf(pdf_path)
         except ImportError:
             self._fallback_html_to_pdf(html_path, pdf_path)
 

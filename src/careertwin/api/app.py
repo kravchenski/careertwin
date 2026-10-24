@@ -24,7 +24,7 @@ from careertwin.api.routes import (
 )
 from careertwin.api.security import SecurityMiddleware, cors_origins, docs_enabled, server_token, token_file
 from careertwin.db import db_conn, init_db, migrate_db
-from careertwin.vault import install_log_redaction
+from careertwin.vault import install_log_redaction, private_umask
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +32,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 install_log_redaction()
+private_umask()
 logger = logging.getLogger("careertwin.api")
 
 

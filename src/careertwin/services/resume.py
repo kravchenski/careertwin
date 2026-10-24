@@ -168,9 +168,9 @@ def _render_cover_letter_pdf(
 ) -> None:
     html = _build_cover_letter_html(full_name, email, phone, company, job_title, language_label, body)
     try:
-        from weasyprint import HTML
+        from careertwin.rendering.safe import html as safe_html
 
-        HTML(string=html).write_pdf(str(output_path))
+        safe_html(string=html).write_pdf(str(output_path))
     except Exception:
         output_path.write_text(body, encoding="utf-8")
 
@@ -508,9 +508,9 @@ async def render_markdown_resume_pdf(
     body_html = _markdown_to_resume_html(markdown_text)
     html = _build_markdown_resume_html(full_name, title, email, phone, location, github, linkedin, body_html)
     try:
-        from weasyprint import HTML
+        from careertwin.rendering.safe import html as safe_html
 
-        HTML(string=html).write_pdf(str(output_path))
+        safe_html(string=html).write_pdf(str(output_path))
     except Exception:
         output_path.write_text(markdown_text, encoding="utf-8")
         return

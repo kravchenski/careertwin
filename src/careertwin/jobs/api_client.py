@@ -25,6 +25,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from careertwin.net import guard_page
 from careertwin.net import safe_async_client
 
 _TIMEOUT = 15.0
@@ -234,6 +235,7 @@ async def discover_jobs_api_via_network(url: str, company_name: str) -> dict[str
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page()
+            await guard_page(page)
             page.on("response", on_response)
             try:
                 await page.goto(url, timeout=20000, wait_until="domcontentloaded")

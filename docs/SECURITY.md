@@ -43,6 +43,12 @@ MAIL_PASSWORD=...                    # an APP PASSWORD for IMAP/SMTP, not your m
 | Things go wrong and you want it to **stop now** | The kill switch: `touch data/STOP` (works with the API down), `POST /v1/automation/kill`, or type `kill` at a `watch` prompt. Nothing is submitted, sent or visited until it is lifted | `test_guard.py`, `test_mail.py`, `test_monitor.py` |
 | **Another user on the machine** reads your files | `.env`, `ABOUT.md` and the API token are checked for group/world access (`careertwin security --fix`); the workbook is written mode 0600; generated documents are served only to the token holder, and the profile snapshot never | `test_vault.py`, `test_security_check.py`, `test_dashboard.py`, `test_api_security.py` |
 | A **formula in a spreadsheet cell** (`=HYPERLINK(…)`) | Any cell that starts like a formula is written as text | `test_dashboard.py` |
+| A **profile, resume or page** carries HTML that makes the PDF engine fetch an address or read a file | Template text is escaped; the PDF engine is a restricted fetcher that loads only `data:` URLs and the fonts it was given, so even unescaped HTML fetches nothing | `test_audit_fixes.py` |
+| A **request body or a redirect** sends a real browser (Playwright, the crawler, the agent browser) to an internal address or a `file:` URL | The three routes that took any URL refuse it; every browser launch is guarded request by request, redirects and subresources included | `test_audit_fixes.py` |
+| A **hostile line of text** freezes the program (catastrophic regex backtracking) | The redaction, experience and question patterns are bounded, and a spoken question is cut at 2000 characters; each is timed on a 300 000-character hostile input in a separate process | `test_audit_fixes.py` |
+| **Another account** connects to the interview window's control socket | The socket lives in a folder only its owner can enter (checked: owner, mode, not a link), so there is no window between `bind` and `chmod`; the API and the window create every file private by default | `test_audit_fixes.py` |
+| A **repository in a folder you analyse** runs its own hooks when git is called | Git is called with hooks and the file-system monitor switched off and without prompts | `test_audit_fixes.py` |
+| The **MCP server over HTTP** is a second door to the same tools (it holds the API token and runs them with it) | It asks for the same bearer token, the same Host and Origin rules and the same limits as the API, and listens on the loopback only | `test_mcp_security.py` |
 | A **vacancy site is hammered** | One request at a time per host, `robots.txt` respected on career pages, exponential back-off, a batch size | `test_monitor.py` |
 
 ## Everything goes through Switchyard
@@ -51,6 +57,41 @@ Text generation, decisions and the browser tools of the agents use your Switchya
 different provider in the saved settings is ignored. If you route Switchyard to a cloud model, that model sees
 what the agents send it: your facts, vacancy text and the emails it classifies. Choose the route accordingly.
 `decision_backend=typesafe` is an exception you opt into, and `careertwin security` warns when it is on.
+
+## The last audit
+
+Run on 2026-10-24 against the code of this guide (OWASP-style classes, a dependency audit with `pip-audit`, the
+`ruff` security rules, a timing test of every regular expression, a scan of all 266 commits for credentials and
+private files, and the workflows). Found and fixed:
+
+* **High: HTML injection into the PDF engine** (confirmed with a local listener that the renderer called it).
+  Escaped now, and the engine may fetch nothing.
+* **Medium: three routes sent a real browser to any URL** from a request body, including `file:///etc/passwd`
+  and cloud-metadata addresses. Validated and guarded.
+* **Medium: three regular expressions that take minutes on a hostile line**, one of them in the secret redaction
+  of project analysis. Bounded; a gap that let `Authorization: Bearer …` through unredacted is closed.
+* **Medium: 16 vulnerable packages (150 advisories)**, among them `pypdf` (27, on uploaded files), `weasyprint`,
+  `pillow`, `urllib3` and the `certifi` root-store advisory. Upgraded, minimum versions raised, and a test keeps
+  them from going back. One is left: `cryptography` 49 (fix in 50), which `pyopenssl` does not yet allow; the
+  advisory concerns PKCS#7 decryption, which nothing here uses.
+* **Medium (second pass): the MCP server over HTTP accepted any local caller without a token**, so another account
+  on the machine could run the tools through it. Now behind the API's gate.
+* **Low:** the control socket race, a settings file readable for an instant before `chmod`, git run with the
+  repository's own config, an unpinned CI toolchain and a workflow with no `permissions`. All fixed.
+
+Clean: no SQL built from input (the few dynamic statements take column names from fixed lists), no deserialization
+of untrusted data, no `shell=True`, no disabled TLS verification, no committed secrets or private files, no
+script injection in the workflows.
+
+Left, on purpose or for lack of a way to test it here:
+
+* **The container runs as root with Chrome's sandbox off** (`--no-sandbox`) and on the host network. A browser
+  escape would land in a root container that shares the host's loopback. Running it as an unprivileged user needs
+  an image build and test that was not possible here.
+* **A browser checks a name once.** The guard resolves the name for each request, but a name that changes between
+  the check and the connection (DNS rebinding) can still reach a browser; our own HTTP client has no such gap.
+* **Error texts** of the older routes still return the exception message to the caller, and a few have no upper
+  bound on a list in the body. Both need the token and neither can reach a secret.
 
 ## What this does not cover
 
