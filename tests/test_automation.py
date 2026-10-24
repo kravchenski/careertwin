@@ -942,3 +942,47 @@ def test_a_search_cycle_does_not_start_while_the_kill_switch_is_on(store, tmp_pa
     guard.stop("test")
     with pytest.raises(guard.Stopped):
         Engine(store).run()
+
+
+@pytest.mark.asyncio
+async def test_a_one_time_code_is_read_from_the_mailbox_and_typed(store, form, monkeypatch):
+    class Mailbox:
+        asked = []
+
+        def __init__(self, store):
+            pass
+
+        async def wait_for_code(self, hint):
+            self.asked.append(hint)
+            return "482913"
+
+    monkeypatch.setattr(browser, "MailAgent", Mailbox)
+    monkeypatch.setattr(browser, "mail_configured", lambda: True)
+    monkeypatch.setattr(FakeMCP, "page", '[ref_1] textbox "Verification code"\n[ref_2] button "Continue"')
+    code_plan = {"tool": "type", "args": {"ref": "ref_1", "text": "482913"}, "field": "Verification code", "value": "482913", "evidence": "482913"}
+    model = AsyncMock(side_effect=[json.dumps({"need_code": "workday"}), json.dumps(code_plan), '{"done": true}'])
+    monkeypatch.setattr(browser, "call_ai", model)
+    monkeypatch.setattr(browser.JevRanker, "supports_answer", AsyncMock(return_value=True))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert Mailbox.asked == ["workday"] and types(FakeMCP.instances[0].calls)[0]["text"] == "482913"
+    assert json.loads(model.call_args_list[1].args[1])["verification"] == {"code": "482913", "from": "workday"}
+    assert store.job(form["id"])["state"] == "form_ready"
+
+
+@pytest.mark.asyncio
+async def test_without_a_code_the_filler_asks_the_user_instead_of_guessing(store, form, monkeypatch):
+    monkeypatch.setattr(browser, "mail_configured", lambda: False)
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps({"need_code": "workday"})))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    job = store.job(form["id"])
+    assert job["state"] == "awaiting_answers" and "one-time code" in json.dumps(store.events(form["id"])[-1])
+    assert types(FakeMCP.instances[0].calls) == []
+
+
+@pytest.mark.asyncio
+async def test_an_invented_code_is_not_typed(store, form, monkeypatch):
+    monkeypatch.setattr(browser, "mail_configured", lambda: False)
+    plan = {"tool": "type", "args": {"ref": "ref_1", "text": "123456"}, "field": "Code", "value": "123456", "evidence": "123456"}
+    monkeypatch.setattr(browser, "call_ai", AsyncMock(return_value=json.dumps(plan)))
+    await browser.BrowserAgent().apply(form, store.settings(), store, allow_submit=False)
+    assert store.job(form["id"])["state"] == "needs_review" and types(FakeMCP.instances[0].calls) == []

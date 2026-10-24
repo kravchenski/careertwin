@@ -9,6 +9,7 @@ from . import guard
 from .browser import BrowserAgent
 from .documents import DocumentAgent
 from .excel import ExcelAgent
+from .mail import MailAgent, MailError, configured as mail_configured
 from .models import Vacancy
 from .ranker import JevRanker
 from .sources import SearchAgent
@@ -28,6 +29,16 @@ class Engine:
         self.scheduler: asyncio.Task | None = None
         self.cycle: asyncio.Task | None = None
         self.last_run: str | None = None
+        self._mail: MailAgent | None = None
+        self.last_mail_check: float | None = None
+        self.mail_error = ""
+
+    @property
+    def mail(self) -> MailAgent:
+        """Created on first use: it opens the mail table, which a bare Engine does not need."""
+        if self._mail is None:
+            self._mail = MailAgent(self.store)
+        return self._mail
 
     def start(self) -> None:
         self.store.initialize()
@@ -59,6 +70,8 @@ class Engine:
             or bool(os.getenv("TYPESAFE_API_KEY")),
             "browser_url": os.getenv("SWITCHYARD_MCP_URL", "http://127.0.0.1:3260/mcp"),
             "submitted_today": self.store.submissions_today(),
+            "mail_configured": mail_configured(),
+            "mail_error": self.mail_error,
             "excel_path": str(self.tracker.path.resolve()),
             "excel_error": self.tracker.error,
         }
@@ -212,10 +225,28 @@ class Engine:
         except Exception as exc:
             self.store.event(None, "cycle_error", {"message": str(exc)})
 
+    async def _check_mail(self, settings) -> None:
+        try:
+            summary = await self.mail.check(settings)
+            self.mail_error = ""
+            if summary["new"]:
+                self.store.event(None, "mail_checked", summary)
+        except (MailError, guard.Stopped) as exc:
+            if str(exc) != self.mail_error:  # say it once, not every half hour
+                self.store.event(None, "mail_error", {"message": str(exc)})
+            self.mail_error = str(exc)
+
     async def _schedule(self) -> None:
+        import time
+
         while True:
             await asyncio.sleep(60)
             settings = self.store.settings()
+            if settings.mail_scheduled and mail_configured() and not guard.stopped():
+                due = self.last_mail_check is None or time.monotonic() - self.last_mail_check >= settings.mail_check_minutes * 60
+                if due:
+                    self.last_mail_check = time.monotonic()
+                    await self._check_mail(settings)
             if not settings.scheduled or guard.stopped():
                 continue
             from datetime import datetime, timezone

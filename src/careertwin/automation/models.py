@@ -32,6 +32,10 @@ class Settings(BaseModel):
     interval_hours: int = Field(default=12, ge=1, le=168)
     limit: int = Field(default=30, ge=1, le=100)
     daily_limit: int = Field(default=10, ge=1, le=100)
+    mail_daily_limit: int = Field(default=10, ge=1, le=50)
+    mail_scheduled: bool = True  # read the inbox on a timer when mail is configured
+    mail_check_minutes: int = Field(default=30, ge=5, le=1440)
+    mail_auto_send: bool = False  # the user's standing permission to send drafts without asking again
 
     @field_validator("provider", mode="before")
     @classmethod

@@ -67,8 +67,8 @@ def test_catalogue_is_consistent_between_openai_and_mcp():
         assert item.parameters["type"] == "object"
 
 
-def test_only_submit_is_outward():
-    assert [item.name for item in all_tools() if item.outward] == ["submit_application"]
+def test_only_submit_and_send_are_outward():
+    assert [item.name for item in all_tools() if item.outward] == ["submit_application", "send_email"]
     assert not get_tool("list_vacancies").mutating
 
 
