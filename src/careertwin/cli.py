@@ -356,6 +356,11 @@ def main() -> None:
     _ = serve.add_argument("--host", default="127.0.0.1")
     _ = serve.add_argument("--port", type=int, default=8000)
     _ = serve.add_argument("--reload", action="store_true")
+    _ = serve.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="Listen on a non-loopback address (the API has no TLS: put a reverse proxy in front)",
+    )
 
     mcp = sub.add_parser("mcp", help="Run the MCP server for agents")
     _ = mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio")
@@ -418,6 +423,11 @@ def _run_service(command: str, args: argparse.Namespace) -> None:
     if command == "serve":
         import uvicorn
 
+        if args.host not in {"127.0.0.1", "localhost", "::1"} and not args.allow_remote:
+            raise SystemExit(
+                f"Refusing to listen on {args.host}: the API carries your CV and can send applications. "
+                "Use 127.0.0.1, or pass --allow-remote behind a TLS reverse proxy."
+            )
         uvicorn.run(
             "careertwin.api.app:app", host=args.host, port=args.port, reload=args.reload
         )

@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from careertwin.api.routes import (
     applications,
     automation,
     boards,
     companies,
+    files,
     interview,
     jobs,
     profile,
@@ -23,8 +22,8 @@ from careertwin.api.routes import (
     resume,
     studio,
 )
+from careertwin.api.security import SecurityMiddleware, cors_origins, docs_enabled, server_token, token_file
 from careertwin.db import db_conn, init_db, migrate_db
-from careertwin.settings import OUTPUT_DIR, SCREENSHOT_DIR
 from careertwin.vault import install_log_redaction
 
 logging.basicConfig(
@@ -38,6 +37,8 @@ logger = logging.getLogger("careertwin.api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    server_token()  # creates data/api-token on the first start
+    logger.info("API token is in %s (or CAREERTWIN_API_TOKEN)", token_file())
     init_db()
     migrate_db()
     from careertwin.jobs.companies import save_known_companies_to_db
@@ -49,28 +50,20 @@ async def lifespan(app: FastAPI):
         await automation.engine.close()
 
 
-app = FastAPI(title="CareerTwin API", version="2.0.0", lifespan=lifespan)
+# The interactive docs are off unless CAREERTWIN_API_DOCS=1: they cannot send the token.
+_DOCS = {} if docs_enabled() else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="CareerTwin API", version="2.0.0", lifespan=lifespan, **_DOCS)
 
-_CORS_ORIGINS = [
-    o.strip()
-    for o in os.getenv(
-        "CORS_ORIGINS",
-        "",
-    ).split(",")
-    if o.strip()
-]
-
+app.add_middleware(SecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_CORS_ORIGINS,
+    allow_origins=cors_origins(),
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
-app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
-app.mount("/screenshots", StaticFiles(directory=str(SCREENSHOT_DIR)), name="screenshots")
-
+app.include_router(files.router)
 app.include_router(profile.router)
 app.include_router(resume.router)
 app.include_router(jobs.router)

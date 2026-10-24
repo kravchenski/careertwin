@@ -66,7 +66,7 @@ cp ABOUT.example.md ABOUT.md         # then fill in your real background
 uv sync --extra rendering
 
 switchyard                           # your model gateway, http://127.0.0.1:3260
-uv run careertwin serve              # the API, http://127.0.0.1:8000  (docs at /docs)
+uv run careertwin serve              # the API, http://127.0.0.1:8000 (token in data/api-token)
 uv run careertwin agent "Find strong Python matches and prepare CVs for the top two"
 ```
 
@@ -141,7 +141,7 @@ flowchart LR
 |---|---|---|
 | **The built-in agent** | `uv run careertwin agent` | [docs/AGENTS.md](docs/AGENTS.md) |
 | **Your coding agent, over MCP** | `claude mcp add careertwin -- uv run careertwin-mcp` | [docs/AGENTS.md](docs/AGENTS.md) |
-| **The HTTP API** | `uv run careertwin serve`, then `http://127.0.0.1:8000/docs` | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
+| **The HTTP API** | `uv run careertwin serve`, then call it with the token from `data/api-token` | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **The interview window** | `uv run --extra interview careertwin-interview` | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
 
 ## Platform support
