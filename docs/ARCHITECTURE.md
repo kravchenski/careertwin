@@ -9,9 +9,9 @@ CareerTwin is one Python package, `careertwin`, with three front doors onto the 
  you, live       │  interview/    audio · Whisper · coach · Qt overlay            │
                  └───────────────┬───────────────────────────┬──────────────────┘
                                  ▼                           ▼
-                  automation/  four agents          services/  profile/  jobs/
-                  search · rank · documents ·       CV tailoring · ABOUT.md ·
-                  browser · tracking                vacancy discovery
+                  automation/  five agents + guard  services/  profile/  jobs/
+                  monitor · résumé · filler ·       CV tailoring · ABOUT.md ·
+                  mail · Excel                      vacancy discovery
                                  │                           │
                                  ▼                           ▼
               settings · db (SQLite) · llm (providers) · browser · net      document library
@@ -33,6 +33,11 @@ CareerTwin is one Python package, `careertwin`, with three front doors onto the 
 6. **Configuration lives in `settings.py`** (paths and provider table) and `.env`, loaded once by
    `careertwin/__init__.py`. Real environment variables win over `.env`.
 7. **No module changes `sys.path`.** All imports are absolute from `careertwin`.
+8. **Secrets and outbound traffic have one door each.** `vault.py` knows which environment variables are
+   secrets and masks them in logs, events and files and refuses them in a prompt; `net.py` is the only way a
+   foreign URL is fetched (public addresses only, redirects checked); `api/security.py` is the only gate in front
+   of the API; `automation/guard.py` holds the limits no model output can argue with. [SECURITY.md](SECURITY.md)
+   lists what each one stops.
 
 ## How an agent drives a vacancy
 
@@ -65,7 +70,8 @@ parec (sink monitor) ─► 20 ms frames ─► UtteranceSegmenter ─► Whispe
 | Where | What |
 |---|---|
 | `data/careertwin.db` | Profiles, studio sessions, companies, collected jobs, applications, and the automation jobs, events, answers and files |
-| `data/outputs/` | Generated CVs, cover letters, `CareerTwin-applications.xlsx` |
+| `data/outputs/` | Generated CVs, cover letters, `CareerTwin-applications.xlsx`; served only to the token holder |
+| `data/api-token`, `data/STOP` | The API token (mode 0600); the kill switch while the file exists |
 | `data/cache/`, `data/screenshots/` | Job-source cache, browser screenshots |
 | `data/interviews/` | Interview transcripts (text only) |
 | `ABOUT.md` | Your private candidate context; git-ignored |

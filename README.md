@@ -37,7 +37,7 @@ The language model is scripted so the recording is repeatable; the API, tools, s
 
 | | What it does | Guide |
 |---|---|---|
-| **Job-search agents** | Find and rank vacancies against your facts, write a tailored CV and cover letter, fill the application in your signed-in Chrome, track every step in SQLite and an Excel workbook. Stops at login, CAPTCHA and any question it cannot answer from your profile. | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
+| **Five job-search agents** | A monitor that watches company career sites, a résumé builder, a form filler that works in your signed-in Chrome, a mail agent that reads replies and sends approved applications, and an Excel agent with a dashboard. You control them from a terminal and approve every send; secrets never reach a model. | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Interview assistant** | A compact window that transcribes the call and writes what to say, in first person, from your real experience. Solves a task from a screenshot, defends a project from its code, speaks seven languages. | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
 | **MCP server and HTTP API** | 29 typed tools and a documented REST API that any agent or script can drive. | [docs/AGENTS.md](docs/AGENTS.md) |
 | **Document library** | A career knowledge graph, nine PDF templates, an ATS checker, a vision-based quality check and a repair loop. | [docs/DOCUMENTS.md](docs/DOCUMENTS.md) |
@@ -142,6 +142,8 @@ flowchart LR
 | **The built-in agent** | `uv run careertwin agent` | [docs/AGENTS.md](docs/AGENTS.md) |
 | **Your coding agent, over MCP** | `claude mcp add careertwin -- uv run careertwin-mcp` | [docs/AGENTS.md](docs/AGENTS.md) |
 | **The HTTP API** | `uv run careertwin serve`, then call it with the token from `data/api-token` | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
+| **Your control terminal** | `uv run careertwin watch`: the live feed, an approval question for everything that is about to leave, desktop notifications | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
+| **The security check** | `uv run careertwin security` | [docs/SECURITY.md](docs/SECURITY.md) |
 | **The interview window** | `uv run --extra interview careertwin-interview` | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
 
 ## Platform support
@@ -171,6 +173,12 @@ started by the workflow on a Mac runner; nobody has used it by hand on a Mac.
   to your model provider, screenshots you take, project files you analyse, and, only if you pick Deepgram, the audio.
 - **Secrets are not read.** Project analysis skips `.env` files, keys and binaries, and blanks anything that looks
   like a token or a password before a file goes anywhere.
+- **Secrets never reach a model.** Anything that would carry a password or a key into a prompt is refused; the site
+  password is typed by the program, only on the domains you list; logs, events and the workbook are masked.
+- **The API is closed.** A token on every call, loopback only, no foreign Origin, rate and size limits, and every
+  fetch refuses internal addresses. `careertwin security` checks your setup; [docs/SECURITY.md](docs/SECURITY.md)
+  lists each threat, what stops it and what it does not cover.
+- **A kill switch.** `touch data/STOP` stops every submit, send and visit at once.
 
 ## Architecture
 
@@ -186,14 +194,14 @@ flowchart LR
 src/careertwin/
 ├── api/            FastAPI app, request models, one route module per feature
 ├── agentic/        the tool catalogue, MCP server and the Switchyard agent loop
-├── automation/     the four application agents: search, rank, documents, browser, tracking
+├── automation/     the five agents (monitor, résumé, filler, mail, Excel) and the guard around them
 ├── interview/      live assistant: audio, Whisper, question detection, coach, project dossier, Qt window, locales/
 ├── jobs/           vacancy discovery: ATS adapters, scanners, career pages, a catalogue of 246 companies
 ├── profile/        ABOUT.md context, career graph building, profile names
 ├── services/       resume tailoring used by the API
 ├── agents/ ats/ collectors/ graph/ rendering/ storage/ templates/ vision/    the document library
 └── settings.py  db.py  llm.py  browser.py  net.py  cli.py
-docs/               AGENTS · AUTOMATION · INTERVIEW · DOCUMENTS · ARCHITECTURE · TRANSLATING
+docs/               AGENTS · AUTOMATION · SECURITY · INTERVIEW · DOCUMENTS · ARCHITECTURE · TRANSLATING
 packaging/          Linux launcher, Windows setup script, macOS notes
 scripts/            installers, release builds, docs pictures, the demo recorder
 tests/              pytest suite (no network, no real applications)
@@ -214,7 +222,10 @@ Copy `.env.example` to `.env`. The important variables (the interview window als
 | `SWITCHYARD_MCP_URL` | Gateway browser tools | `http://127.0.0.1:3260/mcp` |
 | `SWITCHYARD_API_KEY` | Bearer token when the gateway needs one | empty |
 | `CAREERTWIN_API_URL` | Where agent tools reach the API | `http://127.0.0.1:8000` |
-| `CAREERTWIN_AGENT_ALLOW_SUBMIT` | `1` lets an approved agent press submit | empty |
+| `CAREERTWIN_AGENT_ALLOW_SUBMIT`, `CAREERTWIN_AGENT_ALLOW_MAIL` | `1` lets an approved agent press submit or send a drafted email | empty |
+| `CAREERTWIN_API_TOKEN` | Token every API call carries; empty = a random one in `data/api-token` | empty |
+| `ACCOUNT_EMAIL`, `ACCOUNT_PASSWORD`, `CAREERTWIN_LOGIN_DOMAINS` | The account the filler signs in with, and the only sites where it may type the password | empty |
+| `MAIL_ADDRESS`, `MAIL_PASSWORD`, `MAIL_DRY_RUN` | The mailbox of the mail agent (use an app password); `1` builds messages without sending | empty |
 | `INTERVIEW_MODEL`, `CAREERTWIN_WHISPER_MODEL` | Interview hints model, Whisper size | `auto`, `small` |
 | `DEEPGRAM_API_KEY` | Cloud speech recognition instead of local Whisper | empty |
 | `CAREERTWIN_DATA_DIR` | Database, outputs, cache, transcripts, interview log | `./data` |
@@ -228,7 +239,8 @@ Copy `.env.example` to `.env`. The important variables (the interview window als
 |---|---|
 | [docs/INTERVIEW.md](docs/INTERVIEW.md) | The interview window: setup, settings, screenshots, project defense, audio, troubleshooting |
 | [docs/AGENTS.md](docs/AGENTS.md) | Driving CareerTwin from an agent: the built-in loop, MCP, the tool catalogue, safety |
-| [docs/AUTOMATION.md](docs/AUTOMATION.md) | The four application agents and the HTTP API |
+| [docs/AUTOMATION.md](docs/AUTOMATION.md) | The five application agents, the control terminal and the HTTP API |
+| [docs/SECURITY.md](docs/SECURITY.md) | Threats, protections, the account setup and what is not covered |
 | [docs/DOCUMENTS.md](docs/DOCUMENTS.md) | The document library: knowledge graph, templates, ATS check, repair |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, rules, how a vacancy moves, where state lives |
 | [docs/TRANSLATING.md](docs/TRANSLATING.md) | Adding a window language |
