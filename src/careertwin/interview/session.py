@@ -312,7 +312,7 @@ class InterviewSession:
     def handle_text(self, speaker: str, text: str) -> None:
         self.log.add(speaker, text)
         self.cb.on_turn(speaker, text)
-        if speaker != INTERVIEWER or not is_question(text):
+        if speaker != INTERVIEWER or not is_question(text, self.language.current):
             return
         with self._lock:
             self._pending.append(text)
