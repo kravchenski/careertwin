@@ -37,73 +37,119 @@ fn channels(color: Color32) -> [f32; 3] {
     [f32::from(color.r()) / 255.0, f32::from(color.g()) / 255.0, f32::from(color.b()) / 255.0]
 }
 
-fn lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+/// The twisting strands: a smooth field over the sphere whose iso-lines are the ribbons. Returns
+/// the field and its gradient, which says which way a ribbon faces.
+fn field(p: [f32; 3], t: f32) -> (f32, [f32; 3]) {
+    /// How tightly the field winds, how far it is bent, and how fast the bend repeats.
+    const CARRIER: f32 = 4.7;
+    const BEND: f32 = 1.5;
+    const REPEAT: f32 = 2.0;
+    let (sa, ca) = (REPEAT * p[1] + t * 0.7).sin_cos();
+    let (su, cu) = (CARRIER * p[0] + BEND * sa).sin_cos();
+    let (sb, cb) = (REPEAT * p[2] - t * 0.55).sin_cos();
+    let (sv, cv) = (CARRIER * p[1] + BEND * sb).sin_cos();
+    let (sc, cc) = (REPEAT * p[0] + t * 0.9).sin_cos();
+    let (sw, cw) = (CARRIER * p[2] + BEND * sc).sin_cos();
+    let value = su + sv + sw;
+    let pull = BEND * REPEAT;
+    let gradient = [CARRIER * cu + pull * cw * cc, CARRIER * cv + pull * cu * ca, CARRIER * cw + pull * cv * cb];
+    (value, gradient)
+}
+
+/// How one surface of glass looks at a point: how much of a ribbon is there, and its colour.
+/// `side` is 1 for the near wall and -1 for the far one.
+fn strands(p: [f32; 3], t: f32, level: f32) -> (f32, [f32; 3]) {
+    let scale = 1.5;
+    let (value, gradient) = field(p, t);
+    let phase = value * scale;
+    let (s, c) = phase.sin_cos();
+    // a ribbon is where the wave is near zero; wider when the voice is louder
+    let width = 0.78 + 0.07 * level;
+    let across = (s / width).clamp(-1.0, 1.0);
+    let body = 1.0 - smoothstep(0.80, 1.0, across.abs());
+    if body <= 0.0 {
+        return (0.0, [0.0; 3]);
+    }
+    // the ribbon is a tube: it faces the viewer in the middle and turns away at its edges
+    let depth = (1.0 - across * across).max(0.0).sqrt();
+    let slope = [gradient[0] * c, gradient[1] * c];
+    let length = (slope[0] * slope[0] + slope[1] * slope[1]).sqrt().max(1e-4);
+    let facing = [slope[0] / length * across, slope[1] / length * across, depth];
+    let norm = (facing[0] * facing[0] + facing[1] * facing[1] + facing[2] * facing[2]).sqrt().max(1e-4);
+    let light = [-0.50, -0.62, 0.60];
+    let shine = ((facing[0] * light[0] + facing[1] * light[1] + facing[2] * light[2]) / norm).max(0.0);
+    let glint = shine.powf(14.0);
+    let core = depth * depth;
+    let berry = channels(BERRY);
+    let cranberry = channels(CRANBERRY);
+    let blush = channels(BLUSH);
+    let mut color = [0.0; 3];
+    for i in 0..3 {
+        let base = cranberry[i] + (berry[i] - cranberry[i]) * core;
+        color[i] = base * (0.30 + 0.70 * core) + blush[i] * glint * 0.95;
+    }
+    (body, color)
+}
+
+fn rotate(p: [f32; 3], y_angle: f32, x_angle: f32) -> [f32; 3] {
+    let (sy, cy) = y_angle.sin_cos();
+    let (sx, cx) = x_angle.sin_cos();
+    let q = [p[0] * cy + p[2] * sy, p[1], -p[0] * sy + p[2] * cy];
+    [q[0], q[1] * cx - q[2] * sx, q[1] * sx + q[2] * cx]
 }
 
 /// One pixel as premultiplied RGBA; `x` and `y` run from -1 to 1.
 pub fn pixel(x: f32, y: f32, p: &Params) -> [u8; 4] {
-    let [cr, cg, cb] = channels(CRANBERRY);
     let berry = channels(BERRY);
     let blush = channels(BLUSH);
+    let cranberry = channels(CRANBERRY);
     let level = p.level.clamp(0.0, 1.0);
     let (qx, qy) = (x / RADIUS, y / RADIUS);
     let r2 = qx * qx + qy * qy;
     let r = r2.sqrt();
 
-    // The glow around the sphere is light added to whatever is behind it. It dies out before the
+    // The glow around the sphere is light added to whatever is behind it; it dies out before the
     // edge of the picture, so there is no visible square.
     let edge = 1.0 / RADIUS;
     let fade = 1.0 - smoothstep(1.15, edge, r);
-    let glow = (-(r - 1.0).max(0.0) * 3.4).exp() * (0.14 + 0.50 * level) * fade;
+    let glow = (-(r - 1.0).max(0.0) * 3.0).exp() * (0.14 + 0.40 * level) * fade;
     let glow_color = [berry[0] * glow, berry[1] * glow, berry[2] * glow];
-
     if r >= 1.0 {
         return premultiplied(glow_color, 0.0);
     }
 
     let z = (1.0 - r2).sqrt();
-    // the glass bends what is inside, more towards the edge
-    let bend = 0.55 * (1.0 - z);
-    let (mut ux, mut uy) = (qx * (1.0 - bend), qy * (1.0 - bend));
     let t = p.time * p.spin.max(0.05);
-    let (sin_a, cos_a) = (t * 0.32).sin_cos();
-    (ux, uy) = (ux * cos_a - uy * sin_a, ux * sin_a + uy * cos_a);
-    let wx = (2.6 * uy + t * 0.9 + 1.7 * (2.1 * ux - t * 0.55).sin()).sin();
-    let wy = (2.9 * ux - t * 0.7 + 1.5 * (2.3 * uy + t * 0.45).sin()).sin();
-    let f1 = (6.5 * (ux + 0.32 * wx) + 4.2 * (uy + 0.32 * wy) + t * 1.3 + 3.0 * z).sin();
-    let f2 = (4.8 * (ux - 0.28 * wy) - 6.1 * (uy + 0.30 * wx) - t * 1.1).sin();
-    // Ribbons of glass where the waves peak: a dark berry body with a bright thin edge.
-    let band = (smoothstep(0.55, 0.9, f1.abs()) + smoothstep(0.65, 0.95, f2.abs()) * 0.6).min(1.0);
-    let edge =
-        |f: f32, lo: f32, hi: f32| (smoothstep(lo, lo + 0.05, f.abs()) - smoothstep(hi, hi + 0.04, f.abs())).max(0.0);
-    let outline = (edge(f1, 0.88, 0.96) + edge(f2, 0.90, 0.97) * 0.6).min(1.0);
-    let body = 0.10 + 0.14 * (0.5 + 0.5 * (2.0 * ux + 1.3 * uy + t * 0.5).sin());
+    let (spin, tilt) = (t * 0.22, 0.45);
+    // the same ribbons seen through the near wall and the far wall of the glass
+    let near = rotate([qx, qy, z], spin, tilt);
+    let far = rotate([qx, qy, -z], spin, tilt);
+    let (near_body, near_color) = strands(near, t, level);
+    let (far_body, far_color) = strands(far, t * 0.9 + 4.0, level);
 
-    let dark = [cr * 0.16, cg * 0.16, cb * 0.16];
-    let lit = [berry[0] * 0.15, berry[1] * 0.15, berry[2] * 0.15];
-    let inner = lerp3(dark, lit, (body * z * 3.0).min(1.0));
-    let band_color = lerp3([cr, cg, cb], berry, band);
-    let band_strength = band * (0.36 + 0.55 * level) * (0.5 + 0.5 * z);
-    let outline_strength = outline * (0.45 + 0.6 * level) * (0.45 + 0.55 * (1.0 - z));
-    let mut color = [0.0f32; 3];
+    // inside the glass: dark, with a faint warm depth toward the middle
+    let depth_glow = (1.0 - r) * (0.05 + 0.06 * level);
+    let mut color = [
+        cranberry[0] * 0.10 + berry[0] * depth_glow,
+        cranberry[1] * 0.10 + berry[1] * depth_glow,
+        cranberry[2] * 0.10 + berry[2] * depth_glow,
+    ];
+    let boost = 0.80 + 0.40 * level;
     for i in 0..3 {
-        color[i] = inner[i] + band_color[i] * band_strength + blush[i] * outline_strength;
+        // the far ribbons show dimmer and are hidden where a near ribbon covers them
+        color[i] += far_color[i] * far_body * 0.55 * (1.0 - near_body * 0.8) * boost;
+        color[i] += near_color[i] * near_body * boost;
     }
-
     // light caught along the edge of the glass
-    let rim = (1.0 - z).powf(2.6);
-    let rim_strength = rim * (0.50 + 0.55 * level);
-    // a small highlight in the upper left
-    let (hx, hy) = (qx + 0.36, qy + 0.44);
-    let highlight = (-(hx * hx * 9.0 + hy * hy * 13.0)).exp() * 0.32;
-    // the sphere's own light spilling a little over its edge
-    let spill = (0.015 + 0.05 * level) * (1.0 - z);
+    let rim = (1.0 - z).powf(2.4);
+    let rim_strength = rim * (0.50 + 0.35 * level);
+    // a small soft highlight in the upper left, where a lamp would reflect
+    let (hx, hy) = (qx + 0.38, qy + 0.44);
+    let highlight = (-(hx * hx * 11.0 + hy * hy * 15.0)).exp() * 0.35;
     for i in 0..3 {
-        color[i] += berry[i] * rim_strength + blush[i] * rim * rim * 0.30 + blush[i] * highlight + berry[i] * spill;
+        color[i] += berry[i] * rim_strength + blush[i] * rim * rim * 0.30 + blush[i] * highlight;
     }
     let alpha = smoothstep(1.0, 0.985, r);
-    // under the anti-aliased edge the glow still shows
     let color = [color[0] * alpha + glow_color[0], color[1] * alpha + glow_color[1], color[2] * alpha + glow_color[2]];
     premultiplied(color, alpha)
 }
@@ -113,17 +159,26 @@ fn premultiplied(color: [f32; 3], alpha: f32) -> [u8; 4] {
     [byte(color[0]), byte(color[1]), byte(color[2]), byte(alpha)]
 }
 
-/// The whole picture, ready to be an egui texture.
+/// The whole picture, ready to be an egui texture. The rows are shared out among the cores, so
+/// the sphere can turn smoothly without taking the window's time.
 pub fn render(params: &Params) -> ColorImage {
-    let mut pixels = Vec::with_capacity(SIZE * SIZE);
-    for row in 0..SIZE {
-        let y = (row as f32 + 0.5) / SIZE as f32 * 2.0 - 1.0;
-        for column in 0..SIZE {
-            let x = (column as f32 + 0.5) / SIZE as f32 * 2.0 - 1.0;
-            let [r, g, b, a] = pixel(x, y, params);
-            pixels.push(Color32::from_rgba_premultiplied(r, g, b, a));
+    let threads = std::thread::available_parallelism().map_or(2, std::num::NonZero::get).clamp(1, 8);
+    let band = SIZE.div_ceil(threads);
+    let mut pixels = vec![Color32::TRANSPARENT; SIZE * SIZE];
+    std::thread::scope(|scope| {
+        for (index, rows) in pixels.chunks_mut(band * SIZE).enumerate() {
+            scope.spawn(move || {
+                for (offset, row) in rows.chunks_mut(SIZE).enumerate() {
+                    let y = ((index * band + offset) as f32 + 0.5) / SIZE as f32 * 2.0 - 1.0;
+                    for (column, target) in row.iter_mut().enumerate() {
+                        let x = (column as f32 + 0.5) / SIZE as f32 * 2.0 - 1.0;
+                        let [r, g, b, a] = pixel(x, y, params);
+                        *target = Color32::from_rgba_premultiplied(r, g, b, a);
+                    }
+                }
+            });
         }
-    }
+    });
     ColorImage { size: [SIZE, SIZE], source_size: egui::vec2(SIZE as f32, SIZE as f32), pixels }
 }
 

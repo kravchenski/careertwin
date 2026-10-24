@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use egui::text::{LayoutJob, TextFormat};
-use egui::{Align, Color32, Frame, Key, Margin, Rect, RichText, Sense, TextEdit, TextureOptions, Ui, Vec2, vec2};
+use egui::{Align, Frame, Key, Margin, Rect, RichText, Sense, TextEdit, Ui, Vec2, vec2};
 
 use super::orb;
 use super::theme::{self, BERRY, BLUSH, FAINT, LINE, MUTED, SNOW, SURFACE};
@@ -49,7 +49,6 @@ pub struct LiveView {
     pub finished: bool,
     pub has_microphone: bool,
     started: Instant,
-    orb_texture: Option<egui::TextureHandle>,
     orb_level: f32,
 }
 
@@ -80,7 +79,6 @@ impl LiveView {
             finished: false,
             has_microphone,
             started: Instant::now(),
-            orb_texture: None,
             orb_level: 0.0,
         }
     }
@@ -212,7 +210,7 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     if view.state == State::Speaking && !ctx.egui_wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Space)) {
         view.send(Command::Interrupt);
     }
-    let orb_size = (ui.available_height() * 0.36).clamp(150.0, 290.0);
+    let orb_size = (ui.available_height() * 0.42).clamp(170.0, 340.0);
     scrolling_column(ui, 780.0, |ui| {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
@@ -248,21 +246,8 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
             State::Finished => 0.2,
         };
         let params = orb::Params { time: core.started.elapsed().as_secs_f32(), level: view.orb_level, spin };
-        let image = orb::render(&params);
-        match &mut view.orb_texture {
-            Some(texture) => texture.set(image, TextureOptions::LINEAR),
-            None => view.orb_texture = Some(ctx.load_texture("orb", image, TextureOptions::LINEAR)),
-        }
         let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), orb_size), Sense::hover());
-        if let Some(texture) = &view.orb_texture {
-            let rect = Rect::from_center_size(area.center(), Vec2::splat(orb_size));
-            ui.painter().image(
-                texture.id(),
-                rect,
-                Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                Color32::WHITE,
-            );
-        }
+        core.paint_orb(ui, Rect::from_center_size(area.center(), Vec2::splat(orb_size)), &params);
         ui.vertical_centered(|ui| {
             ui.label(RichText::new(status_text(core, view)).font(theme::serif_italic(21.0)).color(MUTED));
         });

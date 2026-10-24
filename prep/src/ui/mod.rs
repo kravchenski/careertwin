@@ -144,11 +144,27 @@ pub struct Core {
     pub models: Vec<String>,
     /// The offline models being fetched or fetched already.
     pub downloads: Vec<Download>,
+    /// The sphere's picture, drawn again every frame it is on screen.
+    orb: Option<egui::TextureHandle>,
 }
 
 impl Core {
     pub fn now(&self) -> u64 {
         crate::session::now()
+    }
+
+    /// Paints the sphere in `rect`; the picture is made fresh from `params`.
+    pub fn paint_orb(&mut self, ui: &Ui, rect: Rect, params: &orb::Params) {
+        let image = orb::render(params);
+        let context = ui.ctx();
+        match &mut self.orb {
+            Some(texture) => texture.set(image, egui::TextureOptions::LINEAR),
+            None => self.orb = Some(context.load_texture("orb", image, egui::TextureOptions::LINEAR)),
+        }
+        if let Some(texture) = &self.orb {
+            let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(texture.id(), rect, uv, egui::Color32::WHITE);
+        }
     }
 
     /// Fetches the models the offline engines need, if they are chosen and not on disk yet.
@@ -425,6 +441,7 @@ impl PrepApp {
                 vacancy,
                 models: Vec::new(),
                 downloads: Vec::new(),
+                orb: None,
             },
             screen: Screen::Home,
             history: history::HistoryState::default(),
