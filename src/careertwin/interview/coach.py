@@ -104,6 +104,7 @@ class StreamingCoach:
         url: str | None = None,
         api_key: str | None = None,
         style: str = "standard",
+        layout: str = "lines",
     ):
         self.brief = brief
         self.model = model
@@ -111,6 +112,7 @@ class StreamingCoach:
         self.url = url
         self.api_key = api_key
         self.style = style
+        self.layout = layout
 
     def complete(self, system: str, prompt: str, *, max_tokens: int = 2500, temperature: float = 0.3) -> str:
         """One blocking completion through the configured gateway, model and key."""
@@ -147,19 +149,46 @@ class StreamingCoach:
         language: str | None = None,
         image: str | None = None,
     ) -> Iterator[str]:
-        """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored."""
+        """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored.
+
+        If the chosen model fails before saying anything (rate limit, outage), the request is
+        repeated once on automatic routing, so one bad provider does not cost a live answer."""
+        model = self.model or model_name()
+        started = False
+        try:
+            for chunk in self._stream_model(model, question, history, cancel, language, image):
+                started = True
+                yield chunk
+        except CoachError:
+            if started or cancel.is_set() or model == self.FALLBACK_MODEL:
+                raise
+            yield from self._stream_model(
+                self.FALLBACK_MODEL, question, history, cancel, language, image
+            )
+
+    FALLBACK_MODEL = "auto"
+
+    def _stream_model(
+        self,
+        model: str,
+        question: str,
+        history: list[str],
+        cancel: threading.Event,
+        language: str | None,
+        image: str | None,
+    ) -> Iterator[str]:
         if image:
-            text = screenshot_prompt(self.brief, history, language, self.style)
+            text = screenshot_prompt(self.brief, history, language, self.style, self.layout)
             content: str | list[dict] = [
                 {"type": "text", "text": text},
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
             ]
         else:
             content = user_prompt(
-                self.brief, question, classify(question), history, language, self.style
+                self.brief, question, classify(question), history, language, self.style, self.layout
             )
         body = {
-            "model": self.model or model_name(),
+            "model": model,
             "messages": [
                 {"role": "system", "content": SYSTEM},
                 {"role": "user", "content": content},

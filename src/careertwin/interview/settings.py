@@ -12,6 +12,7 @@ from careertwin.settings import DATA_DIR
 
 WHISPER_MODELS = ("tiny", "base", "small", "medium", "large-v3-turbo")
 ANSWER_STYLES = ("concise", "standard", "detailed")
+ANSWER_LAYOUTS = ("main", "lines")
 DEVICES = ("auto", "cpu", "cuda")
 
 
@@ -35,6 +36,7 @@ class InterviewSettings:
     gateway_key: str = ""
     model: str = ""
     answer_style: str = "standard"
+    answer_layout: str = "lines"
     show_full_answer: bool = True
     screenshot_enabled: bool = True
     screenshot_tool: str = "auto"
@@ -108,6 +110,7 @@ def _coerce(name: str, value: Any, current: Any) -> Any:
     choices = {
         "whisper_model": WHISPER_MODELS,
         "answer_style": ANSWER_STYLES,
+        "answer_layout": ANSWER_LAYOUTS,
         "whisper_device": DEVICES,
     }.get(name)
     if choices and value not in choices:

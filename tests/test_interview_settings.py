@@ -68,7 +68,7 @@ def test_settings_validate_and_persist(home):
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("opacity", 10), ("opacity", "high"), ("whisper_model", "huge"), ("answer_style", "wild"),
+        ("opacity", 10), ("opacity", "high"), ("whisper_model", "huge"), ("answer_style", "wild"), ("answer_layout", "cards"),
         ("pinned", "yes"), ("gateway_url", "localhost:3260"), ("font_scale", 999), ("language", 5),
     ],
 )

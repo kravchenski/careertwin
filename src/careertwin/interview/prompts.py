@@ -63,6 +63,11 @@ the closest real experience and how the candidate learns. No bluff.
 - Questions for the interviewer: write two specific, non-generic questions about the vacancy, \
 as the candidate would ask them.
 - When ANSWER STYLE is concise, leave out KEY and CONTEXT.
+- When ANSWER LAYOUT is main answer only, reply with just "ANSWER:" and the paragraph: no POINTS, \
+no KEY, no CONTEXT, and start the paragraph at once. It is read aloud, so write it as speech.
+- Never invent routines, methods, habits, tools or examples that are not in the context. If the \
+context has no such fact, say plainly what is known and what the candidate can offer, and do not \
+make up a plan.
 - No filler such as "great question". No markdown other than the four headings, bullets and bold.
 """
 
@@ -77,7 +82,11 @@ KIND_HINTS = {
     Kind.BEHAVIORAL: "Behavioral: say it as situation, task, action, result with the real details.",
     Kind.MOTIVATION: "Motivation: say how real interests connect to the vacancy and company.",
     Kind.SALARY: "Salary: say what SALARY POLICY allows; do not name an unsupported figure.",
-    Kind.LOGISTICS: "Logistics: say the facts from the context only; say plainly what is unknown.",
+    Kind.LOGISTICS: (
+        "Logistics: answer with the facts from the context and the candidate notes (availability, "
+        "hours, studies, start date, office days, location). Do not invent a plan or a routine; "
+        "if something is not stated, say it can be agreed."
+    ),
     Kind.CANDIDATE_QUESTIONS: "Write two sharp questions the candidate can ask, as spoken.",
     Kind.DEFINITION: (
         "Definition: line one defines it in a sentence, then key properties, typical uses and the "
@@ -87,6 +96,14 @@ KIND_HINTS = {
     Kind.SMALL_TALK: "Small talk: say the greeting or reply itself, then who you are, then invite the first question.",
 }
 
+
+LAYOUT_HINTS = {
+    "main": (
+        "ANSWER LAYOUT: main answer only. Write only the ANSWER section, as one spoken paragraph "
+        "the candidate can read aloud."
+    ),
+    "lines": "ANSWER LAYOUT: lines to say, then the detailed answer.",
+}
 
 STYLE_HINTS = {
     "concise": "ANSWER STYLE: concise. Three or four lines to say, an answer of two or three sentences, no KEY or CONTEXT.",
@@ -106,6 +123,7 @@ def user_prompt(
     history: list[str],
     language: str | None = None,
     style: str = "standard",
+    layout: str = "lines",
 ) -> str:
     """`language` is the interview language; without one it is guessed from the question."""
     name = languages.name(language or detect_language(question))
@@ -113,20 +131,26 @@ def user_prompt(
     return (
         f"{brief.render()}\n\nRECENT CONVERSATION\n{recent}\n\n"
         f"INTERVIEWER'S QUESTION: {question}\nTYPE: {kind.value}. {KIND_HINTS[kind]}\n"
-        f"INTERVIEW LANGUAGE: {name}. Write POINTS and ANSWER in {name}.\n"
-        f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}"
+        f"INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n"
+        f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}\n"
+        f"{LAYOUT_HINTS.get(layout, LAYOUT_HINTS['lines'])}"
     )
 
 
 def screenshot_prompt(
-    brief: InterviewBrief, history: list[str], language: str | None, style: str = "standard"
+    brief: InterviewBrief,
+    history: list[str],
+    language: str | None,
+    style: str = "standard",
+    layout: str = "lines",
 ) -> str:
     name = languages.name(language)
     recent = "\n".join(history[-6:]) or "(start of the interview)"
     return (
         f"{brief.render()}\n\nRECENT CONVERSATION\n{recent}\n\n{SCREENSHOT_NOTE}"
-        f"INTERVIEW LANGUAGE: {name}. Write POINTS and ANSWER in {name}.\n"
-        f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}"
+        f"INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n"
+        f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}\n"
+        f"{LAYOUT_HINTS.get(layout, LAYOUT_HINTS['lines'])}"
     )
 
 

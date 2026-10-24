@@ -57,7 +57,7 @@ STRINGS = {
         "save": "Save", "saved": "Saved", "about_stats": "{n} characters · {path}",
         "interview_language": "Interview language", "ui_language": "Window language",
         "auto": "Auto-detect", "follow": "Follow the interview", "answer_style": "Answer style",
-        "style_concise": "Concise", "style_standard": "Standard", "style_detailed": "Detailed",
+        "answer_layout": "Answer layout", "layout_main": "Main answer only (read it aloud)", "layout_lines": "Lines to say, then the detailed answer", "style_concise": "Concise", "style_standard": "Standard", "style_detailed": "Detailed",
         "full_answer": "Show the detailed answer (main answer, key points, practical context)",
         "language_note": "Answers are written in the interview language. Speech recognition uses it too.",
         "listen": "Listen to the call", "call_source": "Call audio", "default_output": "Automatic: follows the output that plays the call", "listening_to": "Listening to: {name}",
@@ -107,7 +107,7 @@ STRINGS = {
         "save": "Сохранить", "saved": "Сохранено", "about_stats": "{n} символов · {path}",
         "interview_language": "Язык интервью", "ui_language": "Язык окна",
         "auto": "Определять сам", "follow": "Как язык интервью", "answer_style": "Стиль ответа",
-        "style_concise": "Кратко", "style_standard": "Обычный", "style_detailed": "Подробно",
+        "answer_layout": "Вид ответа", "layout_main": "Только основной ответ (читать вслух)", "layout_lines": "Строки для речи и подробный ответ", "style_concise": "Кратко", "style_standard": "Обычный", "style_detailed": "Подробно",
         "full_answer": "Показывать подробный ответ (основной ответ, ключевые моменты, практический контекст)",
         "language_note": "Ответы пишутся на языке интервью. Распознавание речи тоже использует его.",
         "listen": "Слушать звонок", "call_source": "Звук звонка", "default_output": "Автоматически: следует за выходом, где играет звонок", "listening_to": "Сейчас слушаю: {name}",
@@ -157,7 +157,7 @@ STRINGS = {
         "save": "Zapisz", "saved": "Zapisano", "about_stats": "{n} znaków · {path}",
         "interview_language": "Język rozmowy", "ui_language": "Język okna",
         "auto": "Wykryj automatycznie", "follow": "Jak język rozmowy", "answer_style": "Styl odpowiedzi",
-        "style_concise": "Zwięzły", "style_standard": "Standardowy", "style_detailed": "Szczegółowy",
+        "answer_layout": "Wygląd odpowiedzi", "layout_main": "Tylko odpowiedź główna (czytaj na głos)", "layout_lines": "Zdania do powiedzenia i szczegóły", "style_concise": "Zwięzły", "style_standard": "Standardowy", "style_detailed": "Szczegółowy",
         "full_answer": "Pokazuj szczegółową odpowiedź (odpowiedź główna, kluczowe punkty, kontekst praktyczny)",
         "language_note": "Odpowiedzi powstają w języku rozmowy. Rozpoznawanie mowy też go używa.",
         "listen": "Słuchaj rozmowy", "call_source": "Dźwięk rozmowy", "default_output": "Automatycznie: podąża za wyjściem, na którym gra rozmowa", "listening_to": "Teraz słucham: {name}",
@@ -698,11 +698,13 @@ class SettingsDialog(QDialog):
         self.interview_language = QComboBox()
         self.ui_language = QComboBox()
         self.answer_style = QComboBox()
+        self.answer_layout = QComboBox()
         self.full_answer = QCheckBox()
-        self.language_labels = [QLabel() for _ in range(3)]
+        self.language_labels = [QLabel() for _ in range(4)]
         form.addRow(self.language_labels[0], self.interview_language)
         form.addRow(self.language_labels[1], self.ui_language)
         form.addRow(self.language_labels[2], self.answer_style)
+        form.addRow(self.language_labels[3], self.answer_layout)
         form.addRow(self.full_answer)
         self.language_note = self._hint()
         outer.addWidget(self.language_note)
@@ -710,6 +712,7 @@ class SettingsDialog(QDialog):
         self._bind_combo(self.interview_language, "language")
         self._bind_combo(self.ui_language, "ui_language")
         self._bind_combo(self.answer_style, "answer_style")
+        self._bind_combo(self.answer_layout, "answer_layout")
         self._bind_check(self.full_answer, "show_full_answer")
 
     # ---- audio and speech --------------------------------------------------
@@ -957,7 +960,8 @@ class SettingsDialog(QDialog):
                 widget.setValue(value)
         for combo, value in (
             (self.interview_language, settings.language), (self.ui_language, settings.ui_language),
-            (self.answer_style, settings.answer_style), (self.whisper_model, settings.whisper_model),
+            (self.answer_style, settings.answer_style), (self.answer_layout, settings.answer_layout),
+            (self.whisper_model, settings.whisper_model),
             (self.whisper_device, settings.whisper_device),
         ):
             with QSignalBlocker(combo):
@@ -995,7 +999,9 @@ class SettingsDialog(QDialog):
         self.notes.setPlaceholderText(self.t("notes_hint"))
         self.about_intro.setText(self.t("about_intro"))
         self.about_save.setText(self.t("save"))
-        for label, key in zip(self.language_labels, ("interview_language", "ui_language", "answer_style")):
+        for label, key in zip(
+            self.language_labels, ("interview_language", "ui_language", "answer_style", "answer_layout")
+        ):
             label.setText(self.t(key))
         self.full_answer.setText(self.t("full_answer"))
         self.language_note.setText(self.t("language_note"))
@@ -1041,6 +1047,11 @@ class SettingsDialog(QDialog):
             for code in languages.UI_LANGUAGES:
                 self.ui_language.addItem(languages.NATIVE[code], code)
             self._select(self.ui_language, settings.ui_language)
+        with QSignalBlocker(self.answer_layout):
+            self.answer_layout.clear()
+            for layout in ("main", "lines"):
+                self.answer_layout.addItem(self.t(f"layout_{layout}"), layout)
+            self._select(self.answer_layout, settings.answer_layout)
         with QSignalBlocker(self.answer_style):
             self.answer_style.clear()
             for style in ANSWER_STYLES:
