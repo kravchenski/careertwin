@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Render the interview overlay offscreen with a sample exchange (for the docs).
 
-Usage: uv run --extra interview python scripts/render_overlay_preview.py docs/media/interview-overlay.png [ru|en|pl]
+Usage: uv run --extra interview python scripts/render_overlay_preview.py docs/media/interview-overlay.png [language] [answer|code]
+
+"code" shows the answer to a screenshot of a coding task.
 """
 
 from __future__ import annotations
@@ -52,6 +54,74 @@ SAMPLES = {
         "Я використовую її для async-сервісів на FastAPI і PostgreSQL, а важкі ділянки виношу в окремі "
         "процеси або сервіси.",
     ),
+    "pl": (
+        "Czym jest Python?",
+        "POINTS:\n"
+        "- **Python** to wysokopoziomowy, interpretowany język z typowaniem dynamicznym.\n"
+        "- Znany z **czytelnej składni** i dużej biblioteki standardowej.\n"
+        "- Używany do **backendów webowych**, automatyzacji, danych i uczenia maszynowego.\n"
+        "- Kompromis: jest **wolniejszy** od języków kompilowanych, a GIL ogranicza wątki.\n"
+        "ANSWER:\n"
+        "Python to język ogólnego przeznaczenia, interpretowany i dynamicznie typowany, stawiający na czytelność. "
+        "Ogromny ekosystem sprawia, że jest częstym wyborem do backendów, skryptów i pracy z danymi.\n"
+        "KEY:\n"
+        "- **Typowanie dynamiczne**: typy sprawdzane są w trakcie działania, kod pisze się szybciej.\n"
+        "- **GIL**: bajtkod wykonuje jeden wątek naraz, więc ciężkie zadania idą do procesów.\n"
+        "- **Ekosystem**: FastAPI, Django, asyncio, NumPy i tysiące pakietów.\n"
+        "CONTEXT:\n"
+        "Używam go do asynchronicznych usług na FastAPI i PostgreSQL, a ciężkie zadania wynoszę do osobnych procesów.",
+    ),
+    "de": (
+        "Was ist Python?",
+        "POINTS:\n"
+        "- **Python** ist eine höhere, interpretierte Sprache mit dynamischer Typisierung.\n"
+        "- Bekannt für **lesbare Syntax** und eine große Standardbibliothek.\n"
+        "- Eingesetzt für **Web-Backends**, Automatisierung, Daten und maschinelles Lernen.\n"
+        "- Der Preis: Sie ist **langsamer** als kompilierte Sprachen, und die GIL begrenzt Threads.\n"
+        "ANSWER:\n"
+        "Python ist eine universelle, interpretierte Sprache mit dynamischer Typisierung und Fokus auf Lesbarkeit. "
+        "Das große Ökosystem macht sie zur häufigen Wahl für Backends, Skripte und Datenarbeit.\n"
+        "KEY:\n"
+        "- **Dynamische Typisierung**: Typen werden zur Laufzeit geprüft, der Code entsteht schneller.\n"
+        "- **GIL**: Ein Thread führt Bytecode aus, daher läuft Schweres in Prozessen.\n"
+        "- **Ökosystem**: FastAPI, Django, asyncio, NumPy und tausende Pakete.\n"
+        "CONTEXT:\n"
+        "Ich nutze sie für asynchrone Dienste mit FastAPI und PostgreSQL und lagere Schweres in eigene Prozesse aus.",
+    ),
+    "fr": (
+        "Qu’est-ce que Python ?",
+        "POINTS:\n"
+        "- **Python** est un langage de haut niveau, interprété, à typage dynamique.\n"
+        "- Connu pour sa **syntaxe lisible** et sa grande bibliothèque standard.\n"
+        "- Utilisé pour les **backends web**, l’automatisation, les données et le machine learning.\n"
+        "- Le compromis : il est **plus lent** que les langages compilés, et le GIL limite les threads.\n"
+        "ANSWER:\n"
+        "Python est un langage généraliste, interprété et à typage dynamique, qui privilégie la lisibilité. "
+        "Son immense écosystème en fait un choix courant pour les backends, les scripts et les données.\n"
+        "KEY:\n"
+        "- **Typage dynamique** : les types sont vérifiés à l’exécution, on écrit plus vite.\n"
+        "- **GIL** : un seul thread exécute le bytecode, le lourd passe donc par des processus.\n"
+        "- **Écosystème** : FastAPI, Django, asyncio, NumPy et des milliers de paquets.\n"
+        "CONTEXT:\n"
+        "Je l’utilise pour des services asynchrones avec FastAPI et PostgreSQL, et je déporte le lourd dans des processus séparés.",
+    ),
+    "es": (
+        "¿Qué es Python?",
+        "POINTS:\n"
+        "- **Python** es un lenguaje de alto nivel, interpretado y de tipado dinámico.\n"
+        "- Conocido por su **sintaxis legible** y su gran biblioteca estándar.\n"
+        "- Se usa en **backends web**, automatización, datos y aprendizaje automático.\n"
+        "- El compromiso: es **más lento** que los lenguajes compilados, y el GIL limita los hilos.\n"
+        "ANSWER:\n"
+        "Python es un lenguaje de propósito general, interpretado y de tipado dinámico, que prioriza la legibilidad. "
+        "Su enorme ecosistema lo hace habitual en backends, scripts y trabajo con datos.\n"
+        "KEY:\n"
+        "- **Tipado dinámico**: los tipos se comprueban al ejecutar, se escribe más rápido.\n"
+        "- **GIL**: un solo hilo ejecuta bytecode, así que lo pesado va en procesos.\n"
+        "- **Ecosistema**: FastAPI, Django, asyncio, NumPy y miles de paquetes.\n"
+        "CONTEXT:\n"
+        "Lo uso para servicios asíncronos con FastAPI y PostgreSQL, y llevo lo pesado a procesos aparte.",
+    ),
     "ru": (
         "Что такое Python?",
         "POINTS:\n"
@@ -73,7 +143,30 @@ SAMPLES = {
 }
 
 
-def main(target: str, language: str = "en") -> None:
+CODE_REPLY = (
+    "POINTS:\n"
+    "- The array is **sorted**, so use **two pointers**: one at each end.\n"
+    "- Move the left one up when the sum is too small, the right one down when it is too big.\n"
+    "- It is **O(n)** time and **O(1)** space, with no hash map.\n"
+    "ANSWER:\n"
+    "```python\n"
+    "def two_sum(nums: list[int], target: int) -> list[int]:\n"
+    "    # Time O(n), space O(1)\n"
+    "    left, right = 0, len(nums) - 1\n"
+    "    while left < right:\n"
+    "        total = nums[left] + nums[right]\n"
+    "        if total == target:\n"
+    "            return [left + 1, right + 1]\n"
+    "        if total < target:\n"
+    "            left += 1\n"
+    "        else:\n"
+    "            right -= 1\n"
+    "    return []\n"
+    "```"
+)
+
+
+def main(target: str, language: str = "en", kind: str = "answer") -> None:
     app = create_app(sys.argv[:1])
     bridge = Bridge()
     window = OverlayWindow(
@@ -90,10 +183,12 @@ def main(target: str, language: str = "en") -> None:
         ui_language=language,
         frameless=True,
     )
-    window.resize(900, 700)
+    window.resize(900, 640 if kind == "code" else 700)
     window.apply_setting("show_full_answer", True)
     window.show()
     question, reply = SAMPLES[language if language in SAMPLES else "en"]
+    if kind == "code":
+        question, reply = "[screenshot]", CODE_REPLY
     bridge.state.emit("listening")
     bridge.level.emit("Interviewer", 0.62)
     bridge.turn.emit("Interviewer", question)
@@ -105,4 +200,4 @@ def main(target: str, language: str = "en") -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "overlay.png", sys.argv[2] if len(sys.argv) > 2 else "en")
+    main(*(sys.argv[1:4] or ["overlay.png"]))
