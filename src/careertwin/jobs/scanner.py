@@ -9,7 +9,6 @@ import time
 from collections import deque
 from urllib.parse import parse_qs, urljoin, urlparse
 
-import httpx
 
 from careertwin.net import safe_async_client
 from bs4 import BeautifulSoup

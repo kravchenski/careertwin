@@ -7,7 +7,6 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import httpx
 
 from careertwin.net import safe_async_client
 from fastapi import UploadFile
