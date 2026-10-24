@@ -19,9 +19,9 @@ class UtteranceSegmenter:
     def __init__(
         self,
         *,
-        end_silence_ms: int = 800,
+        end_silence_ms: int = 500,
         min_speech_ms: int = 300,
-        max_utterance_ms: int = 25_000,
+        max_utterance_ms: int = 12_000,
         preroll_ms: int = 200,
         tail_ms: int = 200,
         min_threshold: float = 250.0,
@@ -66,6 +66,12 @@ class UtteranceSegmenter:
         if self.silent_frames >= self.end_frames or len(self.frames) >= self.max_frames:
             return self._finish()
         return None
+
+    def snapshot(self) -> np.ndarray | None:
+        """The speech heard so far in the current utterance, or None while idle or too short."""
+        if not self.active or self.speech_frames < self.min_frames:
+            return None
+        return np.concatenate(self.frames)
 
     def flush(self) -> np.ndarray | None:
         return self._finish() if self.active else None

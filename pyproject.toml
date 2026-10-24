@@ -43,6 +43,10 @@ interview = [
     "numpy>=1.26",
     "pyside6-essentials>=6.8",
 ]
+gpu = [
+    "nvidia-cublas-cu12>=12.4; sys_platform == 'linux'",
+    "nvidia-cudnn-cu12>=9.1; sys_platform == 'linux'",
+]
 
 [project.scripts]
 careertwin = "careertwin.cli:main"

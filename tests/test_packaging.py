@@ -39,7 +39,9 @@ def test_the_installed_commands_exist_in_pyproject():
     pyproject = (ROOT / "pyproject.toml").read_text()
     for command in ("careertwin", "careertwin-mcp", APP_ID):
         assert re.search(rf'^{re.escape(command)} = "', pyproject, re.M)
-    assert "[interview,rendering]" in (ROOT / "scripts" / "install.sh").read_text()
+    install = (ROOT / "scripts" / "install.sh").read_text()
+    assert 'EXTRAS="interview,rendering"' in install and 'EXTRAS="$EXTRAS,gpu"' in install and "CAREERTWIN_NO_GPU" in install
+    assert re.search(r"^gpu = \[", pyproject, re.M) and "nvidia-cudnn-cu12" in pyproject
 
 
 def test_the_png_icon_matches_the_svg_and_is_installed():

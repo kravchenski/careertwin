@@ -520,3 +520,13 @@ def test_layout_can_be_switched_from_the_menu_shortcut_and_settings(gui):
     assert gui.window.layout_mode == "main" and gui.dialog.answer_layout.currentData() == "lines"
     gui.dialog.refresh()
     assert gui.dialog.answer_layout.currentData() == "main"
+
+
+def test_the_live_caption_shows_what_is_being_said_and_then_goes_away(gui):
+    assert not gui.window.heard.isVisible()
+    gui.bridge.partial.emit("Thank you for joining us today, could you tell")
+    gui.process()
+    assert gui.window.heard.isVisible() and "Thank you for joining us today" in gui.window.heard.full
+    gui.bridge.partial.emit("")
+    gui.process()
+    assert not gui.window.heard.isVisible() and gui.window.heard.full == ""

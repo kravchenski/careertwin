@@ -28,6 +28,9 @@ INTERVIEWER = "Interviewer"
 YOU = "You"
 MIN_WORDS_FOR_LANGUAGE = 3
 LEVEL_EVERY = 3
+PARTIAL_EVERY = 75  # frames of 20 ms: a live caption about every 1.5 s of speech
+QUESTION_MARK_WAIT = 0.1  # seconds to wait after a sentence that ends with a question mark
+REUSE_SAMPLES = 16_000 * 6 // 10  # a caption that covers all but 0.6 s of the speech is final enough
 
 
 class FrameSource(Protocol):
@@ -57,6 +60,7 @@ class Callbacks:
     on_level: Callable[[str, float], None] = lambda speaker, level: None
     on_language: Callable[[str], None] = lambda code: None
     on_source: Callable[[str], None] = lambda name: None
+    on_partial: Callable[[str], None] = lambda text: None
     on_error: Callable[[str], None] = lambda text: None
 
 
@@ -69,7 +73,7 @@ class InterviewSession:
         callbacks: Callbacks | None = None,
         *,
         language: str | None = None,
-        debounce: float = 1.0,
+        debounce: float = 0.4,
         log: TranscriptLog | None = None,
     ):
         self.brief = brief
@@ -83,7 +87,7 @@ class InterviewSession:
             transcriber.language = self.language.fixed
         self.paused = threading.Event()
         self.stopping = threading.Event()
-        self._utterances: queue.Queue[tuple[str, np.ndarray] | None] = queue.Queue()
+        self._utterances: queue.Queue[tuple[str, np.ndarray, bool] | None] = queue.Queue()
         self._threads: list[threading.Thread] = []
         self._listeners: list[threading.Thread] = []
         self._stt: threading.Thread | None = None
@@ -209,6 +213,7 @@ class InterviewSession:
         # still hear a quiet voice; a microphone has room noise and needs a higher one.
         segmenter = UtteranceSegmenter(min_threshold=120.0 if speaker == INTERVIEWER else 250.0)
         count = 0
+        since_partial = 0
         try:
             for frame in source.frames():
                 if self.stopping.is_set():
@@ -220,7 +225,15 @@ class InterviewSession:
                     rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
                     self.cb.on_level(speaker, min(1.0, (rms / 6000.0) ** 0.5))
                 if (utterance := segmenter.push(frame)) is not None:
-                    self._utterances.put((speaker, utterance))
+                    since_partial = 0
+                    self._utterances.put((speaker, utterance, False))
+                elif speaker == INTERVIEWER and segmenter.active:
+                    since_partial += 1
+                    if since_partial >= PARTIAL_EVERY and (heard := segmenter.snapshot()) is not None:
+                        since_partial = 0
+                        self._utterances.put((speaker, heard, True))
+                else:
+                    since_partial = 0
         except Exception as exc:
             self.cb.on_state("error")
             self.cb.on_error(f"Audio from {speaker.lower()} stopped: {exc}")
@@ -244,6 +257,7 @@ class InterviewSession:
         self.cb.on_status("Listening")
 
     def _transcribe_loop(self) -> None:
+        last_partial: tuple[str, int, str] | None = None
         while not self.stopping.is_set():
             item = self._utterances.get()
             if item is None:
@@ -251,15 +265,30 @@ class InterviewSession:
             transcriber = self.transcriber
             if transcriber is None or not self._ready.is_set():
                 continue
-            speaker, pcm = item
+            speaker, pcm, partial = item
+            if partial and not self._utterances.empty():
+                continue  # newer audio is already waiting; a caption of the old state is stale
+            reuse = None
+            if not partial and last_partial and last_partial[0] == speaker:
+                missing = len(pcm) - last_partial[1]
+                reuse = last_partial[2] if 0 <= missing <= REUSE_SAMPLES else None
             try:
-                text = transcriber.transcribe(pcm, self.brief.vocabulary())
+                text = reuse or transcriber.transcribe(pcm, self.brief.vocabulary())
             except Exception as exc:
                 self.cb.on_error(f"Transcription failed: {exc}")
                 continue
-            if text:
+            if partial:
+                if text and self._utterances.empty():
+                    last_partial = (speaker, len(pcm), text)
+                    self.cb.on_partial(text)
+            elif text:
+                last_partial = None
+                self.cb.on_partial("")
                 self._observe_language(text)
                 self.handle_text(speaker, text)
+            else:
+                last_partial = None
+                self.cb.on_partial("")
 
     def _observe_language(self, text: str) -> None:
         if len(text.split()) < MIN_WORDS_FOR_LANGUAGE or self.transcriber is None:
@@ -280,7 +309,9 @@ class InterviewSession:
             self._pending.append(text)
             if self._timer:
                 self._timer.cancel()
-            self._timer = threading.Timer(self.debounce, self._flush_pending)
+            # A sentence that ends with a question mark is complete: do not wait for a second part.
+            wait = QUESTION_MARK_WAIT if text.rstrip().endswith(("?", "？")) else self.debounce
+            self._timer = threading.Timer(min(wait, self.debounce), self._flush_pending)
             self._timer.daemon = True
             self._timer.start()
 
