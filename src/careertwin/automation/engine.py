@@ -10,6 +10,7 @@ from .browser import BrowserAgent
 from .documents import DocumentAgent
 from .excel import ExcelAgent
 from .mail import MailAgent, MailError, configured as mail_configured
+from .monitor import CompanyMonitor
 from .models import Vacancy
 from .ranker import JevRanker
 from .sources import SearchAgent
@@ -32,6 +33,9 @@ class Engine:
         self._mail: MailAgent | None = None
         self.last_mail_check: float | None = None
         self.mail_error = ""
+        self._monitor: CompanyMonitor | None = None
+        self.last_monitor_tick: float | None = None
+        self.monitoring: asyncio.Task | None = None
 
     @property
     def mail(self) -> MailAgent:
@@ -39,6 +43,12 @@ class Engine:
         if self._mail is None:
             self._mail = MailAgent(self.store)
         return self._mail
+
+    @property
+    def monitor(self) -> CompanyMonitor:
+        if self._monitor is None:
+            self._monitor = CompanyMonitor(self.store)
+        return self._monitor
 
     def start(self) -> None:
         self.store.initialize()
@@ -49,7 +59,7 @@ class Engine:
         self.tracker_task = asyncio.create_task(self.tracker.run())
 
     async def close(self) -> None:
-        tasks = [task for task in [self.scheduler, self.cycle, *self.tasks.values()] if task]
+        tasks = [task for task in [self.scheduler, self.cycle, self.monitoring, *self.tasks.values()] if task]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -70,6 +80,7 @@ class Engine:
             or bool(os.getenv("TYPESAFE_API_KEY")),
             "browser_url": os.getenv("SWITCHYARD_MCP_URL", "http://127.0.0.1:3260/mcp"),
             "submitted_today": self.store.submissions_today(),
+            "monitoring": bool(self.monitoring and not self.monitoring.done()),
             "mail_configured": mail_configured(),
             "mail_error": self.mail_error,
             "excel_path": str(self.tracker.path.resolve()),
@@ -94,6 +105,8 @@ class Engine:
             raise ValueError("This job is already being processed")
         if job["state"] in {"submitted", "interview", "offer", "hired", "rejected", "withdrawn"}:
             raise ValueError("This application already has a recorded outcome")
+        if job["state"] == "closed":
+            raise ValueError("This vacancy is no longer on the company's career site")
         if (
             job["state"] in {"submission_uncertain", "submitting", "verifying"}
             and operation != "verify"
@@ -184,6 +197,27 @@ class Engine:
             )
             self.store.event(job_id, "error", {"operation": operation, "message": str(exc)})
 
+    async def _process(self, ids: list[str], settings) -> None:
+        """Rank each new vacancy, prepare the CV of the strong ones, and submit when the settings allow."""
+        for job_id in ids:
+            if job_id in self.tasks and not self.tasks[job_id].done():
+                continue
+            self.enqueue(job_id, "rank")
+            await self.tasks[job_id]
+            if self.store.job(job_id)["state"] != "priority":
+                continue
+            if settings.auto_prepare:
+                self.enqueue(job_id, "prepare")
+                await self.tasks[job_id]
+            if settings.auto_submit and self.store.job(job_id)["state"] == "prepared":
+                self.enqueue(job_id, "submit")
+                await self.tasks[job_id]
+
+    async def run_monitor(self, settings, *, everything: bool = False) -> dict:
+        summary = await self.monitor.run(settings, everything=everything)
+        await self._process(summary["new"][: settings.limit], settings)
+        return summary
+
     async def _cycle(self) -> None:
         self.last_run = now()
         self.store.event(None, "cycle_started", {"at": self.last_run})
@@ -197,19 +231,7 @@ class Engine:
                 job = self.store.add(vacancy)
                 if job["state"] == "new" and job["id"] not in ids:
                     ids.append(job["id"])
-            for job_id in ids[: settings.limit]:
-                if job_id in self.tasks and not self.tasks[job_id].done():
-                    continue
-                self.enqueue(job_id, "rank")
-                await self.tasks[job_id]
-                if self.store.job(job_id)["state"] != "priority":
-                    continue
-                if settings.auto_prepare:
-                    self.enqueue(job_id, "prepare")
-                    await self.tasks[job_id]
-                if settings.auto_submit and self.store.job(job_id)["state"] == "prepared":
-                    self.enqueue(job_id, "submit")
-                    await self.tasks[job_id]
+            await self._process(ids[: settings.limit], settings)
             self.store.event(
                 None,
                 "cycle_finished",
@@ -224,6 +246,17 @@ class Engine:
             raise
         except Exception as exc:
             self.store.event(None, "cycle_error", {"message": str(exc)})
+
+    async def _monitor_round(self, settings) -> None:
+        await self._monitor_round_now(settings, False)
+
+    async def _monitor_round_now(self, settings, everything: bool) -> None:
+        try:
+            await self.run_monitor(settings, everything=everything)
+        except guard.Stopped:
+            pass
+        except Exception as exc:
+            self.store.event(None, "monitor_error", {"company": "", "message": str(exc)[:300]})
 
     async def _check_mail(self, settings) -> None:
         try:
@@ -247,6 +280,10 @@ class Engine:
                 if due:
                     self.last_mail_check = time.monotonic()
                     await self._check_mail(settings)
+            if settings.monitor_scheduled and not guard.stopped() and not (self.monitoring and not self.monitoring.done()):
+                if self.last_monitor_tick is None or time.monotonic() - self.last_monitor_tick >= 300:
+                    self.last_monitor_tick = time.monotonic()
+                    self.monitoring = asyncio.create_task(self._monitor_round(settings))
             if not settings.scheduled or guard.stopped():
                 continue
             from datetime import datetime, timezone

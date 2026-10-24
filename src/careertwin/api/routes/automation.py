@@ -4,15 +4,19 @@ import os
 from typing import Literal
 
 import httpx
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from careertwin.automation import guard
 from careertwin.automation.engine import Engine
 from careertwin.automation.mail import MailError, config as mail_config, configured as mail_configured
 from careertwin.automation.excel import workbook
 from careertwin.automation.models import Answer, Outcome, Settings, Vacancy
+from careertwin.automation.monitor import Target
+from careertwin.net import validate_public_url
 from careertwin.automation.sources import SOURCES
 
 router = APIRouter(prefix="/v1/automation", tags=["automation"])
@@ -284,3 +288,50 @@ async def mail_handled(mail_id: str, request: MailHandled):
         engine.store.update(row["job_id"], state=request.outcome)
         engine.store.event(row["job_id"], "user_outcome", {"status": request.outcome, "note": f"from mail {mail_id}", "previous_state": job["state"]})
     return engine.mail.mails.get(mail_id)
+
+
+class Company(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    url: str = ""
+    ats_platform: Literal["", "greenhouse", "lever", "ashby", "smartrecruiters", "workday"] = ""
+
+    @field_validator("url")
+    @classmethod
+    def public(cls, value: str) -> str:
+        return validate_public_url(value) if value else value
+
+
+@router.get("/monitor")
+async def monitor_state():
+    """The watch list with the health of every company: when it was read, how many vacancies are open,
+    how many visits failed in a row and why."""
+    return {
+        "watching": engine.monitor.watch.targets(enabled_only=False),
+        "running": bool(engine.monitoring and not engine.monitoring.done()),
+    }
+
+
+@router.post("/monitor/companies")
+async def monitor_add(company: Company):
+    engine.monitor.watch.add(Target(company.name, company.url, company.ats_platform))
+    return {"status": "watching", "company": company.name}
+
+
+@router.delete("/monitor/companies/{name}")
+async def monitor_remove(name: str):
+    if not engine.monitor.watch.remove(name):
+        raise HTTPException(404, "That company is not on the watch list")
+    return {"status": "removed"}
+
+
+@router.post("/monitor/run")
+async def monitor_run(everything: bool = False):
+    """Visit the companies that are due now (all of them with `everything=true`) in the background."""
+    if engine.monitoring and not engine.monitoring.done():
+        raise HTTPException(409, "The monitor is already running")
+    try:
+        guard.assert_running()
+    except guard.Stopped as exc:
+        raise HTTPException(423, str(exc)) from exc
+    engine.monitoring = asyncio.create_task(engine._monitor_round_now(engine.store.settings(), everything))
+    return {"status": "started"}

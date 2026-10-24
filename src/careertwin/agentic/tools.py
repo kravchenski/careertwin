@@ -268,6 +268,32 @@ async def submit_application(job_id: str, confirm: bool = False) -> dict[str, An
     return await _client().post(f"/v1/automation/jobs/{job_id}/actions", {"operation": "submit"})
 
 
+@tool("Companies the monitor watches and their health")
+async def list_monitored_companies() -> dict[str, Any]:
+    """The companies whose career sites are watched, when each was last read, how many vacancies
+    are open and any error. New relevant vacancies from them arrive in the pipeline by themselves."""
+    return await _client().get("/v1/automation/monitor")
+
+
+@tool("Watch one company's career site", mutating=True)
+async def watch_company(
+    name: str,
+    url: str = "",
+    ats_platform: Literal["", "greenhouse", "lever", "ashby", "smartrecruiters", "workday"] = "",
+) -> dict[str, Any]:
+    """Add a company to the monitor. `url` is its careers page (the application system is detected from
+    it); `name` is the board identifier when the company uses Greenhouse, Lever, Ashby, SmartRecruiters
+    or Workday."""
+    return await _client().post("/v1/automation/monitor/companies", {"name": name, "url": url, "ats_platform": ats_platform})
+
+
+@tool("Visit the watched career sites now", mutating=True)
+async def run_monitor(everything: bool = False) -> dict[str, Any]:
+    """Visit the companies that are due (all of them with `everything=true`). Runs in the background;
+    read list_monitored_companies and recent_events for what it found."""
+    return await _client().post(f"/v1/automation/monitor/run?everything={'true' if everything else 'false'}")
+
+
 @tool("Read the inbox for replies to applications", mutating=True)
 async def check_mail() -> dict[str, Any]:
     """Read the candidate's mailbox once (read-only) and file the messages that are about an

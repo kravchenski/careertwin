@@ -33,6 +33,13 @@ class Settings(BaseModel):
     limit: int = Field(default=30, ge=1, le=100)
     daily_limit: int = Field(default=10, ge=1, le=100)
     mail_daily_limit: int = Field(default=10, ge=1, le=50)
+    monitor_scheduled: bool = False  # watch the companies on a timer
+    monitor_interval_minutes: int = Field(default=360, ge=30, le=10_080)
+    monitor_batch: int = Field(default=25, ge=1, le=300)
+    monitor_max_new: int = Field(default=10, ge=1, le=100)  # vacancies filed per company per visit
+    monitor_delay_seconds: float = Field(default=1.0, ge=0, le=30)
+    monitor_import_existing: bool = True  # file the relevant vacancies already open on the first visit
+    monitor_known_companies: bool = False  # also watch the bundled list of known employers
     mail_scheduled: bool = True  # read the inbox on a timer when mail is configured
     mail_check_minutes: int = Field(default=30, ge=5, le=1440)
     mail_auto_send: bool = False  # the user's standing permission to send drafts without asking again
