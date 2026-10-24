@@ -163,6 +163,10 @@ What to know:
 - **"Why" questions** are the weak spot: the code shows what was built, not why. A model may offer generic reasons; put the real ones into the dossier or the interview notes.
 - **Search needs Latin words.** The excerpts are found by words from the question that appear in the code, so a question asked entirely in Russian or Polish finds none unless it names a class, a function or a technology; the dossier still answers it.
 
+## Code in answers
+
+Code is shown as code: in a shaded block, with its indentation, long lines wrapped, and syntax colours (Python, Java, JavaScript/TypeScript, C-like languages, SQL, shell); names and commands in `backticks` inside a sentence are monospace. For a coding question and for a screenshot the solution appears right under the lines to say, not behind *Details*. Copying an answer gives the code without the fences.
+
 ## Answering the screen fast
 
 `Ctrl ⇧ ↵` only works while the interview window has the keyboard focus, and during a call the focus is on the page with the task. Two ways to press it from there:

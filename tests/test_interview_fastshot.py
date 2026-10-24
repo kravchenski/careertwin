@@ -475,7 +475,7 @@ def test_the_window_tells_code_from_prose():
     assert looks_like_code(CODE)
     assert not looks_like_code("I would use two pointers because the array is sorted.\nIt takes linear time.\nIt needs no extra space.")
     html_text = render_answer(f"First the idea.\n```python\n{CODE}\n```\nThen the cost.", "color:red", 14)
-    assert html_text.count("<pre") == 1 and "&lt;" in html_text and "    left, right = 0" in html_text
+    assert html_text.count("<pre") == 1 and "&lt;" in html_text and "    left, right = " in html_text
     assert "First the idea." in html_text and "Then the cost." in html_text and "monospace" in html_text
     assert "<pre" in render_answer(CODE, "color:red", 14)  # no fence: still code
     assert "<pre" not in render_answer("A plain **sentence**.", "color:red", 14)
