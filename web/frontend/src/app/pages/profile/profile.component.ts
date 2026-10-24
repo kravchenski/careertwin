@@ -494,6 +494,12 @@ export class ProfileComponent implements AfterViewInit, OnInit {
     this.profile.linkedin ||= studioState?.linkedin || "";
     this.profile.github ||= studioState?.github || "";
     this.profile.website ||= studioState?.website || "";
+    this.studio.loadFromBackend().subscribe(state => {
+      if (state.completedAt && state.profile.fullName && !this.editing) {
+        this.profile = state.profile;
+        this.profileService.save(this.profile);
+      }
+    });
   }
 
   initials(): string {
@@ -514,11 +520,22 @@ export class ProfileComponent implements AfterViewInit, OnInit {
 
   save(): void {
     this.saving = true;
-    this.profileService.save(this.profile);
-    setTimeout(() => {
-      this.saving = false;
-      this.editing = false;
-    }, 400);
+    this.resumeError = "";
+    this.studio.publishProfile(this.profile).subscribe({
+      next: (result) => {
+        this.saving = false;
+        if (!result?.context_saved) {
+          this.resumeError = "ABOUT.md was not saved. Please retry.";
+          return;
+        }
+        this.profileService.save(this.profile);
+        this.editing = false;
+      },
+      error: (error) => {
+        this.saving = false;
+        this.resumeError = error?.error?.detail || "Could not update ABOUT.md. Please retry.";
+      },
+    });
   }
 
   addSkill(): void {
@@ -709,7 +726,13 @@ export class ProfileComponent implements AfterViewInit, OnInit {
             }
           }
 
-          this.profileService.save(this.profile);
+          this.studio.publishProfile(this.profile).subscribe({
+            next: (result) => {
+              if (result?.context_saved) this.profileService.save(this.profile);
+              else this.resumeError = "Imported CV could not be published to ABOUT.md. Click Save to retry.";
+            },
+            error: () => { this.resumeError = "Imported CV could not be published to ABOUT.md. Click Save to retry."; },
+          });
 
           // Build status message with provider info
           let msg = response.message || "Resume imported successfully.";

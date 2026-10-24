@@ -3,26 +3,34 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import httpx
 from fastapi import UploadFile
 
+from candidate_context import read_context, studio_snapshot
 from config import SKILLS
 from config import _agent_result
 
 from careertwin.collectors.resume import ResumeParser
 from careertwin.collectors.website import WebsiteCollector
-from careertwin.graph.schema import CareerGraph, Experience, Profile, Skill, SkillCategory
+from careertwin.graph.schema import (
+    CareerGraph,
+    Education,
+    Experience,
+    Profile,
+    Project,
+    Skill,
+    SkillCategory,
+)
 from careertwin.rendering import PdfRenderer, RenderConfig
 
 try:
     from careertwin.collectors.github import GitHubCollector
 except ModuleNotFoundError:
     GitHubCollector = None
-
-
 
 
 def _extract_username(url: str) -> str:
@@ -33,8 +41,6 @@ def _extract_username(url: str) -> str:
 def _skills_from_text(text: str) -> list[str]:
     lowered = text.lower()
     return [skill for skill in SKILLS if skill.lower() in lowered][:15]
-
-
 
 
 def _merge_graphs(target: CareerGraph, source: CareerGraph) -> CareerGraph:
@@ -77,8 +83,6 @@ def _merge_graphs(target: CareerGraph, source: CareerGraph) -> CareerGraph:
     return target
 
 
-
-
 def _build_manual_graph(
     full_name: str,
     email: str,
@@ -89,11 +93,24 @@ def _build_manual_graph(
     website: str,
     summary_text: str,
 ) -> CareerGraph:
-    skills = [
-        Skill(name=skill, category=SkillCategory.TOOL)
-        for skill in _skills_from_text(summary_text)
-    ]
-    return CareerGraph(
+    shared = studio_snapshot(read_context()).get("profile", {})
+    if shared and (
+        not full_name or full_name.casefold() == str(shared.get("fullName", "")).casefold()
+    ):
+        full_name = shared.get("fullName") or full_name
+        email, phone, location = (
+            shared.get(key) or value
+            for key, value in [("email", email), ("phone", phone), ("location", location)]
+        )
+        github, linkedin, website = (
+            shared.get(key) or value
+            for key, value in [("github", github), ("linkedin", linkedin), ("website", website)]
+        )
+        summary_text = shared.get("summary") or summary_text
+    else:
+        shared = {}
+    skill_names = shared.get("skills") or _skills_from_text(summary_text)
+    graph = CareerGraph(
         profile=Profile(
             full_name=full_name or "Candidate",
             email=email or None,
@@ -102,12 +119,49 @@ def _build_manual_graph(
             github=github or None,
             linkedin=linkedin or None,
             website=website or None,
+            headline=shared.get("title") or None,
             summary=summary_text or None,
         ),
-        skills=skills,
+        skills=[Skill(name=str(skill), category=SkillCategory.TOOL) for skill in skill_names],
     )
 
+    def exact_date(value):
+        # Do not invent a day for an entry that only supplies a month/year.
+        try:
+            return date.fromisoformat(value) if isinstance(value, str) else None
+        except ValueError:
+            return None
 
+    for item in shared.get("experience", []):
+        graph.experience.append(
+            Experience(
+                company=item.get("company", ""),
+                position=item.get("role", ""),
+                description=item.get("description", ""),
+                start_date=exact_date(item.get("start")),
+                end_date=None if item.get("current") else exact_date(item.get("end")),
+            )
+        )
+    for item in shared.get("education", []):
+        graph.education.append(
+            Education(
+                institution=item.get("school", ""),
+                degree=item.get("degree", ""),
+                field=item.get("field") or None,
+                start_date=exact_date(item.get("start")),
+                end_date=exact_date(item.get("end")),
+            )
+        )
+    for item in shared.get("projects", []):
+        if isinstance(item, dict):
+            graph.projects.append(
+                Project(
+                    name=item.get("name", ""),
+                    description=item.get("description", ""),
+                    url=item.get("url") or None,
+                )
+            )
+    return graph
 
 
 async def _fallback_collect_github(username: str) -> CareerGraph:
@@ -155,8 +209,6 @@ async def _fallback_collect_github(username: str) -> CareerGraph:
             for name, _count in sorted(skills.items(), key=lambda item: -item[1])
         ],
     )
-
-
 
 
 async def build_career_graph(

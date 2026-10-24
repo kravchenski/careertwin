@@ -17,10 +17,16 @@ fi
 
 command -v python >/dev/null 2>&1 || { echo "python is required" >&2; exit 1; }
 command -v npm >/dev/null 2>&1 || { echo "npm is required" >&2; exit 1; }
+command -v uv >/dev/null 2>&1 || { echo "uv is required" >&2; exit 1; }
 
-if [[ ! -d "$ROOT_DIR/web/frontend/node_modules" ]]; then
+uv sync --project "$ROOT_DIR" --extra rendering
+mkdir -p "$ROOT_DIR/web/api/screenshots"
+env_file_args=()
+[[ -f "$ROOT_DIR/.env" ]] && env_file_args=(--env-file "$ROOT_DIR/.env")
+
+if [[ ! -x "$ROOT_DIR/web/frontend/node_modules/.bin/ng" ]]; then
   echo "Installing frontend dependencies..."
-  npm install --prefix "$ROOT_DIR/web/frontend"
+  npm ci --prefix "$ROOT_DIR/web/frontend" --no-audit --no-fund
 fi
 
 backend_pid=""
@@ -37,7 +43,9 @@ trap cleanup EXIT INT TERM
 echo "Starting backend on http://${BACKEND_HOST}:${BACKEND_PORT}"
 (
   cd "$ROOT_DIR"
-  exec python -m uvicorn web.api.main:app \
+  export PYTHONPATH="$ROOT_DIR/web/api:$ROOT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
+  exec "$ROOT_DIR/.venv/bin/python" -m uvicorn web.api.main:app \
+    "${env_file_args[@]}" \
     --host "$BACKEND_HOST" \
     --port "$BACKEND_PORT" \
     --reload

@@ -339,25 +339,20 @@ const FLAGS: Record<string, string> = {
             <h1 class="s-title">{{ current.title }}</h1>
             <p class="s-sub" *ngIf="current.subtitle">{{ current.subtitle }}</p>
             <div class="s-salary">
-              <div class="s-salary-display">
-                <span class="s-salary-cur">{{ state.preferences.salary.currency }}</span>
-                <span class="s-salary-amount">{{ state.preferences.salary.amount | number }}</span>
-              </div>
-              <input
-                type="range"
-                min="60000"
-                max="400000"
-                step="5000"
-                [(ngModel)]="state.preferences.salary.amount"
-                class="s-salary-range"
-              />
-              <div class="s-salary-row">
-                <select [(ngModel)]="state.preferences.salary.currency" class="s-salary-sel">
-                  <option>PLN</option>
-                  <option>USD</option>
-                  <option>EUR</option>
-                  <option>GBP</option>
+              <label class="s-field s-field--full"><span>Salary mode</span>
+                <select [(ngModel)]="state.preferences.salary.mode" class="s-salary-sel">
+                  <option value="auto">Auto — adapt to each vacancy</option>
+                  <option value="fixed">Fixed expectations</option>
                 </select>
+              </label>
+              <p class="s-sub" *ngIf="state.preferences.salary.mode === 'auto'">The application agent uses the vacancy’s salary range, contract and pay period. Each application gets its own amount. If the budget is missing, it uses negotiable wording where allowed or asks you for a required number.</p>
+              <div *ngIf="state.preferences.salary.mode === 'fixed'">
+                <label class="s-field s-field--full"><span>Amount</span><input type="number" min="1" [(ngModel)]="state.preferences.salary.amount" /></label>
+                <div class="s-salary-row">
+                  <select aria-label="Currency" [(ngModel)]="state.preferences.salary.currency" class="s-salary-sel"><option>PLN</option><option>USD</option><option>EUR</option><option>GBP</option></select>
+                  <select aria-label="Pay period" [(ngModel)]="state.preferences.salary.period" class="s-salary-sel"><option value="hour">Per hour</option><option value="month">Per month</option><option value="year">Per year</option></select>
+                  <select aria-label="Salary basis" [(ngModel)]="state.preferences.salary.basis" class="s-salary-sel"><option value="gross">Gross</option><option value="net_b2b">Net B2B</option></select>
+                </div>
               </div>
             </div>
             <p class="s-hint" *ngIf="current.hint">{{ current.hint }}</p>
@@ -504,6 +499,8 @@ const FLAGS: Record<string, string> = {
             <div class="s-loader-bar">
               <div class="s-loader-fill" [style.width.%]="progress"></div>
             </div>
+            <p class="s-warn" role="alert" *ngIf="submitError">{{ submitError }}</p>
+            <button type="button" class="s-foot-btn s-foot-btn--primary" *ngIf="submitError" (click)="finish()">Retry saving ABOUT.md</button>
             <ul class="s-gather-log">
               <li *ngFor="let line of gatherLog" [class.s-done]="line.done">
                 <span class="s-gather-dot"></span>{{ line.text }}
@@ -518,7 +515,7 @@ const FLAGS: Record<string, string> = {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12.4l2.6 2.6L16 9.4"/></svg>
             </div>
             <h2 class="s-success-title">Profile created</h2>
-            <p class="s-success-sub">Your career twin is ready. We are taking you to your dashboard.</p>
+            <p class="s-success-sub">Your ABOUT.md has been saved and is shared by all four agents. We are taking you to your dashboard.</p>
             <button type="button" class="s-foot-btn s-foot-btn--primary s-success-btn" (click)="goToDashboard()">Go to Dashboard</button>
           </div>
         </div>
@@ -547,6 +544,7 @@ const FLAGS: Record<string, string> = {
               </div>
             </div>
             <button class="s-edit-btn" type="button" (click)="retake()">Edit Studio</button>
+            <a class="s-edit-btn" href="/api/v1/studio/about" download="ABOUT.md">Download ABOUT.md</a>
             <button class="s-edit-btn" type="button" (click)="exportProfile()">Export</button>
             <button class="s-edit-btn" type="button" (click)="fileInput.click()">Import</button>
             <input #fileInput type="file" accept="application/json,.json" hidden (change)="importProfile($event)" />
@@ -566,7 +564,7 @@ const FLAGS: Record<string, string> = {
               <div><dt>Employment</dt><dd>{{ labelFor('employmentStatus', state.preferences.employmentStatus) }}</dd></div>
               <div><dt>Target titles</dt><dd>{{ state.preferences.jobTitles.join(", ") || "—" }}</dd></div>
               <div><dt>Experience</dt><dd>{{ labelFor('experienceLevel', state.preferences.experienceLevel) }}</dd></div>
-              <div><dt>Salary</dt><dd>{{ state.preferences.salary.currency }} {{ state.preferences.salary.amount | number }}</dd></div>
+              <div><dt>Salary</dt><dd>{{ salarySummary() }}</dd></div>
               <div><dt>Industries</dt><dd>{{ labelsFor('industries', state.preferences.industries) }}</dd></div>
               <div><dt>Work type</dt><dd>{{ labelsFor('workTypes', state.preferences.workTypes) }}</dd></div>
               <div><dt>Start</dt><dd>{{ state.preferences.startDate || "—" }}</dd></div>
@@ -620,6 +618,7 @@ export class StudioComponent implements OnInit {
   state: StudioState = this.studio.emptyState();
   mode: "wizard" | "summary" = "wizard";
   stepIndex = 0;
+  submitError = "";
   submitting = false;
   progress = 0;
   gatherLog: { text: string; done: boolean }[] = [];
@@ -770,7 +769,7 @@ export class StudioComponent implements OnInit {
       kind: "number",
       eyebrow: "Compensation",
       title: "What are your salary expectations?",
-      hint: "We use this information to assess job compatibility and help complete applications. It is not used as a strict filter, as many roles do not list salary ranges and compensation is often negotiable. If an application asks for your expected salary, we may use this amount.",
+      hint: "Auto is the default. Salary is decided for the particular vacancy and never copied from another application. It does not strictly filter search results.",
     },
     {
       key: "industries",
@@ -936,6 +935,8 @@ export class StudioComponent implements OnInit {
     const k = this.current.key;
     const p = this.state.preferences;
     switch (this.current.kind) {
+      case "number":
+        return p.salary.mode === "auto" || p.salary.amount > 0;
       case "resume":
         return !!this.resumeFileName && !this.resumeProcessing;
       case "about": {
@@ -968,7 +969,6 @@ export class StudioComponent implements OnInit {
       case "email-consent":
         return this.validEmail(p.contactEmail);
       case "date":
-      case "number":
       case "workauth":
         return true;
       default:
@@ -1343,9 +1343,15 @@ export class StudioComponent implements OnInit {
     return this.state.preferences.jobTitles.join(", ") || "Your career twin";
   }
 
+  salarySummary(): string {
+    const salary = this.state.preferences.salary;
+    return salary.mode === "auto" ? "Auto — adapted to each vacancy" : `${salary.amount} ${salary.currency} / ${salary.period} (${salary.basis === "gross" ? "gross" : "net B2B"})`;
+  }
+
   finish(): void {
     if (this.submitting) return;
     this.submitting = true;
+    this.submitError = "";
     this.stepIndex = this.visibleSteps.length - 1;
     this.progress = 0;
 
@@ -1361,28 +1367,42 @@ export class StudioComponent implements OnInit {
     // The "about" step collects github/website on the top-level state, not
     // on state.profile — carry them over so the Profile page's link fields
     // are populated instead of staying empty.
+    this.state.profile.email ||= this.state.preferences.contactEmail;
     this.state.profile.linkedin ||= this.state.linkedin;
     this.state.profile.github ||= this.state.github;
     this.state.profile.website ||= this.state.website;
 
     this.gatherLog = [
       { text: "Analyzing your profile and preferences", done: false },
-      { text: "Saving your preferences", done: false },
+      { text: "Writing ABOUT.md for all four agents", done: false },
     ];
 
     this.gatherLog[0].done = true;
     this.progress = 60;
-    this.gatherLog[1].done = true;
-    this.progress = 100;
     this.complete();
   }
 
   private complete(): void {
-    this.studio.save(this.state);
-    this.studio.submit(this.state).subscribe();
-    this.profileService.save(this.state.profile);
-    this.disconnectScanSse();
-    this.redirectTimer = setTimeout(() => this.goToDashboard(), 2600);
+    this.studio.submit(this.state).subscribe({
+      next: (result) => {
+        if (!result?.success || !result?.context_saved) {
+          this.submitError = "ABOUT.md was not saved. Retry before continuing.";
+          this.submitting = false;
+          this.disconnectScanSse();
+          return;
+        }
+        this.profileService.save(this.state.profile);
+        this.gatherLog[1].done = true;
+        this.progress = 100;
+        this.disconnectScanSse();
+        this.redirectTimer = setTimeout(() => this.goToDashboard(), 2600);
+      },
+      error: (error) => {
+        this.submitError = error?.error?.detail || "Could not save ABOUT.md. Check the backend connection and retry.";
+        this.submitting = false;
+        this.disconnectScanSse();
+      },
+    });
   }
 
   goToDashboard(): void {

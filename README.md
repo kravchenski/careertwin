@@ -218,6 +218,90 @@ Sources analyzed: Dribbble, Behance, Canva, Resume.io, Overleaf templates.
 
 ## Getting Started
 
+### Four-agent job search
+
+Open **Agents** at `/agents` to run the application workflow:
+
+1. **Search and rank:** Remote OK and Remotive public feeds, indexed results from
+   the 25 remote boards plus LinkedIn, Glassdoor and ZipRecruiter, and company
+   career boards through the existing ATS adapters. Import a link and its full
+   description when a source requires login or is not indexed. The decision model evaluates
+   skills, experience, preferences, and explicit eligibility restrictions.
+2. **Prepare documents:** a text model selects evidence from your profile. The
+   agent renders a text-extractable, single-column PDF of at most two pages and
+   saves the cover letter, evidence, vacancy and profile snapshot. Claims and
+   experience dates come from the source facts.
+3. **Apply:** the browser agent uses Switchyard MCP in your signed-in browser,
+   uploads the verified PDF, records its answers and checks the confirmation
+   page after submitting. The decision model checks proposed answers against your profile.
+   Missing answers, login and CAPTCHA pause the application for your input.
+4. **Track:** SQLite keeps each operation and its exact answers. The fourth
+   agent automatically updates `data/outputs/CareerTwin-applications.xlsx`.
+   Download a fresh export in the UI, and record interviews, offers, hiring,
+   rejection or withdrawal in the application details.
+
+```bash
+cp .env.example .env
+cp ABOUT.example.md ABOUT.md  # only for a new profile; preserve your existing ABOUT.md
+# Fill ABOUT.md with your real context.
+# Run the Switchyard gateway and connect its browser extension.
+./start.sh
+```
+
+Visit `http://localhost:4200/agents`. Your private `ABOUT.md` seeds the initial
+settings and is ignored by Git. Later edits are saved in the Agents settings.
+For index searches, run SearXNG at `SEARXNG_URL`, or configure `TAVILY_API_KEY`.
+Company entries accept the ATS board identifier as `name` and the career page
+as `url`; `ats_platform` can be `greenhouse`, `lever`, `ashby`,
+`smartrecruiters` or `workday` through the settings API.
+
+Decisions default to connected cloud models through Switchyard's `/v1/decisions`
+API. Set **Decision model** in Agents to a model ID from Switchyard or `auto`.
+Use **Load available models** to choose from the connected gateway. If automatic
+routing runs out of available providers, select a specific working model.
+The service evaluates finite choices; the four fit dimensions use five levels,
+and their distributions produce a weighted fit score. Returned certainty is
+an approximate model estimate, not calibrated accuracy or a hiring probability.
+This uses hosted models without training or loading a model on your computer.
+
+The [Unsloth decision model guide](https://unsloth.ai/docs/basics/train-your-own-decision-model-with-unsloth)
+describes training an additional decision head and calibrating it on held-out
+data. A prompt-based cloud model has a different implementation and does not
+inherit those calibration guarantees.
+
+Hosted Jev is optional: choose **TypeSafe Jev** in Agents settings. It uses the
+native `/v1/systemone` API and requires `TYPESAFE_API_KEY`.
+Text generation defaults to the Switchyard gateway (`SWITCHYARD_URL`,
+`SWITCHYARD_MODEL`); set the same provider/model in Agents settings if you
+change them. Browser tools use `SWITCHYARD_MCP_URL` and optional
+`SWITCHYARD_API_KEY`. Site permissions are handled by the extension: open its
+side panel on the application tab when it requests access.
+
+Automatic CV preparation is enabled; automatic submission and scheduled searches
+are off until enabled in settings. Explicit **Submit application** also starts
+submission for a selected vacancy. A fit score is compatibility with documented
+requirements, not a hiring probability. A CV cannot guarantee acceptance.
+Scheduled searches require the backend to remain running. Use one backend worker
+to serialize browser work. Restart recovery never repeats a potentially sent
+application: **Check confirmation** reads the existing tab without submitting.
+Close neither the application tab nor the browser while verification is pending.
+
+The workbook contains applications, exact answers, full event history, document
+paths with SHA256 hashes, saved per-application answers and complete snapshots.
+Long values are split into numbered parts instead of silently truncated.
+Files and SQLite data persist in `data/` locally or the Docker data volume.
+
+API routes are under `/v1/automation`: settings, sources, status, run/stop,
+vacancy import and actions, answers, outcomes, events and `export.xlsx`.
+
+```bash
+uv sync --extra dev --extra rendering
+uv run pytest -m 'not integration'
+cd web/frontend
+npm ci
+npm run build
+```
+
 ```bash
 # Clone the repo
 git clone https://github.com/kravchenski/careertwin.git
@@ -355,3 +439,8 @@ Distributed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 **Built with the belief that your career deserves more than a template.**
 
 </div>
+
+
+Studio is the candidate context editor. Completing the questionnaire writes `ABOUT.md` from all answers and the uploaded profile; search, ranking, documents, form filling and Excel use the same file. Download it from Studio or `/v1/studio/about`. Existing background sections are preserved when a partial profile belongs to the same named candidate. `CAREERTWIN_ABOUT_PATH` can select a different shared file. Completing Studio fails visibly if the file cannot be written.
+
+Salary defaults to **Auto**. The application agent selects a separate amount inside the published salary range for each vacancy (35% into the band), matching currency, period and gross/net B2B basis. It never reuses another job's amount or silently converts incompatible units. With no usable advertised budget, negotiable wording is allowed where the form accepts it; a required numeric answer pauses for your input. Salary decisions and their evidence are recorded per application and included in Excel. An optional fixed amount requires explicit currency, pay period and basis.

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import OUTPUT_DIR
 from database import _init_db, _migrate_db, _db_conn
-from routes import profile, resume, jobs, providers, studio, companies, jobs_mcp, applications
+from routes import profile, resume, jobs, providers, studio, companies, jobs_mcp, applications, automation
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +30,11 @@ async def lifespan(app: FastAPI):
     _migrate_db()
     from company_collector import save_known_companies_to_db
     save_known_companies_to_db()
-    yield
+    automation.engine.start()
+    try:
+        yield
+    finally:
+        await automation.engine.close()
 
 
 app = FastAPI(title="CareerTwin API", version="2.0.0", lifespan=lifespan)
@@ -48,7 +52,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -67,6 +71,7 @@ app.include_router(studio.router)
 app.include_router(companies.router)
 app.include_router(jobs_mcp.router)
 app.include_router(applications.router)
+app.include_router(automation.router)
 
 
 @app.get("/")

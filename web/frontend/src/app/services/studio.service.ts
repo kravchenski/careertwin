@@ -30,6 +30,9 @@ export interface WorkAuthEntry {
 }
 
 export interface SalaryInfo {
+  mode: "auto" | "fixed";
+  period: "hour" | "month" | "year";
+  basis: "gross" | "net_b2b";
   amount: number;
   currency: string;
 }
@@ -82,7 +85,7 @@ export class StudioService {
       employmentStatus: "",
       jobTitles: [],
       experienceLevel: "",
-      salary: { amount: 120000, currency: "PLN" },
+      salary: { mode: "auto", amount: 0, currency: "PLN", period: "month", basis: "gross" },
       industries: [],
       workTypes: [],
       startDate: "",
@@ -138,8 +141,8 @@ export class StudioService {
       ...raw,
       preferences: { ...base.preferences, ...(raw.preferences || {}) },
       profile: { ...base.profile, ...(raw.profile || {}) },
-      salary: undefined as any,
     };
+    state.preferences.salary = { ...base.preferences.salary, ...(raw.preferences?.salary || {}) };
     state.profile.fullName = resolveProfileName(
       state.profile.fullName,
       state.firstName,
@@ -175,7 +178,7 @@ export class StudioService {
     if (remote.screenshots) merged.screenshots = remote.screenshots;
     if (remote.completed_at) merged.completedAt = remote.completed_at;
 
-    return merged;
+    return this.normalize(merged);
   }
 
   load(): StudioState | null {
@@ -232,8 +235,9 @@ export class StudioService {
         );
         state.completedAt = remote.completed_at || null;
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        return state;
+        const normalized = this.normalize(state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        return normalized;
       }),
       catchError(() => {
         const local = this.load();
@@ -262,8 +266,20 @@ export class StudioService {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         }
       }),
-      catchError(() => of({ success: false })),
     );
+  }
+
+  publishProfile(profile: UserProfile): Observable<any> {
+    return this.loadFromBackend().pipe(switchMap(state => {
+      state.profile = profile;
+      const [first, ...rest] = profile.fullName.trim().split(/\s+/);
+      state.firstName = first || "";
+      state.lastName = rest.join(" ");
+      state.linkedin = profile.linkedin;
+      state.github = profile.github;
+      state.website = profile.website;
+      return this.submit(state);
+    }));
   }
 
   getState(username: string = DEFAULT_USERNAME): Observable<any> {

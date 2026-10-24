@@ -19,6 +19,7 @@ from careertwin.graph.schema import CareerGraph, Experience, Skill, SkillCategor
 from careertwin.rendering import PdfRenderer, RenderConfig
 
 from ai import call_ai, parse_json_object
+from candidate_context import read_context
 from config import LANGUAGE_LABELS, OUTPUT_DIR, TEMPLATE_MAP, _agent_result
 from job_scraper import (
     _language_from_signals,
@@ -277,7 +278,7 @@ Job description: {job_description[:1500]}"""
     user_msg = f"Candidate background:\n{profile_text}\n\nSkills: {skills_text}\n\nWrite the tailored resume markdown now."
 
     for attempt in range(2):
-        raw = await call_ai(system_prompt, user_msg, provider="lmstudio", model="", max_tokens=6000)
+        raw = await call_ai(system_prompt + "\nUse ABOUT.md as authoritative candidate facts. Do not put salary, demographics or consent in a resume.", "SHARED ABOUT.md:\n" + read_context() + "\n\n" + user_msg, provider="lmstudio", model="", max_tokens=6000)
         if raw.strip():
             return raw.strip()
     return ""
@@ -635,6 +636,7 @@ async def tailor_resume_package(
         f"Rewrite the resume for the job below in {language_name}. "
         "Do not invent employers, dates, or achievements. "
         "Return JSON only with keys summary, skills, experience.\n\n"
+        f"SHARED CANDIDATE FACTS (ABOUT.md):\n{read_context()}\n\n"
         f"BASE RESUME:\n{adapted.to_search_text()}\n\n"
         f"JOB TITLE: {title}\n"
         f"COMPANY: {company}\n"
@@ -676,6 +678,7 @@ async def tailor_resume_package(
         f"Write a professional cover letter in {language_name}. "
         "Use the company context, be specific, and keep it human. "
         "Do not invent facts.\n\n"
+        f"SHARED CANDIDATE FACTS (ABOUT.md):\n{read_context()}\n\n"
         f"CANDIDATE:\n{adapted.to_search_text()}\n\n"
         f"COMPANY RESEARCH:\n{company_profile.get('company_summary', '')}\n\n"
         f"JOB TITLE: {title}\n"

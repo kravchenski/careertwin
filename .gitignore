@@ -233,3 +233,8 @@ web/api/screenshots/
 
 # Editor configs
 .mimocode/
+# Personal candidate context and generated application artifacts.
+ABOUT.md
+data/outputs/
+node_modules/
+.angular/
