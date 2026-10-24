@@ -25,6 +25,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from careertwin.net import safe_async_client
+
 _TIMEOUT = 15.0
 _USER_AGENT = "Mozilla/5.0 (compatible; CareerTwinJobBot/1.0)"
 
@@ -166,7 +168,7 @@ async def fetch_jobs_from_known_ats(url: str, company_name: str, ats_platform: s
     if not fetcher:
         return None
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+        async with safe_async_client(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
             return await fetcher(url, company_name, client)
     except Exception:
         return None
@@ -252,7 +254,7 @@ async def fetch_jobs_via_discovered_api(api_info: dict[str, Any], company_name: 
     """Re-call a previously discovered JSON endpoint directly via httpx.
     Returns None on any failure so the caller invalidates the cache entry."""
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+        async with safe_async_client(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
             resp = await client.request(api_info.get("method", "GET"), api_info["url"])
             if resp.status_code >= 400:
                 return None

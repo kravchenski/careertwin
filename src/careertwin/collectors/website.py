@@ -5,6 +5,8 @@ from __future__ import annotations
 from urllib.parse import urljoin
 
 import httpx
+
+from careertwin.net import safe_client
 from bs4 import BeautifulSoup
 
 from careertwin.graph.schema import (
@@ -20,7 +22,7 @@ class WebsiteCollector:
     """Parses personal websites for professional data."""
 
     def __init__(self):
-        self.client = httpx.Client(
+        self.client = safe_client(
             timeout=15,
             follow_redirects=True,
             headers={"User-Agent": "CareerTwin/0.1 (career-data-collection)"},
