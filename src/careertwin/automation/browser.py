@@ -12,9 +12,11 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
+from careertwin import vault
 from careertwin.llm import call_ai, parse_json_object
 from careertwin.net import validate_public_url
 
+from . import guard
 from .models import Settings
 from .ranker import JevRanker
 from .salary import SALARY_FIELD, expectation
@@ -40,12 +42,13 @@ def content(result: dict[str, Any]) -> str:
 
 
 def observation(result: dict[str, Any]) -> str:
+    """The page text from a tool result, with any secret the page echoed masked."""
     value = content(result)
     try:
         parsed = json.loads(value)
-        return parsed.get("page", {}).get("text") or value
+        return vault.redact(parsed.get("page", {}).get("text") or value)
     except ValueError, AttributeError:
-        return value
+        return vault.redact(value)
 
 
 class MCP:
@@ -132,7 +135,22 @@ class BrowserAgent:
             mcp = MCP()
             submitted = job["state"] in {"submitting", "verifying", "submission_uncertain"}
             try:
+                guard.assert_running()
                 await mcp.connect()
+                allowed_domains = guard.form_domains(job["vacancy"]["url"])
+                account = os.getenv("ACCOUNT_EMAIL", "")
+                login = (
+                    {"email": account, "password": "{{secret:ACCOUNT_PASSWORD}}", "only_on": sorted(guard.login_domains())}
+                    if account and os.getenv("ACCOUNT_PASSWORD") and guard.login_domains()
+                    else None
+                )
+
+                async def address(tab: int) -> str | None:
+                    """Where the tab is now. Without the tool the agent cannot keep to the employer's site."""
+                    if "tabs_list" not in mcp.definitions:
+                        raise RuntimeError("Reload Switchyard: tabs_list is needed to keep forms on the employer's site")
+                    return guard.tab_url(content(await mcp.tool("tabs_list", {"scope": "session"})), tab)
+
                 tab_id = job["tab_id"]
                 if tab_id is None:
                     result = await mcp.tool("tab_create", {"url": job["vacancy"]["url"]})
@@ -167,6 +185,7 @@ class BrowserAgent:
                 facts = settings.context or job["package"]["profile"]
                 transcript: list[dict[str, Any]] = []
                 for _ in range(100):
+                    guard.assert_running()
                     known_answers = store.answers(job["id"])
                     prompt = """Fill one job application with browser tools. Return a JSON action:
 {tool,args,field,value,evidence,submit,questions,done,message}.
@@ -187,6 +206,10 @@ Click and key may return fresh refs. Reuse observations; read_page only when nee
 Use only current refs. Do not invent refs. For native selects use letter/arrows + Tab, no Enter.
 Clicking a final submit/send/apply control requires submit=true. No Enter keys unless submitting.
 If submission is disabled, stop with done=true after preparing/reviewing the form.
+To sign in (only when "login" is given and the page is one of login.only_on) type login.email with
+evidence=login.email, then the exact text {{secret:ACCOUNT_PASSWORD}} (text and value identical) into the
+password field. Never type the password anywhere else and never write any other secret.
+If a code or CAPTCHA is asked, ask the user.
 Do not create accounts, send messages, answer assessments, or change the candidate profile.
 If the browser is loading, wait/read instead of repeating Submit. Output JSON only."""
                     raw = await call_ai(
@@ -199,6 +222,7 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                                 "job": job["vacancy"],
                                 "page": page,
                                 "submission_allowed": allow_submit,
+                                "login": login,
                                 "tools": [
                                     definition
                                     for name, definition in mcp.definitions.items()
@@ -280,6 +304,19 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                         args["readMode"] = "all"
                     if plan.tool == "navigate" and args.get("url"):
                         validate_public_url(args["url"])
+                        if not guard.host_allowed(args["url"], allowed_domains):
+                            raise ValueError("The agent tried to open a page outside the employer's site")
+                    url = ""
+                    if plan.tool in {"click", "type", "key", "upload_file"}:
+                        url = await address(tab_id) or ""
+                        if not guard.host_allowed(url, allowed_domains):
+                            store.update(
+                                job["id"],
+                                state="needs_review",
+                                error="The form is on a page outside the employer's site; nothing was typed",
+                            )
+                            store.event(job["id"], "domain_blocked", {"url": url, "tool": plan.tool})
+                            return
                     ref = str(args.get("ref", ""))
                     line = (
                         next((line for line in page.splitlines() if f"[{ref}]" in line), "")
@@ -310,13 +347,31 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                     selecting = plan.tool == "click" and bool(
                         re.search(r"checkbox|radio|option", line, re.I)
                     )
-                    if (
+                    secrets = vault.placeholders(str(args.get("text", ""))) if plan.tool == "type" else []
+                    if secrets:
+                        if plan.value != args.get("text") or len(secrets) != 1 or args["text"].strip() != "{{secret:%s}}" % secrets[0]:
+                            raise ValueError("A secret must be typed on its own, exactly as the placeholder")
+                        if secrets[0] not in vault.AGENT_SECRETS:
+                            raise ValueError(f"{secrets[0]} is not a secret an agent may type")
+                        if not guard.password_allowed(url):
+                            store.update(
+                                job["id"],
+                                state="awaiting_answers",
+                                error="The password may only be typed on a domain in CAREERTWIN_LOGIN_DOMAINS",
+                            )
+                            store.event(job["id"], "secret_blocked", {"url": url})
+                            return
+                        if not re.search(r"password", line, re.I):
+                            raise ValueError("A secret may only be typed into a password field")
+                    elif (
                         plan.tool == "type"
                         or (plan.tool in {"key", "click"} and plan.field)
                         or selecting
                     ):
                         if not plan.evidence or not (
-                            plan.evidence in facts or plan.evidence in known_answers.values()
+                            plan.evidence in facts
+                            or plan.evidence in known_answers.values()
+                            or (account and plan.evidence == account)
                         ):
                             raise ValueError("An answer lacks a verified profile or user evidence")
                         if plan.tool == "type" and plan.value != args.get("text"):
@@ -399,7 +454,8 @@ If the browser is loading, wait/read instead of repeating Submit. Output JSON on
                         "evidence": plan.evidence,
                     }
                     store.event(job["id"], "browser_action_planned", event)
-                    result = await mcp.tool(plan.tool, args)
+                    call = {**args, "text": vault.resolve(args["text"])[0]} if secrets else args
+                    result = await mcp.tool(plan.tool, call)
                     store.event(job["id"], "browser_action", {**event, "result": result})
                     transcript.append({"tool": plan.tool, "field": plan.field, "value": plan.value})
                     page = observation(result)

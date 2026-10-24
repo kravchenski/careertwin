@@ -17,7 +17,7 @@ class Settings(BaseModel):
     sources: list[str] = Field(default_factory=lambda: ["remotive", "remoteok", "weworkremotely"])
     companies: list[dict[str, str]] = Field(default_factory=list)
     preferences: str = "Work from Poland, remote or in Tricity; no relocation."
-    provider: str = "switchyard"
+    provider: str = "switchyard"  # the agents talk to the Switchyard gateway and to nothing else
     model: str = "agent"
     jev_model: str = "jev-latest"
     decision_backend: Literal["switchyard", "typesafe"] = Field(
@@ -32,6 +32,13 @@ class Settings(BaseModel):
     interval_hours: int = Field(default=12, ge=1, le=168)
     limit: int = Field(default=30, ge=1, le=100)
     daily_limit: int = Field(default=10, ge=1, le=100)
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def only_switchyard(cls, _value: object) -> str:
+        """Candidate facts, vacancy pages and answers go to the gateway; a provider chosen in an older
+        settings file or sent over the API is ignored."""
+        return "switchyard"
 
     @field_validator("queries")
     @classmethod

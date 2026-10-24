@@ -9,6 +9,7 @@ from typing import Any
 
 from careertwin.db import db_conn
 from careertwin.profile.context import read_context, studio_snapshot, write_context
+from careertwin.vault import redact_data
 
 from .models import Settings, Vacancy, canonical_url
 
@@ -147,7 +148,7 @@ class Store:
         with db_conn() as db:
             db.execute(
                 "INSERT INTO automation_events(job_id,stage,payload,created_at) VALUES(?,?,?,?)",
-                (job_id, stage, json.dumps(payload, ensure_ascii=False), now()),
+                (job_id, stage, json.dumps(redact_data(payload), ensure_ascii=False), now()),
             )
             db.commit()
 
