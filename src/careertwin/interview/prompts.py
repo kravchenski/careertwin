@@ -19,11 +19,16 @@ POINTS:
 say them, as the candidate would speak; wrap the one or two key terms of every line in \
 **double asterisks**
 ANSWER:
-the same content as one natural spoken answer of 3 to 5 sentences, first person, about 30 \
-seconds aloud
+the main answer as one natural paragraph of 3 to 5 sentences, first person for questions about \
+the candidate, a clear explanation for knowledge questions
+KEY:
+- two to five lines, each "**Term**: one sentence" with the details worth knowing
+CONTEXT:
+two or three sentences on where and how this is used in practice, or how it applies to the \
+vacancy and the candidate's real work
 
 Rules
-- POINTS are words to say, never advice about how to answer. Wrong: "Greet warmly", "Keep it \
+- Every section is content, never advice about how to answer. Wrong: "Greet warmly", "Keep it \
 short", "Mention your experience", "Confirm you are ready". Right: "Hi, nice to meet you!", \
 "I'm **<name from the context>**, glad to be here", "I build **APIs** with Python and FastAPI".
 - Greetings and small talk ("hi", "how are you"): the lines are the reply itself, then one line \
@@ -57,7 +62,8 @@ the closest real experience and how the candidate learns. No bluff.
 - Salary: follow SALARY POLICY. Never state a number that is not in the context.
 - Questions for the interviewer: write two specific, non-generic questions about the vacancy, \
 as the candidate would ask them.
-- No filler such as "great question". No markdown other than the two headings, bullets and bold.
+- When ANSWER STYLE is concise, leave out KEY and CONTEXT.
+- No filler such as "great question". No markdown other than the four headings, bullets and bold.
 """
 
 SCREENSHOT_NOTE = """\
@@ -83,11 +89,12 @@ KIND_HINTS = {
 
 
 STYLE_HINTS = {
-    "concise": "ANSWER STYLE: concise. Three or four lines to say, an answer of two or three sentences.",
-    "standard": "ANSWER STYLE: standard. Four to six lines to say, an answer of three to five sentences.",
+    "concise": "ANSWER STYLE: concise. Three or four lines to say, an answer of two or three sentences, no KEY or CONTEXT.",
+    "standard": "ANSWER STYLE: standard. Four to six lines to say, an answer of three to five sentences, two to four KEY lines and a short CONTEXT.",
     "detailed": (
         "ANSWER STYLE: detailed. Six to eight lines to say with real numbers and names from the "
-        "context, an answer of five to eight sentences with one concrete example."
+        "context, an answer of five to eight sentences with one concrete example, four or five KEY "
+        "lines and a fuller CONTEXT."
     ),
 }
 
@@ -124,34 +131,66 @@ def screenshot_prompt(
 
 
 @dataclass
-class Suggestion:
+class Sections:
+    """The parts of a reply, tolerant of one that is still streaming."""
+
     points: list[str] = field(default_factory=list)
     answer: str = ""
+    key: list[str] = field(default_factory=list)
+    context: str = ""
+
+    @property
+    def has_details(self) -> bool:
+        return bool(self.answer or self.key or self.context)
+
+
+@dataclass
+class Suggestion(Sections):
     raw: str = ""
 
     def as_dict(self) -> dict:
         """Plain text for the API and agents: the **bold** markers are for the window."""
-        return {"points": [point.replace("**", "") for point in self.points], "answer": self.answer}
+        plain = lambda line: line.replace("**", "")  # noqa: E731
+        return {
+            "points": [plain(point) for point in self.points],
+            "answer": self.answer,
+            "key_points": [plain(line) for line in self.key],
+            "context": self.context,
+        }
 
 
 _BULLET = re.compile(r"^\s*(?:[-•]|\*(?!\*)|\d+[.)])\s*")
+_MARKER = re.compile(r"^[ \t]*(?:\*\*)?(POINTS|ANSWER|KEY|CONTEXT)(?:\*\*)?[ \t]*:(?:\*\*)?", re.I | re.M)
 
 
 def _bullets(block: str) -> list[str]:
     return [_BULLET.sub("", line).strip() for line in block.splitlines() if line.strip()]
 
 
+def sections(text: str) -> Sections:
+    """Split a reply into POINTS, ANSWER, KEY and CONTEXT; text without markers is the answer."""
+    found = list(_MARKER.finditer(text))
+    if not found:
+        return Sections(answer=text.strip())
+    blocks: dict[str, str] = {}
+    for index, match in enumerate(found):
+        end = found[index + 1].start() if index + 1 < len(found) else len(text)
+        blocks[match[1].upper()] = text[match.end() : end].strip()
+    return Sections(
+        points=_bullets(blocks.get("POINTS", "")),
+        answer=blocks.get("ANSWER", ""),
+        key=_bullets(blocks.get("KEY", "")),
+        context=blocks.get("CONTEXT", ""),
+    )
+
+
 def parse_suggestion(text: str) -> Suggestion:
     raw = text.strip()
-    match = re.search(r"POINTS:\s*(.*?)\s*ANSWER:\s*(.*)", raw, re.S | re.I)
-    if not match:
-        return Suggestion(answer=raw, raw=raw)
-    return Suggestion(points=_bullets(match[1]), answer=match[2].strip(), raw=raw)
+    parts = sections(raw)
+    return Suggestion(parts.points, parts.answer, parts.key, parts.context, raw)
 
 
 def split_partial(text: str) -> tuple[list[str], str]:
     """Points and answer so far from a half-streamed reply."""
-    if "ANSWER:" not in text and "POINTS:" not in text:
-        return [], text.strip()
-    head, _, tail = text.partition("ANSWER:")
-    return _bullets(head.replace("POINTS:", "")), tail.strip()
+    parts = sections(text)
+    return parts.points, parts.answer

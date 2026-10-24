@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from careertwin.interview import languages
-from careertwin.interview.prompts import split_partial
+from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.session import INTERVIEWER, YOU, Callbacks
 
@@ -54,7 +54,7 @@ STATE_COLOURS = {
 STRINGS = {
     "en": {
         "ask": "Ask", "screenshot": "Screenshot", "get_answer": "Get answer",
-        "placeholder": "Type a question manually…", "full_answer": "Full answer",
+        "placeholder": "Type a question manually…", "full_answer": "Detailed answer", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details",
         "transcript": "Transcript", "pin": "Pin on top", "opacity": "Opacity",
         "add_cv": "Add CV…", "language": "Interview language", "auto": "Auto-detect",
         "quit": "Quit", "interviewer": "Interviewer", "you": "You",
@@ -73,7 +73,7 @@ STRINGS = {
     },
     "ru": {
         "ask": "Спросить", "screenshot": "Скриншот", "get_answer": "Получить ответ",
-        "placeholder": "Введите вопрос вручную…", "full_answer": "Полный ответ",
+        "placeholder": "Введите вопрос вручную…", "full_answer": "Подробный ответ", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно",
         "transcript": "Расшифровка", "pin": "Поверх всех окон", "opacity": "Прозрачность",
         "add_cv": "Добавить резюме…", "language": "Язык интервью", "auto": "Определять сам",
         "quit": "Выход", "interviewer": "Интервьюер", "you": "Вы",
@@ -92,7 +92,7 @@ STRINGS = {
     },
     "pl": {
         "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "get_answer": "Odpowiedz",
-        "placeholder": "Wpisz pytanie ręcznie…", "full_answer": "Pełna odpowiedź",
+        "placeholder": "Wpisz pytanie ręcznie…", "full_answer": "Szczegółowa odpowiedź", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły",
         "transcript": "Transkrypcja", "pin": "Zawsze na wierzchu", "opacity": "Przezroczystość",
         "add_cv": "Dodaj CV…", "language": "Język rozmowy", "auto": "Wykryj automatycznie",
         "quit": "Zamknij", "interviewer": "Rekruter", "you": "Ty",
@@ -440,6 +440,15 @@ class OverlayWindow(QWidget):
 
         self.previous = QToolButton()
         self.next = QToolButton()
+        self.details = QToolButton()
+        self.details.setCheckable(True)
+        self.details.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.details.setStyleSheet(
+            f"QToolButton {{ border: 1px solid rgba(188,180,255,0.45); border-radius: 12px; "
+            f"padding: 3px 14px; color: {TEXT}; }} "
+            f"QToolButton:checked {{ background: rgba(188,180,255,0.30); color: {STRONG}; }}"
+        )
+        self.details.toggled.connect(lambda value: self._quick("show_full_answer", value))
         self.page = QLabel("–")
         self.page.setObjectName("page")
         self.page.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -450,6 +459,7 @@ class OverlayWindow(QWidget):
         footer.addStretch(1)
         footer.addWidget(self.page)
         footer.addStretch(1)
+        footer.addWidget(self.details)
         footer.addWidget(self.next)
         footer.addWidget(QSizeGrip(self), 0, Qt.AlignmentFlag.AlignBottom)
         root.addLayout(footer)
@@ -474,6 +484,7 @@ class OverlayWindow(QWidget):
             ("Ctrl+Left", lambda: self.show_entry(self.index - 1)),
             ("Ctrl+Right", lambda: self.show_entry(self.index + 1)),
             ("Ctrl+P", self._key_pause),
+            ("Ctrl+D", self.details.toggle),
         ):
             QShortcut(QKeySequence(sequence), self, activated=slot)
 
@@ -584,6 +595,7 @@ class OverlayWindow(QWidget):
         self.next.setText(keys["next"])
         self.act_transcript.setText(self.tr_("transcript"))
         self.act_full.setText(self.tr_("full_answer"))
+        self.details.setText(self.tr_("details_button"))
         self.act_pin.setText(self.tr_("pin"))
         self.interview_menu_action.setText(self.tr_("interview_menu"))
         self.act_settings.setText(self.tr_("settings"))
@@ -660,9 +672,10 @@ class OverlayWindow(QWidget):
             self._render()
         elif name == "show_full_answer":
             self.full_answer = bool(value)
-            self.act_full.blockSignals(True)
-            self.act_full.setChecked(self.full_answer)
-            self.act_full.blockSignals(False)
+            for toggle in (self.act_full, self.details):
+                toggle.blockSignals(True)
+                toggle.setChecked(self.full_answer)
+                toggle.blockSignals(False)
             self._render()
         elif name == "ui_language":
             self.ui_locked = value != "auto"
@@ -837,12 +850,36 @@ class OverlayWindow(QWidget):
 
     @property
     def answer_text(self) -> str:
-        """The current answer as plain text, for copying."""
+        """The current answer as plain text, for copying (details only when they are shown)."""
         if not (0 <= self.index < len(self.entries)):
             return ""
-        points, spoken = split_partial(self.entries[self.index].raw)
-        lines = [point.replace("**", "") for point in points]
-        return "\n".join([*(f"• {line}" for line in lines), *([spoken] if spoken else [])])
+        parts = sections(self.entries[self.index].raw)
+        plain = lambda line: line.replace("**", "")  # noqa: E731
+        lines = [f"• {plain(point)}" for point in parts.points]
+        if parts.answer and (self.full_answer or not parts.points):
+            lines.append(parts.answer)
+        if self.full_answer:
+            lines += [f"• {plain(line)}" for line in parts.key]
+            if parts.context:
+                lines.append(parts.context)
+        return "\n".join(lines)
+
+    def _details_html(self, found, px) -> str:
+        """The detailed answer: main answer, key points, practical context."""
+        heading = lambda size, text: (  # noqa: E731
+            f'<div style="font-size:{px(size)}px; font-weight:700; color:{STRONG}; '
+            f'margin-top:14px">{html.escape(text)}</div>'
+        )
+        body = f"font-size:{px(15)}px; color:{TEXT}"
+        parts = [heading(18, self.tr_("details_title"))]
+        if found.answer:
+            parts += [heading(16, self.tr_("details_main")), f'<p style="{body}">{render_bold(found.answer)}</p>']
+        if found.key:
+            items = "".join(f"<li>{render_bold(line)}</li>" for line in found.key)
+            parts += [heading(16, self.tr_("details_key")), f'<ul style="{body}">{items}</ul>']
+        if found.context:
+            parts += [heading(16, self.tr_("details_context")), f'<p style="{body}">{render_bold(found.context)}</p>']
+        return "".join(parts)
 
     def _render(self) -> None:
         total = len(self.entries)
@@ -865,7 +902,8 @@ class OverlayWindow(QWidget):
             )
             return
         entry = self.entries[self.index]
-        points, spoken = split_partial(entry.raw)
+        found = sections(entry.raw)
+        points, spoken = found.points, found.answer
         parts = [
             f'<div style="font-size:{px(19)}px; font-weight:700; color:{STRONG}">'
             f"{html.escape(entry.question)}</div>"
@@ -873,8 +911,10 @@ class OverlayWindow(QWidget):
         if points:
             items = "".join(f"<li>{render_bold(point)}</li>" for point in points)
             parts.append(f'<ul style="font-size:{px(16)}px">{items}</ul>')
-        if spoken and (self.full_answer or not points):
+        if not points and spoken:
             parts.append(f'<p style="font-size:{px(16)}px; color:{TEXT}">{render_bold(spoken)}</p>')
+        elif self.full_answer and found.has_details:
+            parts.append(self._details_html(found, px))
         scroll = self.answer.verticalScrollBar().value()
         self.answer.setHtml("".join(parts))
         self.answer.verticalScrollBar().setValue(scroll)

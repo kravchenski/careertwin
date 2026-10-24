@@ -63,6 +63,7 @@ class Gui:
         self.runtime = Runtime(InterviewSettings(), self.context, coach, self.session)
         self.window = OverlayWindow(self.bridge, runtime=self.runtime, listening=False)
         self.runtime.on_window = self.window.apply_setting
+        self.window.apply_settings(self.runtime.settings)
         self.window.show()
         self.window.open_settings("docs")
         self.dialog = self.window.settings_dialog
@@ -129,8 +130,11 @@ def test_language_tab_changes_the_interview_and_the_window(gui):
     assert gui.session.language.current == "ru" and InterviewSettings.load().language == "ru"
     gui.choose(gui.dialog.answer_style, "detailed")
     assert gui.runtime.coach.style == "detailed"
+    assert gui.window.full_answer and gui.dialog.full_answer.isChecked()
+    gui.dialog.full_answer.setChecked(False)
+    assert not gui.window.full_answer and not gui.window.details.isChecked()
     gui.dialog.full_answer.setChecked(True)
-    assert gui.window.full_answer and gui.window.act_full.isChecked()
+    assert gui.window.full_answer and gui.window.act_full.isChecked() and gui.window.details.isChecked()
     gui.choose(gui.dialog.ui_language, "pl")
     assert gui.window.ui == "pl" and gui.window.ask.title.text() == "Zapytaj" and gui.window.ui_locked
     gui.bridge.language.emit("en")
@@ -429,3 +433,47 @@ def test_prepare_needs_some_context_first(tmp_path, monkeypatch):
         assert calls == []
     finally:
         stack.window.close()
+
+
+REPLY = (
+    "POINTS:\n- **React** is a library for building **UIs**.\n- It is built on **components**.\n"
+    "ANSWER:\nReact is a JavaScript library maintained by Meta.\n"
+    "KEY:\n- **Components**: reusable pieces of UI.\n- **Virtual DOM**: batches updates.\n"
+    "CONTEXT:\nUsed for single-page apps and, with React Native, for mobile apps."
+)
+
+
+def test_detailed_answer_shows_main_answer_key_points_and_context(gui):
+    gui.bridge.started.emit("What is React?")
+    gui.bridge.done.emit(REPLY)
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    for heading in ("Detailed answer", "Main answer", "Key points", "Practical context"):
+        assert heading in text
+    assert text.index("It is built on components") < text.index("Detailed answer") < text.index("Main answer")
+    assert text.index("Main answer") < text.index("Key points") < text.index("Practical context")
+    assert "Components: reusable pieces of UI." in text and "single-page apps" in text and "**" not in text
+    assert gui.window.answer_text.splitlines()[0] == "• React is a library for building UIs."
+    assert "Virtual DOM: batches updates." in gui.window.answer_text
+
+    gui.window.details.setChecked(False)
+    short = gui.window.answer.toPlainText()
+    assert "Detailed answer" not in short and "Main answer" not in short and "Key points" not in short
+    assert "Virtual DOM" not in gui.window.answer_text
+    assert InterviewSettings.load().show_full_answer is False
+    gui.window.details.setChecked(True)
+    assert "Practical context" in gui.window.answer.toPlainText()
+
+
+def test_details_are_translated_and_streamed_in_order(gui):
+    gui.runtime.update("ui_language", "ru")
+    gui.bridge.started.emit("Что такое React?")
+    gui.bridge.chunk.emit("POINTS:\n- **React** — библиотека\n")
+    gui.process()
+    assert "Подробный ответ" not in gui.window.answer.toPlainText()
+    gui.bridge.chunk.emit("ANSWER:\nReact — это библиотека.\nKEY:\n- **Компоненты**: блоки UI.\nCONTEXT:\nИспользуют в SPA.")
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    for heading in ("Подробный ответ", "Основной ответ", "Ключевые моменты", "Практический контекст"):
+        assert heading in text
+    assert gui.window.details.text() == "Подробно"

@@ -65,7 +65,7 @@ it reads.
 | **Documents** | Add your CV, a LinkedIn export, a cover letter or any file about you (PDF, DOCX, text) with *Add files…* or by dropping them on the window. Mark each as *CV (the employer has it)* or *About me (extra facts)*, switch it off without deleting it, or remove it. Files are copied into `data/interview/documents/`, so moving the original does no harm. A blank or scanned PDF is refused with a reason. |
 | **Vacancy** | Pick a vacancy from the application pipeline (the CV prepared for it is attached too), or paste its text or a link. Notes for this interview go here as well. |
 | **About me** | Your `ABOUT.md`, editable in place and saved to the file. This is the main source of facts; write the *Interview stories (STAR)*, *Honest limits* and *Never claim* sections for the best answers. |
-| **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed) and whether to show the full spoken answer. |
+| **Language** | Interview language (auto-detect or a fixed one), window language (follow the interview, or English, Russian, Polish), answer style (concise, standard, detailed) and whether to show the detailed answer. |
 | **Audio & speech** | Listen to the call on or off, the call audio source, your microphone, the Whisper model (`tiny` to `large-v3-turbo`) and device. |
 | **AI model** | Gateway URL, API key and model, *Load models* to pick from what your gateway offers, and *Test connection*. Leave them empty to use `.env` (`SWITCHYARD_*`) and auto routing. |
 | **Screenshot** | Turn the button on or off, choose the capture tool (grim, spectacle, maim, scrot), the delay, and *Test capture*. |
@@ -113,9 +113,15 @@ The window itself is translated into English, Russian and Polish.
 | **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The window turns transparent for the capture |
 | Input + **Get answer** | Type or paste a question |
 | `Ctrl ←` `Ctrl →` | Page through earlier answers (`2/2`) |
-| ☰ | Settings, Context, transcript, full answer, pin on top, interview language, quit |
+| **Details** `Ctrl D` | Show or hide the detailed answer under the lines |
+| ☰ | Settings, Context, transcript, detailed answer, pin on top, interview language, quit |
 
-Lines have their key terms in bold. Turn on *Full answer* to also see a 30-second spoken version.
+The first thing you see is the lines to say, with key terms in bold; they stream in within a few
+seconds. Under them the **detailed answer** follows as the rest arrives, in three parts: the *main
+answer* (a paragraph), *key points* (a term in bold and one sentence each) and *practical context*
+(where it is used, or how it applies to this vacancy and your real work). It is on by default; the
+**Details** button or `Ctrl D` hides it, and the *Concise* answer style skips it altogether for the
+fastest replies. The window scrolls when the answer is long.
 `Ctrl P` pauses. Questions are recognised automatically (debounced, split questions merged).
 
 ## How it works

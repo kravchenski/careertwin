@@ -349,3 +349,38 @@ def test_coach_complete_uses_the_in_app_gateway_settings(about):
         bad = StreamingCoach(InterviewBrief.load(), transport=httpx.MockTransport(lambda r, resp=response: resp))
         with pytest.raises(CoachError):
             bad.complete("s", "p")
+
+
+def test_replies_split_into_points_answer_key_and_context():
+    from careertwin.interview.prompts import parse_suggestion, sections, split_partial
+
+    full = (
+        "POINTS:\n- **React** is a UI library\n- built on **components**\n"
+        "ANSWER:\nReact is a library.\nKEY:\n- **Components**: reusable UI units\n"
+        "- **Virtual DOM**: batches updates\nCONTEXT:\nUsed for SPAs and React Native."
+    )
+    parts = sections(full)
+    assert parts.points == ["**React** is a UI library", "built on **components**"]
+    assert parts.answer == "React is a library." and parts.has_details
+    assert parts.key == ["**Components**: reusable UI units", "**Virtual DOM**: batches updates"]
+    assert parts.context == "Used for SPAs and React Native."
+    assert parse_suggestion(full).as_dict() == {
+        "points": ["React is a UI library", "built on components"],
+        "answer": "React is a library.",
+        "key_points": ["Components: reusable UI units", "Virtual DOM: batches updates"],
+        "context": "Used for SPAs and React Native.",
+    }
+    assert sections("POINTS:\n- **Py** a\n- **Do").points == ["**Py** a", "**Do"]
+    assert not sections("POINTS:\n- x").has_details
+    assert sections("plain text").answer == "plain text" and sections("plain text").points == []
+    assert split_partial("POINTS:\n- a\nANSWER:\nb") == (["a"], "b")
+    assert sections("**POINTS:**\n- a\n**ANSWER:** b\n**KEY:**\n- **T**: x").key == ["**T**: x"]
+
+
+def test_the_prompt_asks_for_the_four_sections_and_drops_two_when_concise():
+    from careertwin.interview.prompts import STYLE_HINTS, SYSTEM
+
+    for marker in ("POINTS:", "ANSWER:", "KEY:", "CONTEXT:"):
+        assert marker in SYSTEM
+    assert "leave out KEY and CONTEXT" in SYSTEM
+    assert "no KEY or CONTEXT" in STYLE_HINTS["concise"] and "KEY" in STYLE_HINTS["detailed"]

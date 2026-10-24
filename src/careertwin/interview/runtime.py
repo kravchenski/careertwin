@@ -68,6 +68,8 @@ class Runtime:
             self.reload_speech()
         elif name in AUDIO_KEYS:
             self.restart_audio()
+            if name == "listen":
+                self.on_window(name, self.settings.listen)
         elif name in WINDOW_KEYS:
             self.on_window(name, getattr(self.settings, name))
 
