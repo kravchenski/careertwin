@@ -7,7 +7,8 @@ import logging
 import re
 from typing import Any
 
-import httpx
+
+from careertwin.net import safe_async_client
 
 logger = logging.getLogger("careertwin.api")
 
@@ -32,7 +33,7 @@ async def fetch_epam_jobs(query: str = "", limit: int = 50) -> list[dict[str, An
         "websiteLocale": "en-us",
     }
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with safe_async_client(timeout=15) as client:
             resp = await client.get(url, params=params)
             data = resp.json()
             jobs = data.get("data", {}).get("jobs", [])

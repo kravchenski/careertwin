@@ -11,6 +11,8 @@ import urllib.parse
 from typing import Any
 
 import httpx
+
+from careertwin.net import safe_async_client
 from bs4 import BeautifulSoup
 
 from careertwin.browser import (
@@ -183,7 +185,7 @@ def _skills_from_text(text: str) -> list[str]:
 
 async def _safe_fetch_text(url: str) -> str:
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=12.0) as client:
+        async with safe_async_client(follow_redirects=True, timeout=12.0) as client:
             response = await client.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
@@ -418,7 +420,7 @@ async def _tavily_search(query: str, limit: int = 20) -> list[dict[str, Any]]:
         return []
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with safe_async_client(timeout=15.0) as client:
             resp = await client.post(
                 "https://api.tavily.com/search",
                 json={
@@ -583,7 +585,7 @@ def _agent_browser_collect_jobs(
 async def _duckduckgo_search(query: str, domain: str, source: str) -> list[dict[str, Any]]:
     """Fallback DuckDuckGo HTML search for a specific domain."""
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with safe_async_client(timeout=15.0, follow_redirects=True) as client:
             search_q = f"site:{domain} {query}"
             response = await client.get(
                 "https://html.duckduckgo.com/html/",
@@ -647,7 +649,7 @@ async def _web_search_jobs(
 
         if source == "remoteok":
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with safe_async_client(timeout=15.0) as client:
                     resp = await client.get(
                         "https://remoteok.com/api",
                         headers={"User-Agent": "CareerTwin/2.0"},
@@ -675,7 +677,7 @@ async def _web_search_jobs(
 
         elif source == "hn":
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with safe_async_client(timeout=15.0) as client:
                     resp = await client.get(
                         "https://hn.algolia.com/api/v1/search_by_date",
                         params={"query": query or "hiring", "tags": "comment", "hitsPerPage": 30},

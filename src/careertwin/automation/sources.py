@@ -4,12 +4,11 @@ import asyncio
 import json
 from dataclasses import asdict
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
-import httpx
 from bs4 import BeautifulSoup
 
-from careertwin.net import validate_public_url
+from careertwin.net import fetch_text, safe_async_client
 
 from .models import Settings, Vacancy
 
@@ -55,16 +54,8 @@ def text(html: str) -> str:
 
 
 async def fetch(url: str) -> str:
-    async with httpx.AsyncClient(timeout=25) as client:
-        for _ in range(6):
-            validate_public_url(url)
-            response = await client.get(url, headers={"User-Agent": "CareerTwin/2.1"})
-            if response.is_redirect:
-                url = urljoin(url, response.headers["location"])
-                continue
-            response.raise_for_status()
-            return response.text[:2_000_000]
-    raise ValueError("Too many redirects")
+    """A vacancy page: public addresses only, redirects checked at every hop, at most 2 MB."""
+    return await fetch_text(url, max_bytes=2_000_000, timeout=25)
 
 
 def parse_posting(html: str, original: Vacancy) -> Vacancy:
@@ -169,7 +160,7 @@ class SearchAgent:
             if source == "remotive"
             else "https://remoteok.com/api"
         )
-        async with httpx.AsyncClient(timeout=25) as client:
+        async with safe_async_client(timeout=25) as client:
             response = await client.get(endpoint, headers={"User-Agent": "CareerTwin/2.1"})
             response.raise_for_status()
             data = response.json()

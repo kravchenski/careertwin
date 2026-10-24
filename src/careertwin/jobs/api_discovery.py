@@ -42,7 +42,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin
 
-import httpx
+
+from careertwin.net import safe_async_client
 
 from careertwin.db import db_conn
 
@@ -143,7 +144,7 @@ async def discover_via_ssr(url: str, timeout: float = 15.0) -> list[dict] | None
     and catches platforms (like Phenom People) that render the initial
     result set into the page itself rather than fetching it via XHR."""
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with safe_async_client(timeout=timeout, follow_redirects=True) as client:
             resp = await client.get(
                 url,
                 headers={
@@ -351,7 +352,7 @@ async def replay_jobs_api(discovered: DiscoveredJobsAPI) -> list[Any] | None:
     if discovered.requires_session:
         return None
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with safe_async_client(timeout=15, follow_redirects=True) as client:
             if discovered.method.upper() == "GET":
                 resp = await client.get(discovered.url, headers=discovered.request_headers)
             else:

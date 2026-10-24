@@ -7,7 +7,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import httpx
+
+from careertwin.net import safe_async_client
 from fastapi import UploadFile
 
 from careertwin.collectors.resume import ResumeParser
@@ -167,7 +168,7 @@ async def _fallback_collect_github(username: str) -> CareerGraph:
     skills: dict[str, int] = {}
 
     try:
-        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+        async with safe_async_client(timeout=12.0, follow_redirects=True) as client:
             response = await client.get(
                 f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated",
                 headers={"Accept": "application/vnd.github+json", "User-Agent": "CareerTwin/2.0"},

@@ -9,7 +9,8 @@ import time
 from collections import deque
 from urllib.parse import parse_qs, urljoin, urlparse
 
-import httpx
+
+from careertwin.net import safe_async_client
 from bs4 import BeautifulSoup
 
 from careertwin.jobs.api_client import fetch_jobs_from_known_ats, fetch_jobs_smart
@@ -86,7 +87,7 @@ async def _search_careers_url(company_name: str) -> str | None:
     """Search the web for a company's careers page and return the first plausible hit."""
     for query in (f"{company_name} careers", f"{company_name} internships"):
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            async with safe_async_client(timeout=15.0, follow_redirects=True) as client:
                 resp = await client.get(
                     "https://html.duckduckgo.com/html/",
                     params={"q": query},
@@ -332,7 +333,7 @@ def _is_job_link_from_markdown(text: str, url: str) -> bool:
 async def _fetch_html(url: str) -> str:
     """Quick HTTP fetch."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+        async with safe_async_client(follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(
                 url,
                 headers={
