@@ -25,8 +25,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
-    QPushButton,
-    QSizeGrip,
     QSizePolicy,
     QTextBrowser,
     QToolButton,
@@ -34,7 +32,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from careertwin.interview import languages
 from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.session import INTERVIEWER, YOU, Callbacks
@@ -53,10 +50,10 @@ STATE_COLOURS = {
 
 STRINGS = {
     "en": {
-        "ask": "Ask", "screenshot": "Screenshot", "get_answer": "Get answer",
-        "placeholder": "Type a question manually…", "full_answer": "Detailed answer", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details", "main_only": "Main answer only",
-        "transcript": "Transcript", "pin": "Pin on top", "opacity": "Opacity",
-        "add_cv": "Add CV…", "language": "Interview language", "auto": "Auto-detect",
+        "ask": "Ask", "screenshot": "Screenshot",
+        "placeholder": "Type a question manually…", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details",
+        "transcript": "Transcript", "opacity": "Opacity",
+        "add_cv": "Add CV…",
         "quit": "Quit", "interviewer": "Interviewer", "you": "You",
         "waiting": "Waiting for the interviewer…",
         "waiting_hint": "Press {ask} to answer what was just said, or type a question above.",
@@ -64,7 +61,7 @@ STRINGS = {
         "paused": "Paused", "thinking": "Thinking…", "idle": "Type a question",
         "no_screenshot": "Screenshots need grim (Wayland), spectacle, or maim/scrot (X11)",
         "drop_cv": "drop a PDF here to add a CV", "cv_added": "CV added",
-        "settings": "Settings…", "context_menu": "Context…",
+        "settings": "Settings…",
         "no_context": "No context yet",
         "no_context_hint": "Open Settings → Docs and add your CV, or write about yourself in About me.",
         "shot_off": "Screenshots are turned off in Settings",
@@ -72,10 +69,10 @@ STRINGS = {
         "no_vacancy_hint": "No vacancy yet: Settings → Vacancy to paste it, then Documents for the CV you sent.",
     },
     "ru": {
-        "ask": "Спросить", "screenshot": "Скриншот", "get_answer": "Получить ответ",
-        "placeholder": "Введите вопрос вручную…", "full_answer": "Подробный ответ", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно", "main_only": "Только основной ответ",
-        "transcript": "Расшифровка", "pin": "Поверх всех окон", "opacity": "Прозрачность",
-        "add_cv": "Добавить резюме…", "language": "Язык интервью", "auto": "Определять сам",
+        "ask": "Спросить", "screenshot": "Скриншот",
+        "placeholder": "Введите вопрос вручную…", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно",
+        "transcript": "Расшифровка", "opacity": "Прозрачность",
+        "add_cv": "Добавить резюме…",
         "quit": "Выход", "interviewer": "Интервьюер", "you": "Вы",
         "waiting": "Жду вопрос интервьюера…",
         "waiting_hint": "Нажмите {ask}, чтобы ответить на последнюю фразу, или введите вопрос выше.",
@@ -83,7 +80,7 @@ STRINGS = {
         "paused": "Пауза", "thinking": "Думаю…", "idle": "Введите вопрос",
         "no_screenshot": "Для скриншотов нужен grim (Wayland), spectacle или maim/scrot (X11)",
         "drop_cv": "перетащите PDF, чтобы добавить резюме", "cv_added": "Резюме добавлено",
-        "settings": "Настройки…", "context_menu": "Контекст…",
+        "settings": "Настройки…",
         "no_context": "Контекста пока нет",
         "no_context_hint": "Откройте Настройки → Документы и добавьте резюме или напишите о себе во вкладке «Обо мне».",
         "shot_off": "Скриншоты выключены в настройках",
@@ -91,10 +88,10 @@ STRINGS = {
         "no_vacancy_hint": "Вакансии пока нет: Настройки → Вакансия, чтобы вставить её, затем Документы для резюме, которое вы отправляли.",
     },
     "pl": {
-        "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "get_answer": "Odpowiedz",
-        "placeholder": "Wpisz pytanie ręcznie…", "full_answer": "Szczegółowa odpowiedź", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły", "main_only": "Tylko odpowiedź główna",
-        "transcript": "Transkrypcja", "pin": "Zawsze na wierzchu", "opacity": "Przezroczystość",
-        "add_cv": "Dodaj CV…", "language": "Język rozmowy", "auto": "Wykryj automatycznie",
+        "ask": "Zapytaj", "screenshot": "Zrzut ekranu",
+        "placeholder": "Wpisz pytanie ręcznie…", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły",
+        "transcript": "Transkrypcja", "opacity": "Przezroczystość",
+        "add_cv": "Dodaj CV…",
         "quit": "Zamknij", "interviewer": "Rekruter", "you": "Ty",
         "waiting": "Czekam na pytanie rekrutera…",
         "waiting_hint": "Naciśnij {ask}, aby odpowiedzieć na ostatnie zdanie, albo wpisz pytanie.",
@@ -102,7 +99,7 @@ STRINGS = {
         "paused": "Pauza", "thinking": "Myślę…", "idle": "Wpisz pytanie",
         "no_screenshot": "Zrzuty ekranu wymagają grim (Wayland), spectacle lub maim/scrot (X11)",
         "drop_cv": "upuść tu plik PDF, aby dodać CV", "cv_added": "Dodano CV",
-        "settings": "Ustawienia…", "context_menu": "Kontekst…",
+        "settings": "Ustawienia…",
         "no_context": "Brak kontekstu",
         "no_context_hint": "Otwórz Ustawienia → Dokumenty i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
         "shot_off": "Zrzuty ekranu są wyłączone w ustawieniach",
@@ -110,7 +107,6 @@ STRINGS = {
         "no_vacancy_hint": "Brak oferty: Ustawienia → Oferta, aby ją wkleić, potem Dokumenty dla wysłanego CV.",
     },
 }
-MENU_LANGUAGES = ["en", "ru", "pl", "uk", "de", "fr", "es", "it", "pt", "cs"]
 KEYS = {"ask": "Ctrl ↵", "screenshot": "Ctrl ⇧ ↵", "previous": "Ctrl ←", "next": "Ctrl →"}
 
 
@@ -153,7 +149,6 @@ class CircleButton(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setFixedSize(44, 44)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.paused = False
         self.setEnabled(True)
 
@@ -246,7 +241,6 @@ class Pill(QWidget):
     def __init__(self, title: str, hint: str) -> None:
         super().__init__()
         self.setFixedHeight(44)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
         row = QHBoxLayout(self)
         row.setContentsMargins(20, 0, 20, 0)
         row.setSpacing(10)
@@ -296,7 +290,6 @@ class ElidedLabel(QLabel):
         super().__init__()
         self.full = ""
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -341,7 +334,6 @@ class OverlayWindow(QWidget):
         on_hint: Callable[[], None] | None = None,
         on_pause: Callable[[bool], None] | None = None,
         on_screenshot: Callable[[], None] | None = None,
-        on_language: Callable[[str | None], None] | None = None,
         sources: list[tuple[str, str]] | None = None,
         listening: bool = True,
         ui_language: str = "en",
@@ -361,7 +353,6 @@ class OverlayWindow(QWidget):
         self._on_hint = on_hint or (session.hint_now if session else lambda: None)
         self._on_pause = on_pause or (session.pause if session else lambda _paused: None)
         self._on_screenshot = on_screenshot
-        self._on_language = on_language
         self.sources = sources or []
         self.pinned = pinned
         self.font_scale = 100
@@ -379,9 +370,6 @@ class OverlayWindow(QWidget):
             QLineEdit {{ background: transparent; border: none; padding: 8px 2px; font-size: 15px;
                         selection-background-color: #6f66d9; }}
             QTextBrowser {{ background: transparent; border: none; }}
-            QPushButton#flat {{ background: transparent; border: none; color: {STRONG};
-                               font-weight: 700; padding: 6px 4px; }}
-            QPushButton#flat:hover {{ color: #bcb4ff; }}
             QToolButton {{ background: transparent; border: none; color: {MUTED}; padding: 4px 8px; }}
             QToolButton:hover {{ color: {STRONG}; }}
             QToolButton::menu-indicator {{ image: none; }}
@@ -421,13 +409,7 @@ class OverlayWindow(QWidget):
         root.addLayout(header)
 
         self.input = QLineEdit()
-        self.get_answer = QPushButton()
-        self.get_answer.setObjectName("flat")
-        self.get_answer.setCursor(Qt.CursorShape.PointingHandCursor)
-        entry = QHBoxLayout()
-        entry.addWidget(self.input, 1)
-        entry.addWidget(self.get_answer)
-        root.addLayout(entry)
+        root.addWidget(self.input)
         rule = QFrame()
         rule.setObjectName("line")
         root.addWidget(rule)
@@ -449,7 +431,6 @@ class OverlayWindow(QWidget):
         self.next = QToolButton()
         self.details = QToolButton()
         self.details.setCheckable(True)
-        self.details.setCursor(Qt.CursorShape.PointingHandCursor)
         self.details.setStyleSheet(
             f"QToolButton {{ border: 1px solid rgba(188,180,255,0.45); border-radius: 12px; "
             f"padding: 3px 14px; color: {TEXT}; }} "
@@ -468,7 +449,6 @@ class OverlayWindow(QWidget):
         footer.addStretch(1)
         footer.addWidget(self.details)
         footer.addWidget(self.next)
-        footer.addWidget(QSizeGrip(self), 0, Qt.AlignmentFlag.AlignBottom)
         root.addLayout(footer)
         self.heard = ElidedLabel()
         self.heard.setObjectName("heard")
@@ -480,13 +460,12 @@ class OverlayWindow(QWidget):
         self.context.clicked.connect(lambda: self.open_settings("docs"))
         root.addWidget(self.context)
 
-        self._build_menu(pinned)
+        self._build_menu()
         self._translate()
         self.pill.show_state(*self.last_state[:1], self.tr_("idle") if not listening else self.tr_("loading"))
 
         self.ask.clicked.connect(self._on_hint)
         self.shot.clicked.connect(self._screenshot)
-        self.get_answer.clicked.connect(self._submit)
         self.input.returnPressed.connect(self._submit)
         self.previous.clicked.connect(lambda: self.show_entry(self.index - 1))
         self.next.clicked.connect(lambda: self.show_entry(self.index + 1))
@@ -497,7 +476,6 @@ class OverlayWindow(QWidget):
             ("Ctrl+Right", lambda: self.show_entry(self.index + 1)),
             ("Ctrl+P", self._key_pause),
             ("Ctrl+D", self.details.toggle),
-            ("Ctrl+M", self.act_main.toggle),
         ):
             QShortcut(QKeySequence(sequence), self, activated=slot)
 
@@ -519,42 +497,19 @@ class OverlayWindow(QWidget):
         text = STRINGS[self.ui].get(key) or STRINGS["en"][key]
         return text.format(**values) if values else text
 
-    def _build_menu(self, pinned: bool) -> None:
+    def _build_menu(self) -> None:
         self.menu = QMenu(self)
         self.act_settings = QAction(self)
-        self.act_context = QAction(self)
         self.act_transcript = QAction(self, checkable=True)
-        self.act_full = QAction(self, checkable=True)
-        self.act_main = QAction(self, checkable=True)
-        self.act_pin = QAction(self, checkable=True, checked=pinned)
         self.act_quit = QAction(self)
-        self.act_settings.triggered.connect(lambda: self.open_settings("language"))
-        self.act_context.triggered.connect(lambda: self.open_settings("docs"))
+        self.act_settings.triggered.connect(lambda: self.open_settings("window"))
         self.act_transcript.toggled.connect(self.transcript.setVisible)
-        self.act_full.toggled.connect(lambda value: self._quick("show_full_answer", value))
-        self.act_main.toggled.connect(
-            lambda value: self._quick("answer_layout", "main" if value else "lines")
-        )
-        self.act_pin.toggled.connect(lambda value: self._quick("pinned", value))
         self.act_quit.triggered.connect(self.close)
-        self.language_menu = QMenu(self)
-        self.language_group = QActionGroup(self)
-        self.language_actions: dict[str | None, QAction] = {}
-        for code in [None, *MENU_LANGUAGES]:
-            action = QAction(self, checkable=True, checked=code is None)
-            action.triggered.connect(lambda _checked=False, value=code: self._choose_language(value))
-            self.language_group.addAction(action)
-            self.language_menu.addAction(action)
-            self.language_actions[code] = action
-        for item in (self.act_settings, self.act_context):
-            self.menu.addAction(item)
+        self.menu.addAction(self.act_settings)
         self.interview_menu = QMenu(self)
         self.interview_menu.aboutToShow.connect(self._fill_interview_menu)
         self.interview_menu_action = self.menu.addMenu(self.interview_menu)
-        self.menu.addSeparator()
-        for item in (self.act_transcript, self.act_main, self.act_full, self.act_pin):
-            self.menu.addAction(item)
-        self.language_menu_action = self.menu.addMenu(self.language_menu)
+        self.menu.addAction(self.act_transcript)
         self.menu.addSeparator()
         self.menu.addAction(self.act_quit)
         self.menu_button.setMenu(self.menu)
@@ -609,21 +564,13 @@ class OverlayWindow(QWidget):
         self.shot.set_texts(self.tr_("screenshot"), keys["screenshot"])
         self._refresh_screenshot()
         self.input.setPlaceholderText(self.tr_("placeholder"))
-        self.get_answer.setText(self.tr_("get_answer"))
         self.previous.setText(keys["previous"])
         self.next.setText(keys["next"])
         self.act_transcript.setText(self.tr_("transcript"))
-        self.act_full.setText(self.tr_("full_answer"))
-        self.act_main.setText(self.tr_("main_only"))
         self.details.setText(self.tr_("details_button"))
-        self.act_pin.setText(self.tr_("pin"))
         self.interview_menu_action.setText(self.tr_("interview_menu"))
         self.act_settings.setText(self.tr_("settings"))
-        self.act_context.setText(self.tr_("context_menu"))
         self.act_quit.setText(self.tr_("quit"))
-        self.language_menu_action.setText(self.tr_("language"))
-        for code, action in self.language_actions.items():
-            action.setText(self.tr_("auto") if code is None else languages.NATIVE.get(code, languages.name(code)))
         self._update_context()
         self.transcript.setPlaceholderText("")
 
@@ -677,9 +624,6 @@ class OverlayWindow(QWidget):
         """Apply one saved setting to the window (called by the runtime and at start)."""
         if name == "pinned":
             self.pinned = bool(value)
-            self.act_pin.blockSignals(True)
-            self.act_pin.setChecked(self.pinned)
-            self.act_pin.blockSignals(False)
             self.set_pinned(self.pinned)
         elif name == "frameless":
             self.frameless = bool(value)
@@ -692,18 +636,13 @@ class OverlayWindow(QWidget):
             self._render()
         elif name == "show_full_answer":
             self.full_answer = bool(value)
-            for toggle in (self.act_full, self.details):
-                toggle.blockSignals(True)
-                toggle.setChecked(self.full_answer)
-                toggle.blockSignals(False)
+            self.details.blockSignals(True)
+            self.details.setChecked(self.full_answer)
+            self.details.blockSignals(False)
             self._render()
         elif name == "answer_layout":
             self.layout_mode = str(value)
-            self.act_main.blockSignals(True)
-            self.act_main.setChecked(self.layout_mode == "main")
-            self.act_main.blockSignals(False)
             self.details.setVisible(self.layout_mode != "main")
-            self.act_full.setEnabled(self.layout_mode != "main")
             self._render()
         elif name == "ui_language":
             self.ui_locked = value != "auto"
@@ -777,21 +716,6 @@ class OverlayWindow(QWidget):
             self.pause.set_paused(not self.pause.paused)
             self._on_pause(self.pause.paused)
 
-    def _toggle_full(self, value: bool) -> None:
-        self.full_answer = value
-        self._render()
-
-    def _choose_language(self, code: str | None) -> None:
-        if self.runtime:
-            try:
-                self.runtime.update("language", code or "auto")
-            except ValueError as exc:
-                self.show_error(str(exc))
-        elif self._on_language:
-            self._on_language(code)
-        if code and not self.runtime:
-            self.set_ui_language(code)
-
     def add_files(self, paths: list[str]) -> None:
         """Add CVs or other documents about you to the context."""
         if not self.runtime:
@@ -839,12 +763,33 @@ class OverlayWindow(QWidget):
     def dropEvent(self, event) -> None:
         self.add_files([url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()])
 
+    RESIZE_EDGE = 6
+
+    def _edges_at(self, point) -> Qt.Edge:
+        """The window edges a press at `point` grabs; none away from the border."""
+        edges = Qt.Edge(0)
+        if point.x() <= self.RESIZE_EDGE:
+            edges |= Qt.Edge.LeftEdge
+        elif point.x() >= self.width() - self.RESIZE_EDGE:
+            edges |= Qt.Edge.RightEdge
+        if point.y() <= self.RESIZE_EDGE:
+            edges |= Qt.Edge.TopEdge
+        elif point.y() >= self.height() - self.RESIZE_EDGE:
+            edges |= Qt.Edge.BottomEdge
+        return edges
+
     def mousePressEvent(self, event) -> None:
+        if not self.frameless or event.button() != Qt.MouseButton.LeftButton:
+            return
+        handle = self.windowHandle()
+        if handle is None:
+            return
+        if edges := self._edges_at(event.position().toPoint()):
+            handle.startSystemResize(edges)
+            return
         child = self.childAt(event.position().toPoint())
-        movable = child is None or isinstance(child, (StatusPill, QLabel, QFrame))
-        if self.frameless and movable and event.button() == Qt.MouseButton.LeftButton:
-            if handle := self.windowHandle():
-                handle.startSystemMove()
+        if child is None or isinstance(child, (StatusPill, QLabel, QFrame)):
+            handle.startSystemMove()
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)

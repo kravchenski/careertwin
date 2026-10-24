@@ -134,13 +134,12 @@ The window itself is translated into English, Russian and Polish.
 | Dots | Live level of the call audio, so you can see it is heard; text while loading, thinking or on errors |
 | **Ask** `Ctrl ↵` | Answer the last thing the interviewer said, even if it did not sound like a question |
 | **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The window turns transparent for the capture |
-| Input + **Get answer** | Type or paste a question |
+| Input | Type or paste a question and press `Enter` |
 | `Ctrl ←` `Ctrl →` | Page through earlier answers (`2/2`) |
 | **Details** `Ctrl D` | Show or hide the detailed answer under the lines (lines layout) |
-| `Ctrl M` | Switch between *main answer only* and *lines + details* |
-| ☰ | Settings, Context, transcript, detailed answer, pin on top, interview language, quit |
+| ☰ | Settings, switch interview, transcript, quit |
 
-**Main answer only** (Settings → Language → Answer layout, or `Ctrl M`) skips everything else: the model
+**Main answer only** (Settings → Language → Answer layout) skips everything else: the model
 writes just one paragraph to read aloud and it starts at once, so it is also the fastest layout.
 
 In the default *lines* layout the first thing you see is the lines to say, with key terms in bold; they stream in within a few
@@ -179,8 +178,8 @@ call audio (sink monitor) ─► 20 ms frames ─► utterance segmenter ─► 
 
 ## Window managers
 
-The window is frameless and translucent; drag it by the empty parts of the header and resize from
-the corner grip (or turn *Frameless window* off). Qt sets the app id to `careertwin-interview`, so
+The window is frameless and translucent; drag it by the empty parts of the header and resize by dragging
+its border (or turn *Frameless window* off). Qt sets the app id to `careertwin-interview`, so
 you can float it. In niri (25.01 or later):
 
 ```kdl
