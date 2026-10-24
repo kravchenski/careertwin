@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from careertwin.interview import languages
+from careertwin.interview.providers import OTHER, PROVIDERS, provider_for
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.settings import ANSWER_STYLES, DEVICES, WHISPER_MODELS
 
@@ -66,6 +67,8 @@ STRINGS = {
         "whisper_model": "Speech model", "whisper_device": "Device",
         "speech_note": "Bigger models are more accurate and slower. A new model downloads on first use.",
         "gateway_url": "Gateway URL", "gateway_key": "API key", "model_id": "Model",
+        "provider": "Provider", "provider_other": "Other (own address)",
+        "cloud_note": "{name} gets your CV, your ABOUT text and each question with every request. Enter its API key, load the list of models and choose one.",
         "load_models": "Load models", "test": "Test connection", "models_loaded": "{n} models available",
         "connected": "Connected: {n} models", "model_note": "Leave the URL, key and model empty to use .env (SWITCHYARD_*) and auto routing.",
         "shot_enabled": "Enable the Screenshot button", "shot_tool": "Capture tool",
@@ -116,6 +119,8 @@ STRINGS = {
         "whisper_model": "Модель речи", "whisper_device": "Устройство",
         "speech_note": "Большие модели точнее и медленнее. Новая модель скачивается при первом использовании.",
         "gateway_url": "Адрес шлюза", "gateway_key": "API-ключ", "model_id": "Модель",
+        "provider": "Провайдер", "provider_other": "Другой (свой адрес)",
+        "cloud_note": "{name} получает ваше резюме, текст ABOUT и каждый вопрос в каждом запросе. Введите его API-ключ, загрузите список моделей и выберите одну.",
         "load_models": "Загрузить модели", "test": "Проверить связь", "models_loaded": "Доступно моделей: {n}",
         "connected": "Связь есть: моделей {n}", "model_note": "Оставьте адрес, ключ и модель пустыми, чтобы брать .env (SWITCHYARD_*) и автоподбор.",
         "shot_enabled": "Включить кнопку «Скриншот»", "shot_tool": "Программа снимка",
@@ -166,6 +171,8 @@ STRINGS = {
         "whisper_model": "Model mowy", "whisper_device": "Urządzenie",
         "speech_note": "Większe modele są dokładniejsze i wolniejsze. Nowy model pobiera się przy pierwszym użyciu.",
         "gateway_url": "Adres bramki", "gateway_key": "Klucz API", "model_id": "Model",
+        "provider": "Dostawca", "provider_other": "Inny (własny adres)",
+        "cloud_note": "{name} dostaje Twoje CV, tekst ABOUT i każde pytanie przy każdym zapytaniu. Wpisz jego klucz API, wczytaj listę modeli i wybierz jeden.",
         "load_models": "Wczytaj modele", "test": "Sprawdź połączenie", "models_loaded": "Dostępne modele: {n}",
         "connected": "Połączono: modele {n}", "model_note": "Zostaw adres, klucz i model puste, aby użyć .env (SWITCHYARD_*) i automatycznego wyboru.",
         "shot_enabled": "Włącz przycisk zrzutu ekranu", "shot_tool": "Narzędzie zrzutu",
@@ -776,6 +783,11 @@ class SettingsDialog(QDialog):
         self.gateway_url = QLineEdit()
         self.gateway_key = QLineEdit()
         self.gateway_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.provider = QComboBox()
+        for provider in PROVIDERS:
+            self.provider.addItem(provider.label, provider.id)
+        self.provider.addItem("", OTHER)
+        self.provider_label = QLabel()
         self.model_id = QComboBox()
         self.model_id.setEditable(True)
         self.load_models = QPushButton()
@@ -784,6 +796,7 @@ class SettingsDialog(QDialog):
         model_row = QHBoxLayout()
         model_row.addWidget(self.model_id, 1)
         model_row.addWidget(self.load_models)
+        form.addRow(self.provider_label, self.provider)
         form.addRow(self.model_labels[0], self.gateway_url)
         form.addRow(self.model_labels[1], self.gateway_key)
         form.addRow(self.model_labels[2], model_row)
@@ -794,12 +807,48 @@ class SettingsDialog(QDialog):
         self.model_note = self._hint()
         outer.addWidget(self.model_note)
         outer.addStretch(1)
-        self.gateway_url.editingFinished.connect(lambda: self._set("gateway_url", self.gateway_url.text()))
+        self.gateway_url.editingFinished.connect(self._url_edited)
+        self.provider.activated.connect(lambda _i: self._choose_provider())
         self.gateway_key.editingFinished.connect(lambda: self._set("gateway_key", self.gateway_key.text()))
         self.model_id.lineEdit().editingFinished.connect(self._set_model)
         self.model_id.activated.connect(lambda _i: self._set_model())
         self.load_models.clicked.connect(self._load_models)
         self.test_gateway.clicked.connect(self._test_gateway)
+
+    def _url_edited(self) -> None:
+        self._set("gateway_url", self.gateway_url.text())
+        self._sync_provider()
+
+    def _choose_provider(self) -> None:
+        provider = next((p for p in PROVIDERS if p.id == self.provider.currentData()), None)
+        if provider is None:  # "other": type the address
+            self.gateway_url.setFocus()
+            self._show_provider_note()
+            return
+        if provider_for(self.rt.gateway()) != provider:
+            # A key and a model id belong to one provider: never send them to another.
+            with QSignalBlocker(self.gateway_key):
+                self.gateway_key.setText("")
+            self._set("gateway_key", "")
+            self._set("model", "")
+            with QSignalBlocker(self.model_id):
+                self.model_id.setCurrentText("auto")
+        with QSignalBlocker(self.gateway_url):
+            self.gateway_url.setText(provider.url)
+        self._set("gateway_url", provider.url)
+        self._sync_provider()
+
+    def _sync_provider(self) -> None:
+        """Show the preset the saved address belongs to, or "other"."""
+        provider = provider_for(self.rt.gateway())
+        with QSignalBlocker(self.provider):
+            self._select(self.provider, provider.id if provider else OTHER)
+        self._show_provider_note()
+
+    def _show_provider_note(self) -> None:
+        provider = provider_for(self.rt.gateway())
+        note = self.t("cloud_note", name=provider.label) if provider and provider.cloud else self.t("model_note")
+        self.model_note.setText(note)
 
     def _set_model(self) -> None:
         text = self.model_id.currentText().strip()
@@ -969,6 +1018,7 @@ class SettingsDialog(QDialog):
                 field.setText(value)
         with QSignalBlocker(self.model_id):
             self.model_id.setCurrentText(settings.model or "auto")
+        self._sync_provider()
 
     def retranslate(self) -> None:
         self.setWindowTitle(f"{self.t('title')} · CareerTwin")
@@ -1014,7 +1064,9 @@ class SettingsDialog(QDialog):
             label.setText(self.t(key))
         self.load_models.setText(self.t("load_models"))
         self.test_gateway.setText(self.t("test"))
-        self.model_note.setText(self.t("model_note"))
+        self.provider_label.setText(self.t("provider"))
+        self.provider.setItemText(self.provider.findData(OTHER), self.t("provider_other"))
+        self._show_provider_note()
         self.gateway_url.setPlaceholderText(self.rt.gateway())
         self.shot_enabled.setText(self.t("shot_enabled"))
         for label, key in zip(self.shot_labels, ("shot_tool", "shot_delay")):

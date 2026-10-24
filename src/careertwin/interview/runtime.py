@@ -32,6 +32,7 @@ from careertwin.interview.prepare import (
     parse_questions,
     questions_prompt,
 )
+from careertwin.interview.providers import base_url
 from careertwin.interview.session import INTERVIEWER, YOU, FrameSource, InterviewSession
 from careertwin.interview.settings import InterviewSettings
 from careertwin.interview.stt import WhisperTranscriber
@@ -171,7 +172,7 @@ class Runtime:
     # ---- gateway -----------------------------------------------------------
 
     def gateway(self) -> str:
-        return (self.settings.gateway_url or gateway_url()).rstrip("/")
+        return base_url(self.settings.gateway_url or gateway_url())
 
     def models(self) -> list[str]:
         """Model ids offered by the gateway; raises RuntimeError with a readable message."""

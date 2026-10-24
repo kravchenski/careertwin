@@ -197,6 +197,34 @@ def test_model_tab_saves_the_gateway_and_lists_models(gui):
     assert "Cannot reach" in gui.dialog.status.text()
 
 
+def test_provider_choice_fills_the_address_and_never_carries_a_key_to_another_provider(gui):
+    settings = gui.runtime.settings
+    gui.dialog.gateway_key.setText("groq-key")
+    gui.dialog.gateway_key.editingFinished.emit()
+    settings.set("model", "llama-x")
+    gui.choose(gui.dialog.provider, "openai")
+    assert settings.gateway_url == "https://api.openai.com"
+    assert settings.gateway_key == "" and settings.model == "" and gui.dialog.gateway_key.text() == ""
+    assert "OpenAI" in gui.dialog.model_note.text() and "CV" in gui.dialog.model_note.text()
+    gui.choose(gui.dialog.provider, "switchyard")
+    assert settings.gateway_url == "http://127.0.0.1:3260"
+    assert "OpenAI" not in gui.dialog.model_note.text()
+
+
+def test_the_provider_follows_the_address_that_is_typed(gui):
+    for text, expected in (
+        ("https://api.groq.com/openai/v1", "groq"),
+        ("http://localhost:11434/", "ollama"),
+        ("http://10.0.0.5:3260", "other"),
+    ):
+        gui.dialog.gateway_url.setText(text)
+        gui.dialog.gateway_url.editingFinished.emit()
+        assert gui.dialog.provider.currentData() == expected
+    gui.dialog.gateway_url.setText("https://api.groq.com/openai/v1")
+    gui.dialog.gateway_url.editingFinished.emit()
+    assert "Groq" in gui.dialog.model_note.text()
+
+
 def test_screenshot_tab_controls_the_button(gui, monkeypatch):
     assert gui.window.shot.isEnabled()
     gui.dialog.shot_enabled.setChecked(False)
