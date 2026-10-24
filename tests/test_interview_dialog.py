@@ -134,7 +134,7 @@ def test_language_tab_changes_the_interview_and_the_window(gui):
     gui.dialog.full_answer.setChecked(False)
     assert not gui.window.full_answer and not gui.window.details.isChecked()
     gui.dialog.full_answer.setChecked(True)
-    assert gui.window.full_answer and gui.window.act_full.isChecked() and gui.window.details.isChecked()
+    assert gui.window.full_answer and gui.window.details.isChecked()
     gui.choose(gui.dialog.ui_language, "pl")
     assert gui.window.ui == "pl" and gui.window.ask.title.text() == "Zapytaj" and gui.window.ui_locked
     gui.bridge.language.emit("en")
@@ -145,13 +145,26 @@ def test_language_tab_changes_the_interview_and_the_window(gui):
     assert gui.window.ui == "ru"
 
 
-def test_menu_quick_toggles_are_saved_too(gui):
-    gui.window.act_pin.setChecked(False)
-    gui.window.act_full.setChecked(True)
-    gui.window.language_actions["de"].trigger()
-    saved = InterviewSettings.load()
-    assert (saved.pinned, saved.show_full_answer, saved.language) == (False, True, "de")
-    assert gui.dialog is gui.window.settings_dialog
+def test_details_button_is_saved_and_the_menu_opens_settings(gui):
+    gui.window.details.setChecked(True)
+    assert InterviewSettings.load().show_full_answer is True
+    gui.window.act_settings.trigger()
+    assert gui.dialog is gui.window.settings_dialog and gui.dialog.isVisible()
+
+
+def test_the_menu_keeps_only_what_is_needed_in_a_call(gui):
+    names = [action.text() for action in gui.window.menu.actions() if not action.isSeparator()]
+    assert names == ["Settings…", "Interview", "Transcript", "Quit"]
+
+
+def test_buttons_show_the_ordinary_cursor_and_nothing_resizes_from_a_button(gui):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QSizeGrip, QWidget
+
+    for widget in gui.window.findChildren(QWidget):
+        assert widget.cursor().shape() != Qt.CursorShape.PointingHandCursor
+    assert not gui.window.findChildren(QSizeGrip)
+    assert not hasattr(gui.window, "get_answer")
 
 
 def test_audio_tab_lists_sources_and_applies_choices(gui, monkeypatch):
@@ -556,8 +569,7 @@ def test_details_are_translated_and_streamed_in_order(gui):
 
 def test_main_answer_layout_shows_only_the_paragraph_as_it_streams(gui):
     gui.runtime.update("answer_layout", "main")
-    assert gui.window.layout_mode == "main" and gui.window.act_main.isChecked()
-    assert not gui.window.details.isVisible() and not gui.window.act_full.isEnabled()
+    assert gui.window.layout_mode == "main" and not gui.window.details.isVisible()
     assert InterviewSettings.load().answer_layout == "main"
     gui.bridge.started.emit("How would you manage 30 hours with your studies?")
     gui.bridge.chunk.emit("ANSWER:\nMy studies leave weekdays free, so ")
@@ -585,16 +597,13 @@ def test_main_layout_survives_a_model_that_ignores_it(gui):
     assert "Just a sentence without markers." in gui.window.answer.toPlainText()
 
 
-def test_layout_can_be_switched_from_the_menu_shortcut_and_settings(gui):
-    gui.window.act_main.setChecked(True)
+def test_layout_is_switched_in_settings(gui):
+    gui.choose(gui.dialog.answer_layout, "main")
     assert gui.runtime.settings.answer_layout == "main" and gui.runtime.coach.layout == "main"
+    assert gui.window.layout_mode == "main" and not gui.window.details.isVisible()
     gui.choose(gui.dialog.answer_layout, "lines")
-    assert gui.window.layout_mode == "lines" and not gui.window.act_main.isChecked()
-    assert gui.window.details.isVisible() is True and gui.runtime.coach.layout == "lines"
-    gui.window.act_main.toggle()
-    assert gui.window.layout_mode == "main" and gui.dialog.answer_layout.currentData() == "lines"
-    gui.dialog.refresh()
-    assert gui.dialog.answer_layout.currentData() == "main"
+    assert gui.window.layout_mode == "lines" and gui.window.details.isVisible() is True
+    assert gui.runtime.coach.layout == "lines"
 
 
 def test_the_live_caption_shows_what_is_being_said_and_then_goes_away(gui):
@@ -605,3 +614,15 @@ def test_the_live_caption_shows_what_is_being_said_and_then_goes_away(gui):
     gui.bridge.partial.emit("")
     gui.process()
     assert not gui.window.heard.isVisible() and gui.window.heard.full == ""
+
+
+def test_only_a_press_on_the_border_resizes_the_window(gui):
+    from PySide6.QtCore import QPoint, Qt
+
+    window = gui.window
+    width, height = window.width(), window.height()
+    assert window._edges_at(QPoint(width // 2, height // 2)) == Qt.Edge(0)
+    assert window._edges_at(QPoint(2, height // 2)) == Qt.Edge.LeftEdge
+    assert window._edges_at(QPoint(width - 1, height // 2)) == Qt.Edge.RightEdge
+    assert window._edges_at(QPoint(width - 1, height - 1)) == Qt.Edge.RightEdge | Qt.Edge.BottomEdge
+    assert window._edges_at(QPoint(3, 3)) == Qt.Edge.LeftEdge | Qt.Edge.TopEdge

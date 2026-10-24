@@ -377,7 +377,7 @@ def test_overlay_renders_a_streamed_suggestion(monkeypatch):
     assert "Why us?" in window.transcript.toPlainText()
     plain = window.answer.toPlainText()
     assert "Why us?" in plain and "Real product" in plain and "Because of the product" not in plain
-    window.act_full.setChecked(True)
+    window.details.setChecked(True)
     assert "Because of the product." in window.answer.toPlainText()
     assert window.answer_text == "• Real product\n• Strong team\nBecause of the product."
     assert window.page.text() == "1/1"
@@ -396,10 +396,10 @@ def test_overlay_pages_through_answers_and_follows_the_interview_language(monkey
     from careertwin.interview.overlay import Bridge, OverlayWindow, create_app, render_bold
 
     app = create_app([])
-    bridge, picked = Bridge(), []
+    bridge = Bridge()
     window = OverlayWindow(
         bridge, on_ask=lambda _: None, on_hint=lambda: None, on_pause=lambda _: None,
-        on_language=picked.append, on_screenshot=None, ui_language="en",
+        on_screenshot=None, ui_language="en",
     )
     for number in (1, 2):
         bridge.started.emit(f"Question {number}")
@@ -413,11 +413,9 @@ def test_overlay_pages_through_answers_and_follows_the_interview_language(monkey
     assert not window.shot.isEnabled()
     bridge.language.emit("ru")
     app.processEvents()
-    assert window.ask.title.text() == "Спросить" and window.get_answer.text() == "Получить ответ"
+    assert window.ask.title.text() == "Спросить" and window.shot.title.text() == "Скриншот"
     bridge.language.emit("xx")
     assert window.ask.title.text() == "Ask"
-    window.language_actions["de"].trigger()
-    assert picked == ["de"]
     assert render_bold("a **b** <c> **d") == 'a <b style="color:#ffffff">b</b> &lt;c&gt; d'
     window.close()
 
