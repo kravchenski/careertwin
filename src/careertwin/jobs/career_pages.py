@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from careertwin.net import guard_page
+
 import logging
 import re
 from typing import Any
@@ -77,6 +79,7 @@ async def scrape_career_page(url: str, company_name: str = "") -> list[dict[str,
                 viewport={"width": 1280, "height": 800},
             )
             page = await context.new_page()
+            await guard_page(page)
 
             try:
                 await page.goto(url, wait_until="networkidle", timeout=25000)

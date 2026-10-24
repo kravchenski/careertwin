@@ -64,9 +64,11 @@ _TOKENS = [
     re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
 ]
+# No run in front of the keyword and a bounded one after it: the old form was quadratic on a long line of
+# dotted names (minified code, a lock file) and could hold the analysis for minutes.
 _ASSIGNED = re.compile(
-    r"(?i)\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|authorization|credential)[A-Za-z0-9_.-]*"
-    r"\s*[:=]\s*)([\"']?)[^\s\"',;)]{8,}\2"
+    r"(?i)((?:api[_-]?key|secret|token|passw(?:or)?d|authorization|credential)[A-Za-z0-9_.-]{0,40}"
+    r"\s{0,5}[:=]\s{0,5}(?:(?:bearer|basic|token)\s+)?)([\"']?)[^\s\"',;)]{8,}\2"
 )
 
 
@@ -117,8 +119,9 @@ def _git_files(root: Path) -> list[str] | None:
     """What git would show (tracked and untracked, minus ignored), or None outside a repository."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-            capture_output=True, timeout=20,
+            ["git", "-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}", "-c", "core.pager=cat",
+             "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            capture_output=True, timeout=20, env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"},
         )
     except (OSError, subprocess.SubprocessError):
         return None

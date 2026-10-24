@@ -191,3 +191,48 @@ async def fetch_text(
     finally:
         if owned:
             await client.aclose()
+
+
+def check_public_url(url: str) -> str:
+    """`validate_public_url` plus a DNS check: every address the name resolves to must be public.
+
+    For code that gives a URL to something other than our own client (a browser, a crawler, a CLI): they
+    resolve the name themselves, so this is the best check that can be made first, and a name that is
+    changed between the check and the visit can still slip through. The browsers are also guarded request
+    by request with `guard_page`."""
+    validate_public_url(url)
+    parts = urlparse(url.strip())
+    host = (parts.hostname or "").lower()
+    if _literal_ip(host) is None:
+        try:
+            found = socket.getaddrinfo(host, parts.port or (443 if parts.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        except OSError as error:
+            raise ValueError(f"{host} did not resolve") from error
+        try:
+            _check(host, [item[4][0] for item in found])
+        except UnsafeURL as error:
+            raise ValueError(str(error)) from error
+    return url
+
+
+async def acheck_public_url(url: str) -> str:
+    return await asyncio.to_thread(check_public_url, url)
+
+
+async def guard_page(target: Any) -> None:
+    """Make a Playwright page or context refuse every request to a non-public address, redirects and
+    subresources included (the first URL being fine says nothing about where a page sends the browser next)."""
+
+    async def handler(route: Any) -> None:
+        url = route.request.url
+        if url.split(":", 1)[0].lower() in {"data", "blob", "about"}:
+            await route.continue_()
+            return
+        try:
+            await acheck_public_url(url)
+        except (ValueError, OSError):
+            await route.abort("blockedbyclient")
+            return
+        await route.continue_()
+
+    await target.route("**/*", handler)

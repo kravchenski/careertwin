@@ -9,6 +9,7 @@ import sys
 
 import httpx
 
+from careertwin import vault
 from careertwin.interview import capture_exclude
 from careertwin.interview.audio import (
     AudioError,
@@ -186,6 +187,7 @@ def start_hotkey(bridge):
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    vault.private_umask()
     if args.list_sources:
         try:
             print("\n".join(list_sources()))

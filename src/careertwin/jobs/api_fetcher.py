@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 
+from careertwin.net import guard_page
 from careertwin.net import safe_async_client
 
 logger = logging.getLogger("careertwin.api")
@@ -84,6 +85,7 @@ async def _fetch_epam_job_description(url: str) -> str:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
             page = await browser.new_page()
+            await guard_page(page)
             try:
                 await page.goto(url, wait_until="networkidle", timeout=20000)
                 await page.wait_for_timeout(2000)

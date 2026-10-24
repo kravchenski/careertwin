@@ -31,7 +31,7 @@ _MID_TITLE_PATTERNS = [
 ]
 
 _YEARS_EXPERIENCE_RE = re.compile(
-    r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)\s*(?:of\s+)?(?:relevant\s+|professional\s+|work(?:ing)?\s+)?experience",
+    r"(\d{1,2})\s{0,5}\+?\s{0,5}(?:-\s{0,5}\d{1,2}\s{0,5})?(?:years?|yrs?)\s{0,5}(?:of\s+)?(?:relevant\s+|professional\s+|work(?:ing)?\s+)?experience",
     re.I,
 )
 _DEGREE_REQUIRED_RE = re.compile(

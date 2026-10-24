@@ -172,7 +172,7 @@ def is_question(text: str, language: str | None = None) -> bool:
     answered when the utterance has a question mark or is at least `FALLBACK_WORDS` words long, so a
     dialogue in it does not stay silent just because nobody wrote its question words yet.
     """
-    value = " ".join(text.split())
+    value = " ".join(text.split())[:2000]
     if len(value) < 5 or _SMALL_TALK.match(value):
         return False
     if any(mark in value for mark in QUESTION_MARKS) or _QUESTION_START.match(value):
@@ -183,7 +183,7 @@ def is_question(text: str, language: str | None = None) -> bool:
 
 
 def classify(text: str) -> Kind:
-    value = " ".join(text.split())
+    value = " ".join(text.split())[:2000]  # a spoken question is short; the cut keeps a hostile one cheap
     if _SMALL_TALK.match(value):
         return Kind.SMALL_TALK
     for kind, pattern in _PATTERNS:
