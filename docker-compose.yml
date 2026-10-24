@@ -4,13 +4,17 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     container_name: careertwin-backend
-    network_mode: host
+    network_mode: host  # the services below listen on 127.0.0.1 only
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./src:/app/src:ro
       - ./ABOUT.md:/app/ABOUT.md:rw
       - careertwin-data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - CAREERTWIN_API_TOKEN=${CAREERTWIN_API_TOKEN:-}
+      - VNC_PASSWORD=${VNC_PASSWORD:?set VNC_PASSWORD in .env: the browser desktop is protected by it}
       - CAREERTWIN_DB_PATH=/app/data/careertwin.db
       - OUTPUT_DIR=/app/data/outputs
       - CACHE_DIR=/app/data/cache

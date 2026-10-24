@@ -330,7 +330,8 @@ async def test_interview_routes(brief, monkeypatch):
         return "POINTS:\n- Built FastAPI services\nANSWER:\nI built FastAPI services."
 
     monkeypatch.setattr("careertwin.interview.coach.call_ai", fake_call_ai)
-    client = TestClient(app)
+    monkeypatch.setenv("CAREERTWIN_API_TOKEN", "t" * 40)
+    client = TestClient(app, base_url="http://localhost", headers={"Authorization": "Bearer " + "t" * 40})
     seen = []
     original = fake_call_ai
 
@@ -501,7 +502,8 @@ async def test_cv_review_route_and_tool(brief, monkeypatch, tmp_path):
         return json.dumps({"summary": "Good fit.", "strengths": ["FastAPI"], "gaps": [], "likely_questions": [], "cv_fixes": []})
 
     monkeypatch.setattr("careertwin.interview.coach.call_ai", fake_call_ai)
-    client = TestClient(app)
+    monkeypatch.setenv("CAREERTWIN_API_TOKEN", "t" * 40)
+    client = TestClient(app, base_url="http://localhost", headers={"Authorization": "Bearer " + "t" * 40})
     missing = client.post("/v1/interview/cv-review", json={"job_id": job["id"]})
     assert missing.status_code == 422 and "no prepared CV" in missing.json()["detail"]
     cv = tmp_path / "sent_cv.txt"

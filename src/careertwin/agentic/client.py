@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from careertwin.api.security import client_token
+
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 
 
@@ -39,9 +41,14 @@ class CareerTwinClient:
         timeout: float | None = None,
     ) -> Any:
         params = {k: v for k, v in (params or {}).items() if v is not None}
+        token = client_token()
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
             async with httpx.AsyncClient(
-                base_url=self.base_url, timeout=timeout or self.timeout, transport=self.transport
+                base_url=self.base_url,
+                timeout=timeout or self.timeout,
+                transport=self.transport,
+                headers=headers,
             ) as client:
                 response = await client.request(method, path, params=params, json=json)
         except httpx.ConnectError as exc:
@@ -50,6 +57,11 @@ class CareerTwinClient:
             ) from exc
         except httpx.HTTPError as exc:
             raise ApiError(f"{method} {path} failed: {type(exc).__name__}: {exc}") from exc
+        if response.status_code == 401:
+            raise ApiError(
+                "The API refused the token. Set CAREERTWIN_API_TOKEN to the server's token "
+                "(it is in data/api-token on the machine that runs the API)."
+            )
         if response.status_code >= 400:
             try:
                 detail = response.json().get("detail", response.text)

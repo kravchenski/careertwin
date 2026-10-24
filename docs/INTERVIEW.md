@@ -286,11 +286,11 @@ through XWayland where the hint is honoured.
 The Prepare tab does this in the window. The same coach is available to agents and over HTTP:
 
 ```bash
-curl -s localhost:8000/v1/interview/cv-review -H 'content-type: application/json' \
+curl -s localhost:8000/v1/interview/cv-review -H "Authorization: Bearer $(cat data/api-token)" -H 'content-type: application/json' \
   -d '{"job_id": "<vacancy id>", "language": "en"}'   # needs the vacancy's prepared CV
-curl -s localhost:8000/v1/interview/practice -H 'content-type: application/json' \
+curl -s localhost:8000/v1/interview/practice -H "Authorization: Bearer $(cat data/api-token)" -H 'content-type: application/json' \
   -d '{"job_id": "<vacancy id>", "count": 8, "language": "ru"}'
-curl -s localhost:8000/v1/interview/suggest -H 'content-type: application/json' \
+curl -s localhost:8000/v1/interview/suggest -H "Authorization: Bearer $(cat data/api-token)" -H 'content-type: application/json' \
   -d '{"question": "Tell me about a time you debugged production.", "language": "en"}'
 ```
 

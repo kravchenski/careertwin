@@ -2,8 +2,9 @@
 
 Four agents run the application workflow. You start and steer them through the
 HTTP API: directly with `curl`, through the tools in [AGENTS.md](AGENTS.md), or
-from your own code. Interactive docs are at `http://127.0.0.1:8000/docs` while
-the API runs.
+from your own code. Every route but `/v1/health` needs the API token (`Authorization: Bearer $(cat data/api-token)`, see
+[SECURITY.md](SECURITY.md)). Interactive docs at `/docs` are off unless you start the API with
+`CAREERTWIN_API_DOCS=1`.
 
 ## The four agents
 
@@ -69,9 +70,10 @@ All under `/v1/automation` unless noted.
 | `/v1/profile/*`, `/v1/studio/*`, `/v1/resume/*`, `/v1/applications` | Profile, Studio context, CV tailoring, manual tracking |
 
 ```bash
-curl -s localhost:8000/v1/automation/jobs | jq '.[].state'
-curl -s -X POST localhost:8000/v1/automation/run
-curl -s localhost:8000/v1/automation/export.xlsx -o applications.xlsx
+AUTH="Authorization: Bearer $(cat data/api-token)"
+curl -s -H "$AUTH" localhost:8000/v1/automation/jobs | jq '.[].state'
+curl -s -H "$AUTH" -X POST localhost:8000/v1/automation/run
+curl -s -H "$AUTH" localhost:8000/v1/automation/export.xlsx -o applications.xlsx
 ```
 
 ## Models
