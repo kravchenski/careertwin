@@ -48,6 +48,18 @@ The `careertwin*` commands live in the project's virtualenv: run them with `uv r
 Browser steps need the [Switchyard extension](https://github.com/kravchenski/switchyard-extension) in the
 Chrome you are signed in to. Python 3.14 and [uv](https://docs.astral.sh/uv/) are required.
 
+## Install as an app (CachyOS and other Arch-based systems)
+
+```bash
+./scripts/install.sh          # or: make install
+careertwin-interview          # from any directory, or open "CareerTwin Interview" in your launcher
+```
+
+This puts `careertwin-interview`, `careertwin` and `careertwin-mcp` in `~/.local/bin` and adds a launcher
+entry with an icon. The install is editable, so it runs the code of this checkout and a `git pull` takes
+effect at once; run the script again when dependencies change. `./scripts/uninstall.sh` removes it and
+keeps your data. It needs `uv` and `libpulse` (`parec`, `pactl`); `grim` is optional for screenshots.
+
 ## The three ways in
 
 | | Command | Guide |

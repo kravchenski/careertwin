@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>CareerTwin Interview</title>
+  <defs>
+    <clipPath id="you"><circle cx="102" cy="128" r="72"/></clipPath>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="#0f1016"/>
+  <circle cx="102" cy="128" r="72" fill="#ffb224"/>
+  <circle cx="154" cy="128" r="72" fill="#0f1016" clip-path="url(#you)"/>
+  <circle cx="154" cy="128" r="72" fill="none" stroke="#f5efe3" stroke-width="12"/>
+  <g fill="#ffb224">
+    <rect x="109" y="104" width="12" height="48" rx="6"/>
+    <rect x="127" y="82" width="12" height="92" rx="6"/>
+    <rect x="145" y="96" width="12" height="64" rx="6"/>
+    <rect x="163" y="112" width="12" height="32" rx="6"/>
+  </g>
+</svg>
