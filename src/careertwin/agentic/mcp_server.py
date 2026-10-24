@@ -40,7 +40,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--api-url", help="CareerTwin API base URL (CAREERTWIN_API_URL)")
+    parser.add_argument("--list", action="store_true", help="Print the tools and exit")
     args = parser.parse_args(argv)
+    if args.list:
+        for item in all_tools():
+            kind = "employer" if item.outward else "local" if item.mutating else "read"
+            print(f"{item.name:<28}{kind:<10}{item.summary}")
+        return
     if args.api_url:
         import os
 

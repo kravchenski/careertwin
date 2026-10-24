@@ -384,3 +384,17 @@ def test_whisper_falls_back_to_cpu_when_gpu_libraries_are_missing():
     other._model = type("M", (), {"transcribe": lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))})()
     with pytest.raises(RuntimeError, match="boom"):
         other.transcribe(np.zeros(1600, dtype=np.int16))
+
+
+def test_vocabulary_combines_vacancy_and_skills():
+    brief = InterviewBrief(
+        candidate="## Skills\n\n- Professional: Python, FastAPI, GitHub Actions, Linux.\n"
+        "- Coursework only: Kubernetes (a lab cluster).\n\n## Education\n- BSc\n",
+        job_title="Backend Developer",
+        company="Example Corp",
+        job_description="You will use PostgreSQL daily.",
+    )
+    words = brief.vocabulary().split(", ")
+    assert {"Example Corp", "PostgreSQL", "FastAPI", "GitHub Actions", "Kubernetes"} <= set(words)
+    assert "BSc" not in words
+    assert InterviewBrief(candidate="no skills section").vocabulary() == ""

@@ -20,6 +20,7 @@ class AgentTool:
     fn: ToolFn
     mutating: bool = False
     outward: bool = False
+    summary: str = ""
     impl: _SchemaTool | None = None
 
     async def call(self, arguments: dict[str, Any]) -> Any:
@@ -31,11 +32,14 @@ class AgentTool:
 _REGISTRY: dict[str, AgentTool] = {}
 
 
-def tool(*, mutating: bool = False, outward: bool = False) -> Callable[[ToolFn], ToolFn]:
+def tool(
+    summary: str, *, mutating: bool = False, outward: bool = False
+) -> Callable[[ToolFn], ToolFn]:
     """Register an async function as an agent tool.
 
-    `mutating` tools change local CareerTwin state. `outward` tools act on a
-    third party (an application form) and are blocked unless explicitly allowed.
+    `summary` is the one-line label shown in listings. `mutating` tools change local
+    CareerTwin state. `outward` tools act on a third party (an application form) and are
+    blocked unless explicitly allowed.
     """
 
     def decorate(fn: ToolFn) -> ToolFn:
@@ -48,6 +52,7 @@ def tool(*, mutating: bool = False, outward: bool = False) -> Callable[[ToolFn],
             impl=schema,
             mutating=mutating,
             outward=outward,
+            summary=summary,
         )
         return fn
 

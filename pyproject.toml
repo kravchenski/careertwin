@@ -26,6 +26,7 @@ dependencies = [
     "crawl4ai>=0.4",
     "openpyxl>=3.1",
     "mcp>=1.12,<2",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

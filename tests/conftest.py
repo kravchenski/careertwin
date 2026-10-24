@@ -1,6 +1,9 @@
 """Shared test fixtures."""
 
+import os
 from pathlib import Path
+
+os.environ["CAREERTWIN_NO_DOTENV"] = "1"
 
 import pytest
 

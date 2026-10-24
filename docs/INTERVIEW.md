@@ -22,7 +22,9 @@ uv run careertwin-interview --doctor
 uv run careertwin-interview --job <vacancy id | description.txt | https://…>
 ```
 
-`--doctor` checks Qt, Whisper, PipeWire, Switchyard and your `ABOUT.md`. Start
+The commands live in the project's virtualenv, not on your `PATH`: run them with `uv run`, or
+`source .venv/bin/activate` (`activate.fish` in fish) first. `--doctor` checks Qt, Whisper,
+PipeWire, Switchyard and your `ABOUT.md`. Start
 the interview app before the call, join the call, and speak English, Russian,
 Polish or anything else Whisper knows.
 
