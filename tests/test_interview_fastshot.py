@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import socket
@@ -169,7 +168,7 @@ def test_the_screenshot_request_is_lean_and_goes_to_the_vision_model(brief):
     body = json.loads(requests[0].content)
     assert body["model"] == "fast-vision" and body["stream"] is True and body["max_tokens"] == SCREENSHOT_MAX_TOKENS >= 3000
     system, user = body["messages"]
-    assert system["content"] == SCREENSHOT_SYSTEM and len(system["content"]) < len(SYSTEM) / 3
+    assert system["content"] == SCREENSHOT_SYSTEM and len(system["content"]) < len(SYSTEM) / 2
     text, image = user["content"]
     assert image["image_url"]["url"] == "data:image/jpeg;base64,QUJD"
     assert "Java, Python, TypeScript" in text["text"] and "CANDIDATE STACK" in text["text"]

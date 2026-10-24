@@ -159,10 +159,34 @@ writes just one paragraph to read aloud and it starts at once, so it is also the
 In the default *lines* layout the first thing you see is the lines to say, with key terms in bold; they stream in within a few
 seconds. Under them the **detailed answer** follows as the rest arrives, in three parts: the *main
 answer* (a paragraph), *key points* (a term in bold and one sentence each) and *practical context*
-(where it is used, or how it applies to this vacancy and your real work). It is on by default; the
+(where it is used, or how it applies to this vacancy and your real work). A technical question adds a
+fourth part, the *likely next questions* with a one-sentence answer to each. It is on by default; the
 **Details** button or `Ctrl D` hides it, and the *Concise* answer style skips it altogether for the
 fastest replies. The window scrolls when the answer is long.
 `Ctrl P` pauses. Questions are recognised automatically (debounced, split questions merged).
+
+## Technical questions
+
+A technical question (a concept, a design, a slow endpoint, a function to write) is answered in the shape that fits it,
+chosen by the model from the wording, in any language:
+
+| Question | The lines to say |
+|---|---|
+| Concept, "X vs Y" | the definition, how it works, when to use each, the main trade-off |
+| "How would you design…" | the assumptions (scale, latency, consistency), the components and data flow, the key decision and its alternative, where it breaks and how you would measure it |
+| "It is slow / broken" | reproduce and measure, form a hypothesis, narrow it down, fix the cause, prevent a repeat |
+| "Write / implement…" | the approach, time and space complexity, edge cases; the code in the answer |
+| "Why X rather than Y" | the criteria, the choice, what you give up |
+
+What is said about the technology is general knowledge and is worded as such: the assistant does not claim that you
+built, used or measured anything unless your `ABOUT.md` or CV says so, and the one line that ties the answer to you
+only names a technology that is written there. When the model is unsure of a version or a detail it says so rather
+than guess. The *likely next questions* in the detailed answer are what an interviewer usually asks after this one,
+each with a one-sentence answer, so a follow-up does not catch you without a line to say.
+
+A screenshot is answered by the kind of task it shows: a multiple-choice question gets the option and the reason, "what
+does this print" the traced output, SQL one query, a bug the corrected code, a design question a few spoken sentences.
+Model answers to a trap question can still be wrong, so read the result before you say it.
 
 ## Defending a project
 

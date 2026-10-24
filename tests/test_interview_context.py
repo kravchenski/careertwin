@@ -369,6 +369,7 @@ def test_replies_split_into_points_answer_key_and_context():
         "answer": "React is a library.",
         "key_points": ["Components: reusable UI units", "Virtual DOM: batches updates"],
         "context": "Used for SPAs and React Native.",
+        "follow_ups": [],
     }
     assert sections("POINTS:\n- **Py** a\n- **Do").points == ["**Py** a", "**Do"]
     assert not sections("POINTS:\n- x").has_details

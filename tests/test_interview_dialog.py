@@ -616,6 +616,19 @@ def test_detailed_answer_shows_main_answer_key_points_and_context(gui):
     assert "Practical context" in gui.window.answer.toPlainText()
 
 
+def test_the_likely_next_questions_follow_the_detailed_answer(gui):
+    gui.bridge.started.emit("What is React?")
+    gui.bridge.done.emit(REPLY + "\nNEXT:\n- Why a virtual DOM? - It batches updates.")
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    assert text.index("Practical context") < text.index("Likely next questions") < text.index("Why a virtual DOM?")
+    assert "→ Why a virtual DOM? - It batches updates." in gui.window.answer_text
+
+    gui.window.details.setChecked(False)
+    assert "Likely next questions" not in gui.window.answer.toPlainText()
+    assert "Why a virtual DOM?" not in gui.window.answer_text
+
+
 def test_details_are_translated_and_streamed_in_order(gui):
     gui.runtime.update("ui_language", "ru")
     gui.bridge.started.emit("Что такое React?")

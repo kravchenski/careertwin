@@ -84,8 +84,13 @@ what *you* could say, line by line, built only from your `ABOUT.md`, the CV you 
 - **Hears the call, locally.** Voice-activity detection and Whisper run on your machine (the GPU when there is
   one); Deepgram is an opt-in cloud alternative. Questions are recognised in seven languages even when the
   transcript has no question mark, and other languages are answered too.
+- **Answers technical questions the way an engineer would.** A concept, a design, a slow endpoint or a function to
+  write each gets its own shape: definition and trade-off, assumptions and bottleneck, reproduce-measure-narrow-fix,
+  approach with complexity and then the code. General knowledge is never passed off as your experience, and the
+  detailed answer ends with the questions the interviewer will probably ask next.
 - **Solves what is on the screen.** Press `Ctrl+Shift+Enter` (a key bound in your compositor on Linux, built in on
-  Windows) and the window answers the task you are looking at: the approach in a few lines and the solution as code.
+  Windows) and the window answers the task you are looking at: the approach in a few lines and the solution as code;
+  for a multiple-choice quiz the right option, for "what does this print" the traced output, for a bug the fixed code.
 
   <p align="center"><img src="docs/media/interview-code.png" alt="A screenshot answer: three lines of approach and a syntax-highlighted Python solution" width="560"></p>
 
