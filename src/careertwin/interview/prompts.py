@@ -231,8 +231,24 @@ def _bullets(block: str) -> list[str]:
     return items
 
 
+_PARTIAL_MARKERS = {
+    word[:size].lower()
+    for word in ("POINTS", "ANSWER", "KEY", "CONTEXT")
+    for size in range(1, len(word) + 1)
+}
+
+
+def _without_partial_marker(text: str) -> str:
+    """A heading that is still streaming ("ANSW") is not a line of the reply: leave it out for now."""
+    head, newline, last = text.rpartition("\n")
+    if newline and last.strip().strip("*").lower() in _PARTIAL_MARKERS and not _BULLET.match(last):
+        return head
+    return text
+
+
 def sections(text: str) -> Sections:
     """Split a reply into POINTS, ANSWER, KEY and CONTEXT; text without markers is the answer."""
+    text = _without_partial_marker(text)
     found = list(_MARKER.finditer(text))
     if not found:
         return Sections(answer=text.strip())
