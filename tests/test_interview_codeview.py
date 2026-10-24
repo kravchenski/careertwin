@@ -39,13 +39,13 @@ def test_python_gets_keywords_strings_comments_decorators_and_numbers_coloured()
 def test_floor_division_and_hash_inside_a_string_are_not_comments_in_python():
     out = highlight('x = 7 // 2\ny = "a # b"', "python")
     assert out.count(f'color:{COLOURS["comment"]}') == 0
-    assert f">&quot;a # b&quot;</span>" in out
+    assert ">&quot;a # b&quot;</span>" in out
 
 
 def test_c_like_languages_colour_slash_comments_and_template_strings():
     out = highlight("const url = `/api/${id}`; // fetch it\n/* block */ function go() { return null; }", "js")
-    assert f">// fetch it</span>" in out and f">/* block */</span>" in out
-    assert f">`/api/${{id}}`</span>" in out
+    assert ">// fetch it</span>" in out and ">/* block */</span>" in out
+    assert ">`/api/${id}`</span>" in out
     assert f'color:{COLOURS["keyword"]}">const</span>' in out and f'color:{COLOURS["keyword"]}">null</span>' in out
 
 
@@ -53,7 +53,7 @@ def test_sql_keywords_are_recognised_in_any_case():
     out = highlight("select name from books where price > 10 -- cheap", "sql")
     for word in ("select", "from", "where"):
         assert f'color:{COLOURS["keyword"]}">{word}</span>' in out
-    assert f">-- cheap</span>" in out
+    assert ">-- cheap</span>" in out
 
 
 def test_unknown_text_is_only_escaped_and_cannot_break_out_of_its_block():

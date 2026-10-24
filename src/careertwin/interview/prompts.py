@@ -97,6 +97,12 @@ Rules
 - Read the task carefully: the constraints, the examples, the signature and the language the task \
 names or the editor shows. Use the CANDIDATE STACK only when the screen names no language.
 - Correct first, then efficient. Check the examples on the screen in your head before you answer.
+- By kind of screen. Multiple choice: POINTS give the right option letter and the reason, ANSWER is \
+one sentence. "What does this print or return": ANSWER is the exact output; first follow the code \
+statement by statement, remembering that all arguments of a call are evaluated before the call runs \
+and that mutable objects are shared by reference. SQL: one fenced sql block, no complexity line. \
+A bug to find: POINTS name the bug in one line, ANSWER is the corrected code in a fenced block. \
+Design or theory: ANSWER is three or four sentences to read aloud.
 - Never think aloud: no discussion, no "let me try" and no comments in the code except the one \
 complexity line. Work the problem out before you write, then write only the solution. If the task is \
 hard, give the best working solution you can; never end with doubts.
@@ -104,6 +110,40 @@ hard, give the best working solution you can; never end with doubts.
 prose are written in the interview language.
 - If the screenshot shows no task or question, write one POINTS bullet that says so.
 """
+
+GENERAL_KNOWLEDGE = (
+    "This is general knowledge: state it as a fact about the technology. Say nothing the candidate "
+    "did (no \"I built, used, debugged, monitored, validated\") in POINTS, ANSWER, KEY or CONTEXT, "
+    "even as an example. The only link to the candidate is the last line of POINTS, and only when "
+    "the technology itself is named in CANDIDATE CONTEXT: then \"I work with <technology>\" or the "
+    "exact fact written there. If it is not named there, the candidate appears nowhere. CONTEXT says "
+    "where this is used in practice in general, never what the candidate did."
+)
+
+NEXT_HINT = (
+    "After CONTEXT add NEXT: one or two questions the interviewer will probably ask next, each line "
+    "\"question - the answer in one sentence\". Skip NEXT when ANSWER STYLE is concise or ANSWER "
+    "LAYOUT is main answer only."
+)
+
+TECHNICAL_PLAYBOOK = (
+    "Technical question. Pick the shape that fits and write it as speech, with no opener such as "
+    "\"Sure\" or \"Here is\":\n"
+    "- Concept or difference (what is X, X vs Y): one-sentence definition, how it works, when to use "
+    "each, the main trade-off or pitfall.\n"
+    "- Design (how would you design or build X): the assumption you make (scale, latency, "
+    "consistency), the main components and the data flow, the key decision with its alternative "
+    "and why, where it breaks and how you would measure it.\n"
+    "- Troubleshooting (slow, broken, flaky): reproduce and measure first, form a hypothesis, narrow "
+    "it down (logs, metrics, profiler, query plan), fix the cause, prevent a repeat.\n"
+    "- Coding (write, implement, fix): POINTS say the approach, the time and space complexity and "
+    "the edge cases; ANSWER is one fenced code block with the signature the task names, then one "
+    "sentence on how it works.\n"
+    "- Choice (why X, which would you use): the criteria, the option, what you give up.\n"
+    "Be exact: real names, numbers, complexity, defaults. \"It depends\" only with what it depends "
+    "on. If you are unsure of a version or a detail, say so instead of guessing. " + GENERAL_KNOWLEDGE + "\n"
+    + NEXT_HINT
+)
 
 KIND_HINTS = {
     Kind.INTRO: "Self-introduction: the lines to say are present, past, why this role. Under a minute.",
@@ -118,9 +158,9 @@ KIND_HINTS = {
     Kind.CANDIDATE_QUESTIONS: "Write two sharp questions the candidate can ask, as spoken.",
     Kind.DEFINITION: (
         "Definition: line one defines it in a sentence, then key properties, typical uses and the "
-        "main trade-off. No greeting and no personal story except, at most, a closing line."
+        "main trade-off. No greeting and no personal story. " + GENERAL_KNOWLEDGE + "\n" + NEXT_HINT
     ),
-    Kind.TECHNICAL: "Technical: say a precise, concrete answer and mention a trade-off.",
+    Kind.TECHNICAL: TECHNICAL_PLAYBOOK,
     Kind.SMALL_TALK: "Small talk: say the greeting or reply itself, then who you are, then invite the first question.",
 }
 
@@ -188,10 +228,11 @@ class Sections:
     answer: str = ""
     key: list[str] = field(default_factory=list)
     context: str = ""
+    follow_ups: list[str] = field(default_factory=list)  # NEXT: what the interviewer will probably ask next
 
     @property
     def has_details(self) -> bool:
-        return bool(self.answer or self.key or self.context)
+        return bool(self.answer or self.key or self.context or self.follow_ups)
 
 
 @dataclass
@@ -206,11 +247,12 @@ class Suggestion(Sections):
             "answer": self.answer,
             "key_points": [plain(line) for line in self.key],
             "context": self.context,
+            "follow_ups": [plain(line) for line in self.follow_ups],
         }
 
 
 _BULLET = re.compile(r"^\s*(?:[-•]|\*(?!\*)|\d+[.)])\s*")
-_MARKER = re.compile(r"^[ \t]*(?:\*\*)?(POINTS|ANSWER|KEY|CONTEXT)(?:\*\*)?[ \t]*:(?:\*\*)?", re.I | re.M)
+_MARKER = re.compile(r"^[ \t]*(?:\*\*)?(POINTS|ANSWER|KEY|CONTEXT|(?-i:NEXT))(?:\*\*)?[ \t]*:(?:\*\*)?", re.I | re.M)
 
 
 def _bullets(block: str) -> list[str]:
@@ -233,7 +275,7 @@ def _bullets(block: str) -> list[str]:
 
 _PARTIAL_MARKERS = {
     word[:size].lower()
-    for word in ("POINTS", "ANSWER", "KEY", "CONTEXT")
+    for word in ("POINTS", "ANSWER", "KEY", "CONTEXT", "NEXT")
     for size in range(1, len(word) + 1)
 }
 
@@ -265,13 +307,14 @@ def sections(text: str) -> Sections:
         answer=answer,
         key=_bullets(blocks.get("KEY", "")),
         context=blocks.get("CONTEXT", ""),
+        follow_ups=_bullets(blocks.get("NEXT", "")),
     )
 
 
 def parse_suggestion(text: str) -> Suggestion:
     raw = text.strip()
     parts = sections(raw)
-    return Suggestion(parts.points, parts.answer, parts.key, parts.context, raw)
+    return Suggestion(parts.points, parts.answer, parts.key, parts.context, parts.follow_ups, raw)
 
 
 def split_partial(text: str) -> tuple[list[str], str]:

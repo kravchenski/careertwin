@@ -933,6 +933,7 @@ class OverlayWindow(QWidget):
             lines += [unfence(line) if line.lstrip().startswith("```") else f"• {plain(line)}" for line in parts.key]
             if parts.context:
                 lines.append(parts.context)
+            lines += [f"→ {plain(line)}" for line in parts.follow_ups]
         return "\n".join(lines)
 
     def _details_html(self, found, px) -> str:
@@ -949,6 +950,8 @@ class OverlayWindow(QWidget):
             parts += [heading(16, self.tr_("details_key")), render_items(found.key, body, px(14))]
         if found.context:
             parts += [heading(16, self.tr_("details_context")), render_answer(found.context, body, px(14))]
+        if found.follow_ups:
+            parts += [heading(16, self.tr_("details_next")), render_items(found.follow_ups, body, px(14))]
         return "".join(parts)
 
     def _render(self) -> None:
@@ -1006,7 +1009,7 @@ class OverlayWindow(QWidget):
             # Code, or what the screen asked for, is the solution itself: show it under the lines,
             # not behind Details; the key points and context may still follow.
             parts.append(render_answer(spoken, f"font-size:{px(16)}px; color:{TEXT}", px(15)))
-            if self.full_answer and points and (found.key or found.context):
+            if self.full_answer and points and (found.key or found.context or found.follow_ups):
                 parts.append(self._details_html(replace(found, answer=""), px))
         elif self.full_answer and found.has_details:
             parts.append(self._details_html(found, px))

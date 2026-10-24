@@ -3,7 +3,7 @@
 
 Usage: uv run --extra interview python scripts/render_docs_media.py [output folder, default docs/media]
 
-Writes interview-overlay.png, interview-code.png, interview-settings.png, interview-project.png and
+Writes interview-overlay.png, interview-code.png, interview-technical.png, interview-settings.png, interview-project.png and
 interview-languages.png. The demo video is made by scripts/demo/record.py.
 """
 
@@ -47,6 +47,7 @@ def main(out: str = "docs/media") -> None:
     folder.mkdir(parents=True, exist_ok=True)
     run("render_overlay_preview.py", str(folder / "interview-overlay.png"), "en", "answer")
     run("render_overlay_preview.py", str(folder / "interview-code.png"), "en", "code")
+    run("render_overlay_preview.py", str(folder / "interview-technical.png"), "en", "technical")
     run("render_settings_preview.py", str(folder / "interview-settings.png"), "interview", "en")
     run("render_settings_preview.py", str(folder / "interview-project.png"), "project", "en")
     with tempfile.TemporaryDirectory() as work:
