@@ -232,6 +232,7 @@ strings! {
     Engine => ("Engine", "Движок"),
     EngineHttp => ("Cloud or local server", "Облако или локальный сервер"),
     EngineLocal => ("In this program (offline)", "В этой программе (офлайн)"),
+    EngineLocalVoice => ("In this program (offline, English)", "В этой программе (офлайн, английский)"),
     EngineOff => ("Off (the interviewer only writes)", "Выкл. (интервьюер только пишет)"),
     EngineOpenai => ("OpenAI-style speech address", "Адрес речи в стиле OpenAI"),
     EngineEleven => ("ElevenLabs", "ElevenLabs"),
@@ -248,6 +249,33 @@ strings! {
         "Cloud engines receive what they speak or hear. Use a local address to keep it on this computer.",
         "Облачные движки получают то, что произносят или слышат. Локальный адрес оставляет всё на этом компьютере."
     ),
+    SecOffline => ("Offline on this computer", "Автономно на этом компьютере"),
+    OfflineHardware => ("{ram} GB of memory, {cores} cores{gpu}", "Памяти: {ram} ГБ, ядер: {cores}{gpu}"),
+    OfflineGpu => (", NVIDIA GPU", ", видеокарта NVIDIA"),
+    OfflineHearing => ("Hearing: {model} ({size} MB)", "Слух: {model} ({size} МБ)"),
+    OfflineInterviewer => (
+        "Interviewer: ollama pull {tag} (about {size} GB), then choose Ollama above",
+        "Интервьюер: ollama pull {tag} (около {size} ГБ), затем выберите Ollama выше"
+    ),
+    OfflineWeak => (
+        "This much memory is too little for an interviewer that follows up well: use a cloud model for it and keep hearing and voice offline.",
+        "Для интервьюера, который хорошо уточняет, этой памяти мало: берите облачную модель, а слух и голос оставьте автономными."
+    ),
+    OfflineNotBuilt => (
+        "This build has no offline engines. Install without LIGHT=1 to get them.",
+        "В этой сборке нет автономных движков. Установите без LIGHT=1, чтобы они появились."
+    ),
+    OfflineModel => ("Hearing model", "Модель слуха"),
+    OfflineVoiceName => ("Voice", "Голос"),
+    OfflineVoiceNote => (
+        "The offline voice speaks English only. Russian prompts need a voice server or the cloud.",
+        "Автономный голос говорит только по-английски. Для русского нужен голосовой сервер или облако."
+    ),
+    Recommended => ("recommended", "рекомендуется"),
+    UseModel => ("Use {tag}", "Взять {tag}"),
+    Downloading => ("Downloading {name}… {percent}%", "Скачиваю {name}… {percent}%"),
+    DownloadFailed => ("Could not download {name}: {why}", "Не удалось скачать {name}: {why}"),
+    ModelsNotReady => ("The offline models are still downloading.", "Автономные модели ещё скачиваются."),
     SaveSettings => ("Save", "Сохранить"),
     Cancel => ("Cancel", "Отмена"),
     Saved => ("Saved", "Сохранено"),

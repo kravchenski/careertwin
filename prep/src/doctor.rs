@@ -48,7 +48,7 @@ pub async fn run(settings: &Settings, paths: &Paths, options: &Options) -> Vec<C
     let mut checks = vec![settings_check(paths)];
     checks.push(profile_check(&effective));
     checks.push(model_check(&effective).await);
-    checks.push(recognition_check(&effective, options.probes).await);
+    checks.push(recognition_check(&effective, paths, options.probes).await);
     checks.push(voice_check(&effective, paths, options.probes).await);
     if options.devices {
         checks.push(microphone_check(&effective.audio.input_device).await);
@@ -102,20 +102,34 @@ async fn model_check(settings: &Settings) -> Check {
     }
 }
 
-async fn recognition_check(settings: &Settings, probe: bool) -> Check {
-    if settings.stt.engine == SttEngine::Local {
-        return Check::fail("recognition", "offline recognition needs a build with the local-stt feature");
+/// What the recogniser is, in words: an address for a server, a model name for the offline one.
+fn recognition_name(settings: &Settings) -> String {
+    match settings.stt.engine {
+        SttEngine::Http => format!("{} ({})", settings.stt.url, settings.stt.model),
+        SttEngine::Local => format!("offline {}", crate::speech::local_stt_model(settings).label),
     }
-    let stt = match speech::build_stt(settings) {
+}
+
+/// What the voice is, in words.
+fn voice_name(settings: &Settings) -> String {
+    match settings.tts.engine {
+        TtsEngine::Openai | TtsEngine::Elevenlabs => format!("{} ({})", settings.tts.url, settings.tts.model),
+        TtsEngine::Local => format!("offline Kokoro, voice {}", settings.tts.voice_en),
+        TtsEngine::Off => "off".to_owned(),
+    }
+}
+
+async fn recognition_check(settings: &Settings, paths: &Paths, probe: bool) -> Check {
+    let stt = match speech::build_stt(settings, paths) {
         Ok(stt) => stt,
         Err(error) => return Check::fail("recognition", error.to_string()),
     };
     if !probe {
-        return Check::pass("recognition", format!("{} (not tried)", settings.stt.url));
+        return Check::pass("recognition", format!("{} (not tried)", recognition_name(settings)));
     }
     // a second of silence: nothing is understood, but the address, the key and the model are all used
     match stt.transcribe(vec![0i16; 16_000], SttHint::default()).await {
-        Ok(_) => Check::pass("recognition", format!("{} answers ({})", settings.stt.url, settings.stt.model)),
+        Ok(_) => Check::pass("recognition", format!("{} answers", recognition_name(settings))),
         Err(error) => Check::fail("recognition", error.to_string()),
     }
 }
@@ -130,13 +144,10 @@ async fn voice_check(settings: &Settings, paths: &Paths, probe: bool) -> Check {
         Err(error) => return Check::fail("voice", error.to_string()),
     };
     if !probe {
-        return Check::pass("voice", format!("{} (not tried)", settings.tts.url));
+        return Check::pass("voice", format!("{} (not tried)", voice_name(settings)));
     }
     match tts.synthesize("Ready.".into(), speech::voice_for(settings, crate::prompts::Lang::En)).await {
-        Ok(speech) => Check::pass(
-            "voice",
-            format!("{} spoke {:.1} s ({})", settings.tts.url, speech.seconds(), settings.tts.model),
-        ),
+        Ok(speech) => Check::pass("voice", format!("{} spoke {:.1} s", voice_name(settings), speech.seconds())),
         Err(error) => Check::fail("voice", error.to_string()),
     }
 }
@@ -303,6 +314,26 @@ mod tests {
         assert!(checks.iter().find(|c| c.name == "voice").unwrap().ok);
         let report = checks.iter().map(Check::line).collect::<Vec<_>>().join("\n");
         assert!(!report.contains("gsk_test_1234567890") && !report.contains("sk-test-1234567890"), "{report}");
+    }
+
+    #[test]
+    fn the_report_names_the_engine_that_was_really_used() {
+        let mut settings = Settings::default();
+        settings.stt.url = "https://api.groq.com/openai".into();
+        assert!(
+            recognition_name(&settings).contains("api.groq.com")
+                && recognition_name(&settings).contains("whisper-large-v3-turbo")
+        );
+        assert!(voice_name(&settings).contains("api.openai.com"));
+        settings.stt.engine = SttEngine::Local;
+        settings.stt.local_model = "small".into();
+        settings.tts.engine = TtsEngine::Local;
+        settings.tts.voice_en = "af_heart".into();
+        assert_eq!(recognition_name(&settings), "offline Whisper small");
+        assert_eq!(voice_name(&settings), "offline Kokoro, voice af_heart");
+        assert!(!recognition_name(&settings).contains("groq") && !voice_name(&settings).contains("openai"));
+        settings.tts.engine = TtsEngine::Off;
+        assert_eq!(voice_name(&settings), "off");
     }
 
     #[test]

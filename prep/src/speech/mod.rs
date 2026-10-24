@@ -1,13 +1,20 @@
 //! Speech in and out: recognising what you say and giving the interviewer a voice.
 
 pub mod cache;
+pub mod download;
 pub mod stt;
+#[cfg(feature = "local-stt")]
+pub mod stt_local;
 pub mod tts;
+#[cfg(feature = "local-tts")]
+pub mod tts_local;
 pub mod wav;
 
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
+#[cfg(not(all(feature = "local-stt", feature = "local-tts")))]
+use anyhow::bail;
 use futures_util::future::BoxFuture;
 use thiserror::Error;
 
@@ -71,11 +78,39 @@ pub trait Tts: Send + Sync {
     fn id(&self) -> String;
 }
 
+/// The Whisper model the offline engine uses: the one chosen, or the one that suits this computer.
+pub fn local_stt_model(settings: &Settings) -> &'static crate::models::SttModel {
+    crate::models::stt_model(&settings.stt.local_model)
+        .unwrap_or_else(|| crate::models::recommend(&crate::models::Hardware::detect()).stt)
+}
+
+/// Where the offline Whisper model lives.
+pub fn local_stt_path(settings: &Settings, paths: &Paths) -> std::path::PathBuf {
+    local_stt_model(settings).path_in(&paths.models_dir())
+}
+
+/// Where the offline voice lives.
+pub fn local_tts_folder(paths: &Paths) -> std::path::PathBuf {
+    paths.models_dir().join("kokoro")
+}
+
 /// The recogniser the settings ask for.
-pub fn build_stt(settings: &Settings) -> Result<Arc<dyn Stt>> {
+pub fn build_stt(settings: &Settings, paths: &Paths) -> Result<Arc<dyn Stt>> {
     match settings.stt.engine {
         SttEngine::Http => Ok(Arc::new(stt::HttpStt::new(&settings.stt, settings.secrets())?)),
-        SttEngine::Local => bail!("offline recognition needs a build with the local-stt feature"),
+        #[cfg(feature = "local-stt")]
+        SttEngine::Local => {
+            let language = match settings.stt.language.as_str() {
+                "" | "auto" => None,
+                other => Some(other.to_owned()),
+            };
+            Ok(Arc::new(stt_local::LocalStt::new(local_stt_path(settings, paths), language)))
+        }
+        #[cfg(not(feature = "local-stt"))]
+        SttEngine::Local => {
+            let _ = paths;
+            bail!("offline recognition needs a build with the local-stt feature")
+        }
     }
 }
 
@@ -86,6 +121,10 @@ pub fn build_tts(settings: &Settings, paths: &Paths) -> Result<Option<Arc<dyn Tt
         TtsEngine::Off => return Ok(None),
         TtsEngine::Openai => Arc::new(tts::OpenAiTts::new(&settings.tts, settings.secrets())?),
         TtsEngine::Elevenlabs => Arc::new(tts::ElevenTts::new(&settings.tts, settings.secrets())?),
+        #[cfg(feature = "local-tts")]
+        TtsEngine::Local => Arc::new(tts_local::LocalTts::new(local_tts_folder(paths))),
+        #[cfg(not(feature = "local-tts"))]
+        TtsEngine::Local => bail!("the offline voice needs a build with the local-tts feature"),
     };
     Ok(Some(Arc::new(cache::CachedTts::new(engine, paths.speech_cache()))))
 }
@@ -249,7 +288,8 @@ mod tests {
         settings.tts.engine = TtsEngine::Openai;
         assert!(build_tts(&settings, &paths).unwrap().is_some());
         settings.stt.engine = SttEngine::Local;
-        assert!(build_stt(&settings).is_err());
+        // without the local-stt feature the offline engine is refused; with it, it is built lazily
+        assert_eq!(build_stt(&settings, &paths).is_err(), !cfg!(feature = "local-stt"));
     }
 
     #[test]

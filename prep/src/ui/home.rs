@@ -49,6 +49,17 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
         ui.label(RichText::new(tr.get(title)).font(theme::serif(42.0)).color(SNOW));
         ui.add_space(4.0);
         ui.label(RichText::new(tr.get(intro)).font(theme::sans(16.5)).color(MUTED));
+        for download in core.downloading() {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(tr.fill(
+                    K::Downloading,
+                    &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
+                ))
+                .font(theme::mono(12.5))
+                .color(theme::BERRY),
+            );
+        }
         if core.brief.is_none() {
             ui.add_space(14.0);
             widgets::card_frame().show(ui, |ui| {

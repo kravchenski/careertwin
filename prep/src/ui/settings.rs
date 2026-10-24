@@ -42,6 +42,7 @@ pub struct Draft {
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
     pub message: Option<(bool, String)>,
+    pub hardware: crate::models::Hardware,
 }
 
 impl Draft {
@@ -56,6 +57,7 @@ impl Draft {
             inputs: crate::audio::friendly_devices(crate::audio::capture::input_devices()),
             outputs: crate::audio::friendly_devices(crate::audio::playback::output_devices()),
             message: None,
+            hardware: crate::models::Hardware::detect(),
         }
     }
 
@@ -297,6 +299,25 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
             edit.settings.stt.engine = SttEngine::Local;
         }
     });
+    if edit.settings.stt.engine == SttEngine::Local {
+        widgets::caps(ui, tr.get(K::OfflineModel));
+        let suggested = crate::models::recommend(&edit.hardware).stt.id;
+        let chosen =
+            if edit.settings.stt.local_model.is_empty() { suggested } else { edit.settings.stt.local_model.as_str() }
+                .to_owned();
+        ui.horizontal_wrapped(|ui| {
+            for model in &crate::models::STT_MODELS {
+                let label = if model.id == suggested {
+                    format!("{} · {} MB · {}", model.label, model.megabytes(), tr.get(K::Recommended))
+                } else {
+                    format!("{} · {} MB", model.label, model.megabytes())
+                };
+                if chip(ui, &label, chosen == model.id).clicked() {
+                    edit.settings.stt.local_model = model.id.to_owned();
+                }
+            }
+        });
+    }
     if edit.settings.stt.engine == SttEngine::Http {
         ui.horizontal_wrapped(|ui| {
             for (name, url, model) in STT_PRESETS {
@@ -327,8 +348,12 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
         for (engine, label) in [
             (TtsEngine::Openai, K::EngineOpenai),
             (TtsEngine::Elevenlabs, K::EngineEleven),
+            (TtsEngine::Local, K::EngineLocalVoice),
             (TtsEngine::Off, K::EngineOff),
         ] {
+            if engine == TtsEngine::Local && !cfg!(feature = "local-tts") {
+                continue;
+            }
             if chip(ui, tr.get(label), edit.settings.tts.engine == engine).clicked() {
                 edit.settings.tts.engine = engine;
                 if engine == TtsEngine::Elevenlabs {
@@ -350,7 +375,27 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
             }
         });
     }
-    if edit.settings.tts.engine != TtsEngine::Off {
+    if edit.settings.tts.engine == TtsEngine::Local {
+        widgets::caps(ui, tr.get(K::OfflineVoiceName));
+        ui.horizontal_wrapped(|ui| {
+            for (name, _, _, description) in crate::models::KOKORO_VOICES {
+                if chip(ui, &format!("{name} · {description}"), edit.settings.tts.voice_en == name).clicked() {
+                    edit.settings.tts.voice_en = name.to_owned();
+                }
+            }
+        });
+        ui.label(RichText::new(tr.get(K::OfflineVoiceNote)).font(theme::sans(13.0)).color(FAINT));
+        let speed_label = widgets::caps(ui, tr.get(K::VoiceSpeed));
+        ui.horizontal(|ui| {
+            ui.add(egui::Slider::new(&mut edit.settings.tts.speed, 0.7..=1.3).step_by(0.05).show_value(false))
+                .labelled_by(speed_label.id);
+            ui.label(RichText::new(format!("{:.2}×", edit.settings.tts.speed)).font(theme::mono(12.5)).color(MUTED));
+        });
+        if ghost_button(ui, tr.get(K::TestVoice)).clicked() {
+            *action = Some(Action::TestVoice);
+        }
+    }
+    if matches!(edit.settings.tts.engine, TtsEngine::Openai | TtsEngine::Elevenlabs) {
         field(ui, tr.get(K::Address), &mut edit.settings.tts.url, "https://api.openai.com", false);
         field(ui, tr.get(K::ApiKey), &mut edit.tts_key, tr.get(K::KeyFromEnv), true);
         field(ui, tr.get(K::ModelName), &mut edit.settings.tts.model, "gpt-4o-mini-tts", false);
@@ -372,6 +417,61 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
     }
     ui.add_space(4.0);
     ui.label(RichText::new(tr.get(K::CloudWarning)).font(theme::sans(13.0)).color(FAINT));
+
+    section(ui, tr.get(K::SecOffline));
+    let hardware = edit.hardware;
+    let plan = crate::models::recommend(&hardware);
+    let gpu = if hardware.nvidia { tr.get(K::OfflineGpu) } else { "" };
+    ui.label(
+        RichText::new(tr.fill(
+            K::OfflineHardware,
+            &[("ram", &hardware.ram_gb().to_string()), ("cores", &hardware.cores.to_string()), ("gpu", gpu)],
+        ))
+        .font(theme::mono(12.5))
+        .color(MUTED),
+    );
+    ui.label(
+        RichText::new(
+            tr.fill(K::OfflineHearing, &[("model", plan.stt.label), ("size", &plan.stt.megabytes().to_string())]),
+        )
+        .font(theme::sans(14.5))
+        .color(SNOW),
+    );
+    ui.label(
+        RichText::new(
+            tr.fill(K::OfflineInterviewer, &[("tag", plan.llm.tag), ("size", &format!("{:.1}", plan.llm.gigabytes))]),
+        )
+        .font(theme::sans(14.5))
+        .color(SNOW),
+    );
+    if plan.llm_is_weak {
+        ui.label(RichText::new(tr.get(K::OfflineWeak)).font(theme::sans(13.5)).color(BERRY));
+    }
+    if ghost_button(ui, &tr.fill(K::UseModel, &[("tag", plan.llm.tag)])).clicked() {
+        edit.settings.llm.url = "http://127.0.0.1:11434".to_owned();
+        edit.settings.llm.model = plan.llm.tag.to_owned();
+    }
+    if !cfg!(feature = "local-stt") && !cfg!(feature = "local-tts") {
+        ui.label(RichText::new(tr.get(K::OfflineNotBuilt)).font(theme::sans(13.0)).color(FAINT));
+    }
+    for download in &core.downloads {
+        if let Some(why) = &download.failed {
+            ui.label(
+                RichText::new(tr.fill(K::DownloadFailed, &[("name", &download.name), ("why", why)]))
+                    .font(theme::sans(13.5))
+                    .color(BERRY),
+            );
+        } else if !download.finished {
+            ui.label(
+                RichText::new(tr.fill(
+                    K::Downloading,
+                    &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
+                ))
+                .font(theme::mono(12.5))
+                .color(MUTED),
+            );
+        }
+    }
 
     section(ui, tr.get(K::SecAudio));
     let mic_label = widgets::caps(ui, tr.get(K::Microphone));

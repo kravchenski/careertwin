@@ -131,7 +131,22 @@ pub fn ui(core: &mut Core, view: &mut SetupView, ui: &mut Ui) -> Option<Nav> {
             ui.label(RichText::new(problem).font(theme::sans(13.5)).color(theme::BERRY));
         }
         ui.add_space(26.0);
-        let ready = core.brief.is_some() || track == Track::English;
+        let downloading = !core.downloading().is_empty();
+        if downloading {
+            ui.label(RichText::new(tr.get(K::ModelsNotReady)).font(theme::sans(13.5)).color(theme::BERRY));
+            for download in core.downloading() {
+                ui.label(
+                    RichText::new(tr.fill(
+                        K::Downloading,
+                        &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
+                    ))
+                    .font(theme::mono(12.5))
+                    .color(MUTED),
+                );
+            }
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        let ready = (core.brief.is_some() || track == Track::English) && !downloading;
         if primary_button(ui, tr.get(K::StartCall), ready).clicked() {
             nav = Some(Nav::StartCall { spec: Box::new(view.spec.clone()), headphones: view.headphones });
         }

@@ -82,6 +82,15 @@ pub enum Outcome {
     Analysis(Result<Analysis, OpError>),
     Questions(Result<Vec<BankQuestion>, OpError>),
     Models(Result<Vec<String>, String>),
+    Downloaded { name: String, result: Result<(), String> },
+}
+
+/// A model being fetched for the offline engines.
+pub struct Download {
+    pub name: String,
+    pub progress: Arc<crate::speech::download::Progress>,
+    pub failed: Option<String>,
+    pub finished: bool,
 }
 
 /// The vacancy you are preparing for. It is kept between runs and the interviewer uses it.
@@ -133,11 +142,50 @@ pub struct Core {
     pub vacancy: Vacancy,
     /// Models the gateway offered when last asked, for the picker in Settings.
     pub models: Vec<String>,
+    /// The offline models being fetched or fetched already.
+    pub downloads: Vec<Download>,
 }
 
 impl Core {
     pub fn now(&self) -> u64 {
         crate::session::now()
+    }
+
+    /// Fetches the models the offline engines need, if they are chosen and not on disk yet.
+    pub fn prefetch_local(&mut self) {
+        let settings = self.settings.effective();
+        if cfg!(feature = "local-stt") && settings.stt.engine == crate::config::SttEngine::Local {
+            let model = crate::speech::local_stt_model(&settings);
+            self.download(model.label, vec![crate::models::stt_asset(model)], self.paths.models_dir());
+        }
+        if cfg!(feature = "local-tts")
+            && settings.tts.engine == crate::config::TtsEngine::Local
+            && let Some(assets) = crate::models::kokoro_assets(&settings.tts.voice_en)
+        {
+            self.download("Kokoro", assets, crate::speech::local_tts_folder(&self.paths));
+        }
+    }
+
+    fn download(&mut self, name: &str, assets: Vec<crate::speech::download::Asset>, folder: std::path::PathBuf) {
+        let progress = Arc::new(crate::speech::download::Progress::default());
+        self.downloads.retain(|d| d.name != name);
+        self.downloads.push(Download {
+            name: name.to_owned(),
+            progress: Arc::clone(&progress),
+            failed: None,
+            finished: false,
+        });
+        let label = self.tr.fill(K::Downloading, &[("name", name), ("percent", "0")]);
+        let name = name.to_owned();
+        self.jobs.spawn(label, async move {
+            let result = crate::speech::download::ensure(&assets, &folder, &progress).await.map_err(|e| e.to_string());
+            Outcome::Downloaded { name, result }
+        });
+    }
+
+    /// The offline models that are still being fetched.
+    pub fn downloading(&self) -> Vec<&Download> {
+        self.downloads.iter().filter(|d| !d.finished && d.failed.is_none()).collect()
     }
 
     /// Saves new settings and rebuilds everything that depends on them.
@@ -158,6 +206,7 @@ impl Core {
             }
         }
         self.settings = settings;
+        self.prefetch_local();
         Ok(())
     }
 
@@ -355,7 +404,7 @@ impl PrepApp {
         let store = Store::new(paths.sessions_dir());
         let deck = Deck::load(&paths.deck_file());
         let tr = Tr::new(settings.ui_language);
-        Self {
+        let mut app = Self {
             core: Core {
                 paths,
                 settings,
@@ -375,11 +424,14 @@ impl PrepApp {
                 notice: None,
                 vacancy,
                 models: Vec::new(),
+                downloads: Vec::new(),
             },
             screen: Screen::Home,
             history: history::HistoryState::default(),
             draft: None,
-        }
+        };
+        app.core.prefetch_local();
+        app
     }
 
     /// Draws one frame of the whole window.
@@ -530,6 +582,14 @@ impl PrepApp {
                     }
                 }
             }
+            Outcome::Downloaded { name, result } => {
+                if let Some(download) = self.core.downloads.iter_mut().find(|d| d.name == name) {
+                    match result {
+                        Ok(()) => download.finished = true,
+                        Err(why) => download.failed = Some(why),
+                    }
+                }
+            }
             Outcome::Models(Ok(models)) => self.core.models = models,
             Outcome::Models(Err(error)) => {
                 if let Some(draft) = &mut self.draft {
@@ -677,7 +737,7 @@ impl PrepApp {
                 });
                 let right = Rect::from_min_size(pos2(bar.right() - 40.0, bar.center().y - 20.0), vec2(40.0, 40.0));
                 ui.scope_builder(UiBuilder::new().max_rect(right).layout(Layout::right_to_left(Align::Center)), |ui| {
-                    if icon_button(ui, Icon::Gear, tr.get(K::SettingsTitle), 38.0, None).clicked() {
+                    if icon_button(ui, Icon::Sliders, tr.get(K::SettingsTitle), 38.0, None).clicked() {
                         self.core.settings_open = !self.core.settings_open;
                     }
                 });

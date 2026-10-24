@@ -1,0 +1,87 @@
+name: Prep
+
+# The Rust program in prep/: formatting, lints and tests on Linux. A second job builds the offline
+# engines (whisper.cpp and the candle voices) so they cannot stop compiling unnoticed.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "prep/**"
+      - ".github/workflows/prep.yml"
+  pull_request:
+    paths:
+      - "prep/**"
+      - ".github/workflows/prep.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Format, lint, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: prep
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: System libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
+
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
+
+      - name: Cache the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            prep/target
+          key: prep-${{ runner.os }}-${{ hashFiles('prep/Cargo.lock') }}
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked
+
+  offline:
+    name: Offline engines build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: prep
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: System libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev cmake
+
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
+
+      - name: Cache the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            prep/target
+          key: prep-offline-${{ runner.os }}-${{ hashFiles('prep/Cargo.lock') }}
+
+      - name: Lints with the offline engines
+        run: cargo clippy --features local --all-targets -- -D warnings
+
+      - name: Tests with the offline engines
+        run: cargo test --features local --locked

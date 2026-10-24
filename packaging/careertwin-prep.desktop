@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CareerTwin Prep
+GenericName=Interview practice
+Comment=Practise English, technical and general interviews out loud with a live interviewer
+Exec=@BIN@/careertwin-prep
+Icon=@ICON@
+Terminal=false
+Categories=Education;Utility;
+StartupWMClass=careertwin-prep
+Keywords=interview;english;practice;speaking;career;

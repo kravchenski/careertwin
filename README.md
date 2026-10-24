@@ -39,7 +39,8 @@ The language model is scripted so the recording is repeatable; the API, tools, s
 |---|---|---|
 | **Five job-search agents** | A monitor that watches company career sites, a résumé builder, a form filler that works in your signed-in Chrome, a mail agent that reads replies and sends approved applications, and an Excel agent with a dashboard. You control them from a terminal and approve every send; secrets never reach a model. | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Interview assistant** | A compact window that transcribes the call and writes what to say, in first person, from your real experience. Solves a task from a screenshot, defends a project from its code, speaks seven languages. | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
-| **MCP server and HTTP API** | 29 typed tools and a documented REST API that any agent or script can drive. | [docs/AGENTS.md](docs/AGENTS.md) |
+| **MCP server and HTTP API** | 29 typed tools and a documented REST API that any agent or script can drive. | [docs/PREP.md](docs/PREP.md) | CareerTwin Prep: spoken practice for English, technical and general interviews, offline engines, privacy |
+| [docs/AGENTS.md](docs/AGENTS.md) |
 | **Document library** | A career knowledge graph, nine PDF templates, an ATS checker, a vision-based quality check and a repair loop. | [docs/DOCUMENTS.md](docs/DOCUMENTS.md) |
 
 ## Quick start
@@ -133,6 +134,27 @@ last answer took. Details and method: [docs/INTERVIEW.md](docs/INTERVIEW.md).
 Many employers forbid AI help during interviews, and recording a call can need the other side's consent. Check the
 rules of each interview and tell the interviewer when you are expected to. The assistant only suggests: you decide
 what to say.
+
+## Practise with CareerTwin Prep
+
+The overlay helps during a call; **Prep** is where you train for one. It is a separate program, written in Rust, with
+three tabs: English, Technical interview and Job interview. You talk, out loud, to an interviewer who answers like a
+person: it starts speaking as soon as its first sentence is written, waits when your thought is not finished,
+follows up on a vague answer, stops when you talk over it (with headphones), nudges you when you go quiet and asks
+about the real work in your `ABOUT.md`. Afterwards it gives a review, with a better answer you can listen to and
+say yourself.
+
+<p align="center"><img src="docs/media/prep-call.png" alt="A call in CareerTwin Prep: the glowing sphere, the interviewer's sentence with the spoken words bright, and the bar to talk or type" width="760"></p>
+
+It works with cloud engines, with your own servers, or **fully offline**: Whisper for hearing, Kokoro for the English
+voice and a small model in Ollama for the interviewer. The program detects the memory and the cores and says which
+sizes fit. See [docs/PREP.md](docs/PREP.md).
+
+```bash
+./scripts/install-prep.sh     # builds it, with the offline engines
+careertwin-prep --doctor      # checks the model, hearing, voice, microphone and speakers
+careertwin-prep
+```
 
 ## Agents and MCP
 
@@ -262,6 +284,11 @@ uv run ruff check src tests
 make windows                             # portable Windows zip, built on Linux
 ./scripts/build_macos.sh                 # macOS app and dmg, on a Mac
 docker compose up --build                # API + SearXNG in containers
+```
+
+```bash
+cd prep && cargo test                   # the Rust program, no sound card or network needed
+cd prep && cargo test --features local  # also builds the offline engines (needs cmake)
 ```
 
 The interview extra pulls Qt and faster-whisper (large); everything else works without it. A tag such as `v0.2.0`
