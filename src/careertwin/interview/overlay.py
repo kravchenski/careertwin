@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import re
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from careertwin.interview import screenshot
 from careertwin.interview.prompts import sections
 from careertwin.interview.runtime import Runtime
 from careertwin.interview.session import INTERVIEWER, YOU, Callbacks
@@ -50,7 +53,7 @@ STATE_COLOURS = {
 
 STRINGS = {
     "en": {
-        "ask": "Ask", "screenshot": "Screenshot",
+        "ask": "Ask", "screenshot": "Screenshot", "looking": "Looking at the screen…",
         "placeholder": "Type a question manually…", "details_title": "Detailed answer", "details_main": "Main answer", "details_key": "Key points", "details_context": "Practical context", "details_button": "Details",
         "transcript": "Transcript", "opacity": "Opacity",
         "add_cv": "Add CV…",
@@ -69,7 +72,7 @@ STRINGS = {
         "no_vacancy_hint": "No vacancy yet: Settings → Interview to paste it and to add the CV you sent.",
     },
     "ru": {
-        "ask": "Спросить", "screenshot": "Скриншот",
+        "ask": "Спросить", "screenshot": "Скриншот", "looking": "Смотрю на экран…",
         "placeholder": "Введите вопрос вручную…", "details_title": "Подробный ответ", "details_main": "Основной ответ", "details_key": "Ключевые моменты", "details_context": "Практический контекст", "details_button": "Подробно",
         "transcript": "Расшифровка", "opacity": "Прозрачность",
         "add_cv": "Добавить резюме…",
@@ -88,7 +91,7 @@ STRINGS = {
         "no_vacancy_hint": "Вакансии пока нет: Настройки → Интервью, чтобы вставить её и добавить резюме, которое вы отправляли.",
     },
     "pl": {
-        "ask": "Zapytaj", "screenshot": "Zrzut ekranu",
+        "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "looking": "Patrzę na ekran…",
         "placeholder": "Wpisz pytanie ręcznie…", "details_title": "Szczegółowa odpowiedź", "details_main": "Odpowiedź główna", "details_key": "Kluczowe punkty", "details_context": "Kontekst praktyczny", "details_button": "Szczegóły",
         "transcript": "Transkrypcja", "opacity": "Przezroczystość",
         "add_cv": "Dodaj CV…",
@@ -124,6 +127,7 @@ class Bridge(QObject):
     source = Signal(str)
     partial = Signal(str)
     error = Signal(str)
+    remote = Signal(str)  # a command from outside the window: a global key, the ctl command
 
     def callbacks(self) -> Callbacks:
         return Callbacks(
@@ -190,6 +194,7 @@ class StatusPill(QWidget):
         self.text = ""
         self.kind = "idle"
         self.source_line = ""
+        self.note = ""
         self.timer = QTimer(self, interval=45)
         self.timer.timeout.connect(self._decay)
         self.timer.start()
@@ -200,7 +205,7 @@ class StatusPill(QWidget):
 
     def show_state(self, kind: str, text: str) -> None:
         self.kind, self.text = kind, "" if kind == "listening" else text
-        self.setToolTip(f"{text}\n{self.source_line}" if self.source_line else text)
+        self.setToolTip("\n".join(line for line in (text, self.note, self.source_line) if line))
         self.update()
 
     def _decay(self) -> None:
@@ -317,6 +322,46 @@ class Entry:
     raw: str = ""
 
 
+_FENCE = re.compile(r"```[A-Za-z0-9_+#.-]*[ \t]*\n?(.*?)(?:```|\Z)", re.S)
+_CODE_LINE = re.compile(
+    r"^(?:\s{2,}\S|\t|\s*(?:def |class |public |private |static |function |const |let |var |import |from \S+ import |#include|fn |func |return\b)).*",
+    re.M,
+)
+
+
+def looks_like_code(text: str) -> bool:
+    """Several lines of which most are indented or start like code: a fence-less code answer."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    return len(lines) >= 3 and sum(bool(_CODE_LINE.match(line)) for line in lines) * 2 >= len(lines)
+
+
+def code_block(code: str, size: int) -> str:
+    """Code in a box that keeps its indentation (a table cell, which Qt shades reliably)."""
+    return (
+        '<table width="100%" cellspacing="0" cellpadding="8" style="margin-top:6px"><tr>'
+        f'<td bgcolor="#262838"><pre style="font-family:monospace; font-size:{size}px; margin:0; '
+        f'color:{TEXT}">{html.escape(code.strip(chr(10)))}</pre></td></tr></table>'
+    )
+
+
+def render_answer(text: str, style: str, code_size: int) -> str:
+    """An answer as HTML: prose with **bold** in `style`, fenced or code-like parts as code blocks."""
+    out, position = [], 0
+    for match in _FENCE.finditer(text):
+        prose = text[position : match.start()].strip()
+        if prose:
+            out.append(f'<p style="{style}">{render_bold(prose)}</p>')
+        out.append(code_block(match[1], code_size))
+        position = match.end()
+    rest = text[position:].strip()
+    if rest:
+        if not out and looks_like_code(rest):
+            out.append(code_block(rest, code_size))
+        else:
+            out.append(f'<p style="{style}">{render_bold(rest)}</p>')
+    return "".join(out)
+
+
 def render_bold(text: str) -> str:
     """Escape, then turn **key terms** into bold; a half-streamed `**` is dropped."""
     escaped = html.escape(text)
@@ -325,6 +370,8 @@ def render_bold(text: str) -> str:
 
 
 class OverlayWindow(QWidget):
+    _captured = Signal(object, str, float)
+
     def __init__(
         self,
         bridge: Bridge,
@@ -348,6 +395,7 @@ class OverlayWindow(QWidget):
         self.resize(900, 400)
         self.setMinimumSize(560, 280)
         self.runtime = runtime
+        self._shot_started = 0.0
         session = runtime.session if runtime else None
         self._on_ask = on_ask or (session.ask if session else lambda _text: None)
         self._on_hint = on_hint or (session.hint_now if session else lambda: None)
@@ -465,7 +513,7 @@ class OverlayWindow(QWidget):
         self.pill.show_state(*self.last_state[:1], self.tr_("idle") if not listening else self.tr_("loading"))
 
         self.ask.clicked.connect(self._on_hint)
-        self.shot.clicked.connect(self._screenshot)
+        self.shot.clicked.connect(lambda: self._screenshot("all"))
         self.input.returnPressed.connect(self._submit)
         self.previous.clicked.connect(lambda: self.show_entry(self.index - 1))
         self.next.clicked.connect(lambda: self.show_entry(self.index + 1))
@@ -490,6 +538,8 @@ class OverlayWindow(QWidget):
         bridge.source.connect(self._source_changed)
         bridge.partial.connect(self._partial)
         bridge.error.connect(self.show_error)
+        bridge.remote.connect(self.run_command)
+        self._captured.connect(self._finish_screenshot)
         self.set_pinned(pinned)
         self._render()
 
@@ -688,7 +738,10 @@ class OverlayWindow(QWidget):
         self.pause.set_paused(kind == "paused")
 
     def _status_text(self, text: str) -> None:
-        if self.last_state[0] in {"loading", "idle"}:
+        if text.startswith("Screenshot:"):
+            self.pill.note = text  # how long the last screenshot answer took, under the status
+            self.pill.show_state(self.last_state[0], self.last_state[1] or self._state_text(self.last_state[0]))
+        elif self.last_state[0] in {"loading", "idle"}:
             self.pill.show_state(self.last_state[0], self._state_text(self.last_state[0]))
 
     def show_error(self, message: str) -> None:
@@ -727,28 +780,52 @@ class OverlayWindow(QWidget):
         else:
             self.pill.show_state(self.last_state[0], self.tr_("cv_added"))
 
-    def _screenshot(self) -> None:
+    def run_command(self, name: str) -> None:
+        """A command from outside the window (see `control`): it works without the focus."""
+        if name == "screenshot":
+            self._screenshot("focused")
+        elif name == "ask":
+            self._on_hint()
+
+    def _screenshot(self, scope: str = "all") -> None:
+        """Answer the screen. From outside the window (`scope="focused"`) only the monitor that has
+        the focus is captured, and the window stays visible when it sits on another monitor."""
         if not self.shot.isEnabled():
             return
         if not self.runtime:
             if self._on_screenshot:
                 self._on_screenshot()
             return
+        self._shot_started = time.perf_counter()
+        self.pill.note = ""
+        self.pill.show_state("thinking", self.tr_("looking"))
+        output = screenshot.focused_output() if scope == "focused" and not self.isActiveWindow() else None
+        own = self.screen().name() if self.screen() else ""
+        hide = output is None or output == own
         previous = self.windowOpacity()
-        self.setWindowOpacity(0.0)
-        QApplication.processEvents()
+        if hide:
+            self.setWindowOpacity(0.0)
+            QApplication.processEvents()
+        delay = self.runtime.settings.screenshot_delay_ms / 1000 if hide else 0.0
+        runtime = self.runtime
 
         def capture() -> None:
+            time.sleep(delay)
             try:
-                data = self.runtime.capture()
+                data, error = runtime.capture(output), ""
             except Exception as exc:
-                self.setWindowOpacity(previous)
-                self.show_error(str(exc))
-                return
-            self.setWindowOpacity(previous)
-            self.runtime.session.ask_screenshot(data)
+                data, error = None, str(exc)
+            self._captured.emit(data, error, previous if hide else -1.0)
 
-        QTimer.singleShot(self.runtime.settings.screenshot_delay_ms, capture)
+        threading.Thread(target=capture, name="capture", daemon=True).start()
+
+    def _finish_screenshot(self, data: str | None, error: str, previous: float) -> None:
+        if previous >= 0:
+            self.setWindowOpacity(previous)
+        if error or data is None:
+            self.show_error(error)
+            return
+        self.runtime.session.ask_screenshot(data, started_at=self._shot_started)
 
     def _submit(self) -> None:
         text = self.input.text().strip()
@@ -840,8 +917,9 @@ class OverlayWindow(QWidget):
         if self.layout_mode == "main" and parts.answer:
             return plain(parts.answer)
         lines = [f"• {plain(point)}" for point in parts.points]
-        if parts.answer and (self.full_answer or not parts.points):
-            lines.append(parts.answer)
+        shot = self.entries[self.index].question == "[screenshot]"
+        if parts.answer and (self.full_answer or not parts.points or shot):
+            lines.append(_FENCE.sub(lambda match: match[1].strip("\n"), parts.answer))
         if self.full_answer:
             lines += [f"• {plain(line)}" for line in parts.key]
             if parts.context:
@@ -857,7 +935,7 @@ class OverlayWindow(QWidget):
         body = f"font-size:{px(15)}px; color:{TEXT}"
         parts = [heading(18, self.tr_("details_title"))]
         if found.answer:
-            parts += [heading(16, self.tr_("details_main")), f'<p style="{body}">{render_bold(found.answer)}</p>']
+            parts += [heading(16, self.tr_("details_main")), render_answer(found.answer, body, px(14))]
         if found.key:
             items = "".join(f"<li>{render_bold(line)}</li>" for line in found.key)
             parts += [heading(16, self.tr_("details_key")), f'<ul style="{body}">{items}</ul>']
@@ -888,14 +966,17 @@ class OverlayWindow(QWidget):
         entry = self.entries[self.index]
         found = sections(entry.raw)
         points, spoken = found.points, found.answer
+        shot = entry.question == "[screenshot]"
+        title = self.tr_("screenshot") if shot else entry.question
         parts = [
             f'<div style="font-size:{px(19)}px; font-weight:700; color:{STRONG}">'
-            f"{html.escape(entry.question)}</div>"
+            f"{html.escape(title)}</div>"
         ]
         if self.layout_mode == "main" and spoken:
             parts.append(
-                f'<p style="font-size:{px(18)}px; color:{TEXT}; line-height:155%; margin-top:8px">'
-                f"{render_bold(spoken)}</p>"
+                render_answer(
+                    spoken, f"font-size:{px(18)}px; color:{TEXT}; line-height:155%; margin-top:8px", px(15)
+                )
             )
             points = []
         if points:
@@ -903,8 +984,9 @@ class OverlayWindow(QWidget):
             parts.append(f'<ul style="font-size:{px(16)}px">{items}</ul>')
         if self.layout_mode == "main":
             pass
-        elif not points and spoken:
-            parts.append(f'<p style="font-size:{px(16)}px; color:{TEXT}">{render_bold(spoken)}</p>')
+        elif spoken and (shot or not points):
+            # What the screen asked for is the solution itself: show it under the lines, not behind Details.
+            parts.append(render_answer(spoken, f"font-size:{px(16)}px; color:{TEXT}", px(15)))
         elif self.full_answer and found.has_details:
             parts.append(self._details_html(found, px))
         scroll = self.answer.verticalScrollBar().value()

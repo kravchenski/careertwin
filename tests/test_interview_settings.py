@@ -399,10 +399,13 @@ def test_runtime_screenshot_follows_the_settings(stack, monkeypatch):
     from careertwin.interview import screenshot
 
     monkeypatch.setattr(screenshot, "available_tools", lambda: ["grim", "maim"])
-    monkeypatch.setattr(screenshot, "capture_png", lambda tool="auto": f"png:{tool}".encode())
+    monkeypatch.setattr(
+        screenshot, "capture", lambda tool="auto", output=None: screenshot.Shot(f"jpeg:{tool}:{output}".encode())
+    )
     assert stack.screenshot_ready()
     stack.update("screenshot_tool", "maim")
-    assert stack.capture() == "cG5nOm1haW0="
+    assert stack.capture() == "data:image/jpeg;base64,anBlZzptYWltOk5vbmU="
+    assert stack.capture("DP-1").endswith("anBlZzptYWltOkRQLTE=")
     stack.update("screenshot_enabled", False)
     assert not stack.screenshot_ready()
     monkeypatch.setattr(screenshot, "available_tools", lambda: [])

@@ -192,11 +192,14 @@ class InterviewSession:
         self.cb.on_turn(INTERVIEWER, question)
         self._suggest(question)
 
-    def ask_screenshot(self, png_base64: str) -> None:
-        """Answer whatever the screenshot shows: a coding task, a slide, a question."""
+    def ask_screenshot(self, image: str, started_at: float | None = None) -> None:
+        """Answer whatever the screenshot shows: a coding task, a slide, a question.
+
+        `image` is a data URL (or bare base64 PNG); `started_at` is when the key was pressed,
+        so the time to the first words and to the whole answer can be reported."""
         self.log.add(INTERVIEWER, "[screenshot]")
         self.cb.on_turn(INTERVIEWER, "[screenshot]")
-        self._suggest("[screenshot]", image=png_base64)
+        self._suggest("[screenshot]", image=image, started_at=started_at or time.perf_counter())
 
     def hint_now(self) -> None:
         """Suggest for the last thing the interviewer said, whether or not it sounded like a question."""
@@ -328,13 +331,13 @@ class InterviewSession:
         if question and not self.stopping.is_set():
             self._suggest(question)
 
-    def _suggest(self, question: str, image: str | None = None) -> None:
+    def _suggest(self, question: str, image: str | None = None, started_at: float | None = None) -> None:
         self._cancel.set()
         cancel = threading.Event()
         self._cancel = cancel
         threading.Thread(
             target=self._run_suggestion,
-            args=(question, cancel, image),
+            args=(question, cancel, image, started_at),
             name="coach",
             daemon=True,
         ).start()
@@ -342,11 +345,13 @@ class InterviewSession:
     def _idle_state(self) -> str:
         return "paused" if self.paused.is_set() else "listening" if self._listening else "idle"
 
-    def _run_suggestion(self, question: str, cancel: threading.Event, image: str | None) -> None:
+    def _run_suggestion(
+        self, question: str, cancel: threading.Event, image: str | None, started_at: float | None = None
+    ) -> None:
         with self._suggest_lock:
             if cancel.is_set():
                 return
-            if self.brief.is_empty():
+            if self.brief.is_empty() and not image:  # a task on the screen needs no CV
                 self.cb.on_state("error")
                 self.cb.on_error("No context yet: add your CV or write about yourself in Settings → Interview")
                 return
@@ -354,12 +359,14 @@ class InterviewSession:
             self.cb.on_state("thinking")
             self.cb.on_suggestion_start(question)
             text = ""
+            first_words: float | None = None
             try:
                 for chunk in self.coach.stream(
                     question, history, cancel, self.language.current, image
                 ):
                     if cancel.is_set():
                         return
+                    first_words = first_words or time.perf_counter()
                     text += chunk
                     self.cb.on_suggestion_chunk(chunk)
             except CoachError as exc:
@@ -370,3 +377,9 @@ class InterviewSession:
             if text.strip():
                 self.log.suggestions.append((question, parse_suggestion(text).answer))
                 self.cb.on_suggestion_done(text)
+                if image and started_at and first_words:
+                    now = time.perf_counter()
+                    self.cb.on_status(
+                        f"Screenshot: first words after {first_words - started_at:.1f} s, "
+                        f"whole answer after {now - started_at:.1f} s"
+                    )

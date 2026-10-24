@@ -39,12 +39,13 @@ class InterviewSettings:
     gateway_url: str = ""
     gateway_key: str = ""
     model: str = ""
+    vision_model: str = ""
     answer_style: str = "standard"
     answer_layout: str = "lines"
     show_full_answer: bool = True
     screenshot_enabled: bool = True
     screenshot_tool: str = "auto"
-    screenshot_delay_ms: int = 250
+    screenshot_delay_ms: int = 60
     pinned: bool = True
     frameless: bool = True
     opacity: int = 100
@@ -65,6 +66,8 @@ class InterviewSettings:
             return settings
         if isinstance(data, dict):
             for field in fields(cls):
+                if field.name == "screenshot_delay_ms" and data.get(field.name) == 250:
+                    continue  # the old default; the window now needs far less time to hide
                 if field.name in data:
                     settings.set(field.name, data[field.name], save=False, strict=False)
         return settings

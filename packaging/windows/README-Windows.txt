@@ -15,12 +15,13 @@ What it does
     If the call plays on another output, pick that output in Settings -> Audio -> call audio.
     The first start downloads the speech model (about 480 MB for "small").
   - Speech recognition on your processor (Whisper), or in the cloud with Deepgram
-    (Settings -> Audio & speech -> Speech recognition): quicker on a laptop without a graphics card,
+    (Settings -> Audio -> Speech recognition): quicker on a laptop without a graphics card,
     but the voices of the call are sent to Deepgram.
-  - Questions you type or paste, answered by the provider you pick in Settings -> AI model
+  - Questions you type or paste, answered by the provider you pick in Settings -> AI
     (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio or your own address).
-  - The Screenshot button copies the primary screen (or all screens, see Settings -> Screenshot)
-    and asks about what is on it. The window hides itself for the moment of the capture.
+  - The Screenshot button, or Ctrl+Shift+Enter in any program, copies the primary screen and asks
+    about what is on it. The window hides itself for the moment of the capture. Pick a fast model
+    for it in Settings -> AI -> Model for screenshots.
 
 Not on Windows yet
   - The graphics card for speech recognition (it runs on the processor).

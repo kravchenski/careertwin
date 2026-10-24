@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import base64
+import threading
+import time
+import types
 
 import pytest
 
@@ -296,22 +299,81 @@ def test_the_screenshot_switch_controls_the_button(gui, monkeypatch):
     assert not gui.window.shot.isEnabled() and "grim" in gui.dialog.shot_note.text()
 
 
+def wait_for(gui, condition, rounds=100):
+    for _ in range(rounds):
+        gui.process()
+        if condition():
+            return True
+        time.sleep(0.01)
+    return False
+
+
 def test_screenshot_button_sends_the_capture_to_the_session(gui, monkeypatch):
-    sent = []
-    monkeypatch.setattr(screenshot, "capture_png", lambda tool="auto": b"png-bytes")
-    monkeypatch.setattr(gui.session, "ask_screenshot", sent.append)
-    gui.runtime.update("screenshot_delay_ms", 0)
+    sent, asked = [], []
+    monkeypatch.setattr(
+        screenshot, "capture", lambda tool="auto", output=None: asked.append(output) or screenshot.Shot(b"jpeg-bytes")
+    )
+    monkeypatch.setattr(gui.session, "ask_screenshot", lambda data, started_at=None: sent.append((data, started_at)))
     gui.window.shot.clicked.emit()
-    for _ in range(20):
-        gui.process()
-        if sent:
-            break
-    assert sent == [base64.b64encode(b"png-bytes").decode()] and gui.window.windowOpacity() == 1.0
-    monkeypatch.setattr(screenshot, "capture_png", lambda tool="auto": (_ for _ in ()).throw(screenshot.ScreenshotError("grim failed")))
+    assert wait_for(gui, lambda: sent)
+    data, started_at = sent[0]
+    assert data == "data:image/jpeg;base64," + base64.b64encode(b"jpeg-bytes").decode()
+    assert started_at and asked == [None] and gui.window.windowOpacity() == 1.0
+    monkeypatch.setattr(screenshot, "capture", lambda tool="auto", output=None: (_ for _ in ()).throw(screenshot.ScreenshotError("grim failed")))
     gui.window.shot.clicked.emit()
-    for _ in range(20):
-        gui.process()
-    assert gui.window.last_state == ("error", "grim failed") and gui.window.windowOpacity() == 1.0
+    assert wait_for(gui, lambda: gui.window.last_state == ("error", "grim failed"))
+    assert gui.window.windowOpacity() == 1.0
+
+
+def test_the_screenshot_shows_that_it_is_working_at_once(gui, monkeypatch):
+    gate = threading.Event()
+    monkeypatch.setattr(screenshot, "capture", lambda tool="auto", output=None: gate.wait(2) and screenshot.Shot(b"x"))
+    monkeypatch.setattr(gui.session, "ask_screenshot", lambda data, started_at=None: None)
+    gui.window.shot.clicked.emit()
+    assert gui.window.pill.kind == "thinking" and "screen" in gui.window.pill.text
+    gate.set()
+    assert wait_for(gui, lambda: gui.window.windowOpacity() == 1.0)
+
+
+def test_a_command_from_outside_captures_only_the_focused_monitor(gui, monkeypatch):
+    asked, sent = [], []
+    monkeypatch.setattr(screenshot, "focused_output", lambda: "HDMI-A-1")
+    monkeypatch.setattr(
+        screenshot, "capture", lambda tool="auto", output=None: asked.append(output) or screenshot.Shot(b"jpeg")
+    )
+    monkeypatch.setattr(gui.session, "ask_screenshot", lambda data, started_at=None: sent.append(data))
+    monkeypatch.setattr(type(gui.window), "isActiveWindow", lambda self: False)
+    monkeypatch.setattr(type(gui.window), "screen", lambda self: types.SimpleNamespace(name=lambda: "eDP-1"))
+    opacities = []
+    real = type(gui.window).setWindowOpacity
+    monkeypatch.setattr(type(gui.window), "setWindowOpacity", lambda self, value: (opacities.append(value), real(self, value))[1])
+    gui.bridge.remote.emit("screenshot")
+    assert wait_for(gui, lambda: sent)
+    assert asked == ["HDMI-A-1"]
+    assert opacities == []  # the window is on another monitor: nothing to hide
+
+
+def test_the_window_hides_for_a_capture_of_its_own_monitor(gui, monkeypatch):
+    sent, opacities = [], []
+    monkeypatch.setattr(screenshot, "focused_output", lambda: "eDP-1")
+    monkeypatch.setattr(screenshot, "capture", lambda tool="auto", output=None: screenshot.Shot(b"jpeg"))
+    monkeypatch.setattr(gui.session, "ask_screenshot", lambda data, started_at=None: sent.append(data))
+    monkeypatch.setattr(type(gui.window), "isActiveWindow", lambda self: False)
+    monkeypatch.setattr(type(gui.window), "screen", lambda self: types.SimpleNamespace(name=lambda: "eDP-1"))
+    real = type(gui.window).setWindowOpacity
+    monkeypatch.setattr(type(gui.window), "setWindowOpacity", lambda self, value: (opacities.append(value), real(self, value))[1])
+    gui.bridge.remote.emit("screenshot")
+    assert wait_for(gui, lambda: sent)
+    assert opacities == [0.0, 1.0]
+
+
+def test_a_command_from_outside_can_ask_for_the_last_question(gui, monkeypatch):
+    hinted = []
+    monkeypatch.setattr(gui.session, "hint_now", lambda: hinted.append(1))
+    gui.window._on_hint = gui.session.hint_now
+    gui.bridge.remote.emit("ask")
+    gui.process()
+    assert hinted == [1]
 
 
 def test_vacancy_notes_and_about_tabs_write_through(gui):
@@ -643,3 +705,53 @@ def test_the_general_tab_holds_answers_window_and_the_screenshot_switch(gui):
     page = dialog.tabs.currentWidget()
     assert page.isAncestorOf(dialog.docs_layout.parentWidget()) and page.isAncestorOf(dialog.vacancy_text)
     assert page.isAncestorOf(dialog.notes)
+
+
+def test_the_screenshot_model_is_chosen_next_to_the_model(gui):
+    dialog = gui.dialog
+    dialog.vision_id.setCurrentText("meta/llama-4-scout")
+    dialog.vision_id.lineEdit().editingFinished.emit()
+    assert gui.runtime.settings.vision_model == "meta/llama-4-scout"
+    assert gui.runtime.coach.vision_model == "meta/llama-4-scout"
+    assert InterviewSettings.load().vision_model == "meta/llama-4-scout"
+    dialog._models_loaded(["auto", "a", "b"], None)
+    assert dialog.vision_id.currentText() == "meta/llama-4-scout" and dialog.vision_id.count() == 4
+    dialog.vision_id.setCurrentText("auto")
+    dialog.vision_id.lineEdit().editingFinished.emit()
+    assert gui.runtime.settings.vision_model == "" and gui.runtime.coach.vision_model is None
+
+
+def test_another_provider_forgets_the_screenshot_model_too(gui):
+    dialog = gui.dialog
+    gui.runtime.update("vision_model", "fast-vision")
+    dialog.refresh()
+    assert dialog.vision_id.currentText() == "fast-vision"
+    gui.choose(dialog.provider, "groq")
+    assert gui.runtime.settings.vision_model == "" and dialog.vision_id.currentText() == ""
+
+
+def test_a_screenshot_solution_is_shown_as_code_under_the_lines(gui):
+    gui.bridge.started.emit("[screenshot]")
+    gui.bridge.done.emit(
+        "POINTS:\n- use **two pointers**\nANSWER:\n```python\ndef two_sum(nums, target):\n    return [1, 2]\n```"
+    )
+    gui.process()
+    text = gui.window.answer.toPlainText()
+    assert text.startswith("Screenshot") and "[screenshot]" not in text
+    assert "use two pointers" in text and "def two_sum(nums, target):" in text and "    return [1, 2]" in text
+    assert "Detailed answer" not in text  # the code is the answer, not an extra behind a button
+    gui.window.details.setChecked(False)
+    assert "def two_sum" in gui.window.answer.toPlainText()
+    assert gui.window.answer_text == "• use two pointers\ndef two_sum(nums, target):\n    return [1, 2]"
+
+
+def test_the_status_dots_tell_how_long_the_screenshot_answer_took(gui):
+    gui.bridge.status.emit("Screenshot: first words after 1.3 s, whole answer after 6.0 s")
+    gui.process()
+    assert "first words after 1.3 s" in gui.window.pill.toolTip()
+    gui.bridge.status.emit("Listening")
+    gui.process()
+    assert "first words after 1.3 s" in gui.window.pill.toolTip()  # other status lines leave it alone
+    gui.bridge.state.emit("listening")
+    gui.process()
+    assert "first words after 1.3 s" in gui.window.pill.toolTip()  # and so does a new state

@@ -19,6 +19,7 @@ from careertwin.interview.audio import (
 )
 from careertwin.interview.brief import BriefError, InterviewBrief
 from careertwin.interview.coach import StreamingCoach, gateway_url, model_name
+from careertwin.interview.control import ControlServer
 from careertwin.interview.languages import normalize
 from careertwin.interview.library import ContextController, Library
 from careertwin.interview.providers import base_url
@@ -156,7 +157,25 @@ def doctor(args: argparse.Namespace) -> int:
     tools = available_tools()
     print(f"{'ok ' if tools else 'note'}  screenshots: {', '.join(tools) or 'no tool (install grim, spectacle, maim or scrot)'}")
     print(f"note  settings file: {InterviewSettings.path()}")
+    print(
+        "note  answer the screen from outside the window: careertwin-interview-ctl screenshot "
+        "(bind it to a key in your compositor; Windows has Ctrl+Shift+Enter built in)"
+    )
     return 1 if problems else 0
+
+
+def start_hotkey(bridge):
+    """Ctrl+Shift+Enter for the screenshot anywhere in Windows; elsewhere a compositor key runs
+    `careertwin-interview-ctl screenshot`."""
+    if sys.platform != "win32":
+        return None
+    from careertwin.interview.hotkey_windows import GlobalHotkey
+
+    hotkey = GlobalHotkey(lambda: bridge.remote.emit("screenshot"))
+    if not hotkey.start():
+        bridge.error.emit("Ctrl+Shift+Enter is used by another program: the Screenshot button still works")
+        return None
+    return hotkey
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -215,8 +234,17 @@ def main(argv: list[str] | None = None) -> None:
     window.show()
     if problems:
         bridge.error.emit(problems[0])
+    server = ControlServer(bridge.remote.emit)
+    if not server.start():
+        bridge.error.emit(f"{server.error}; the screenshot key works only while this window has the focus")
+    hotkey = start_hotkey(bridge)
     runtime.start_audio()
+    runtime.warm_up()
     code = app.exec()
+    server.stop()
+    if hotkey is not None:
+        hotkey.stop()
+    coach.close()
     session.stop()
     if settings.save_transcripts and (saved := session.log.save()):
         print(f"Transcript saved to {saved}")

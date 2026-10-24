@@ -71,10 +71,27 @@ make up a plan.
 - No filler such as "great question". No markdown other than the four headings, bullets and bold.
 """
 
-SCREENSHOT_NOTE = """\
-The candidate shared a screenshot of their screen. Find the interview question or task in it. \
-For a coding task give the approach in POINTS and the code in ANSWER; otherwise answer as usual. \
-If the screenshot shows no question or task, say so in one bullet.
+SCREENSHOT_SYSTEM = """\
+You solve what a screenshot shows (a coding task, a test question, a slide) for a candidate in a \
+live interview. Be fast: no preamble, start with the shape below at once.
+
+POINTS:
+- two to four short lines: the approach in the words the candidate would say, key terms in \
+**double asterisks**
+ANSWER:
+for a coding task one fenced code block with the complete working code, the exact function \
+signature shown on the screen and one comment line with the time and space complexity; for any \
+other question one short paragraph to read aloud
+
+Rules
+- Write the two headings exactly as shown, each on its own line: "POINTS:" before the lines and \
+"ANSWER:" before the code. Never put code under POINTS.
+- Read the task carefully: the constraints, the examples, the signature and the language the task \
+names or the editor shows. Use the CANDIDATE STACK only when the screen names no language.
+- Correct first, then efficient. Check the examples on the screen in your head before you answer.
+- No other headings and no explanation after the code. Code stays in English; the lines and any \
+prose are written in the interview language.
+- If the screenshot shows no task or question, write one POINTS bullet that says so.
 """
 
 KIND_HINTS = {
@@ -137,20 +154,15 @@ def user_prompt(
     )
 
 
-def screenshot_prompt(
-    brief: InterviewBrief,
-    history: list[str],
-    language: str | None,
-    style: str = "standard",
-    layout: str = "lines",
-) -> str:
+def screenshot_prompt(brief: InterviewBrief, language: str | None, layout: str = "lines") -> str:
+    """What goes next to the picture. The CV stays out: a task on the screen needs the stack only."""
     name = languages.name(language)
-    recent = "\n".join(history[-6:]) or "(start of the interview)"
+    stack = brief.stack_hint() or "(not stated)"
     return (
-        f"{brief.render()}\n\nRECENT CONVERSATION\n{recent}\n\n{SCREENSHOT_NOTE}"
-        f"INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n"
-        f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}\n"
-        f"{LAYOUT_HINTS.get(layout, LAYOUT_HINTS['lines'])}"
+        f"CANDIDATE STACK: {stack}\n"
+        f"INTERVIEW LANGUAGE: {name}. Write the lines and prose in {name}.\n"
+        f"{LAYOUT_HINTS.get(layout, LAYOUT_HINTS['lines'])}\n"
+        "Solve what the screenshot shows."
     )
 
 
@@ -200,9 +212,13 @@ def sections(text: str) -> Sections:
     for index, match in enumerate(found):
         end = found[index + 1].start() if index + 1 < len(found) else len(text)
         blocks[match[1].upper()] = text[match.end() : end].strip()
+    points_block, answer = blocks.get("POINTS", ""), blocks.get("ANSWER", "")
+    fence = points_block.find("```")
+    if fence >= 0 and not answer:
+        points_block, answer = points_block[:fence], points_block[fence:].strip()
     return Sections(
-        points=_bullets(blocks.get("POINTS", "")),
-        answer=blocks.get("ANSWER", ""),
+        points=_bullets(points_block),
+        answer=answer,
         key=_bullets(blocks.get("KEY", "")),
         context=blocks.get("CONTEXT", ""),
     )

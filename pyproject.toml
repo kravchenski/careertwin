@@ -53,6 +53,7 @@ gpu = [
 careertwin = "careertwin.cli:main"
 careertwin-mcp = "careertwin.agentic.mcp_server:main"
 careertwin-interview = "careertwin.interview.app:main"
+careertwin-interview-ctl = "careertwin.interview.control:main"
 
 [build-system]
 requires = ["hatchling"]
