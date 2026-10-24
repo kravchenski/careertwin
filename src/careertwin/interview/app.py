@@ -117,7 +117,9 @@ def doctor(args: argparse.Namespace) -> int:
                 report(False, f"speech model did not load: {exc}")
         except ImportError:
             report(False, "faster-whisper missing: uv sync --extra interview")
-    if sys.platform != "win32":
+    if sys.platform == "darwin":
+        print("note  call audio is not available on macOS yet: type questions or use the Screenshot button")
+    elif sys.platform != "win32":
         for binary in ("parec", "pactl"):
             report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
     try:

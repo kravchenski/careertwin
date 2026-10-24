@@ -37,6 +37,7 @@ TOOLS: list[tuple[str, list[str], bool]] = [
     ("gnome-screenshot", ["gnome-screenshot", "--file", "{path}"], True),
     ("maim", ["maim", "{path}"], False),
     ("scrot", ["scrot", "{path}"], False),
+    ("screencapture", ["screencapture", "-x", "{path}"], False),  # built into macOS
 ]
 
 

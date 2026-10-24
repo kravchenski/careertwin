@@ -45,6 +45,8 @@ The install is editable (it runs this checkout; re-run the script when dependenc
 `uv run careertwin-interview`; the commands then live in the project's virtualenv, not on your
 `PATH` (`source .venv/bin/activate`, or `activate.fish` in fish).
 
+**Ready-made installers.** Each release on GitHub has a Windows setup program (`…-windows-x64-setup.exe`: it installs for the current user, adds a Start menu entry and keeps your `data` folder when you update or uninstall), the portable zip and a macOS disk image (`…-macos-arm64.dmg`, Apple silicon). Windows may warn that the publisher is unknown (More info, Run anyway) and the Mac refuses the first double click (right-click, Open): neither is signed. On a Mac the window, settings, typed questions, screenshots and project defense are meant to work, but call audio is not there yet, and nobody has tried that build by hand on a Mac. The release workflow installs the Windows setup and starts the Mac app on GitHub's own machines before it publishes.
+
 **Windows.** `make windows` (or `./scripts/build_windows.sh`) builds a portable 64-bit folder and zip,
 `dist/windows/CareerTwin-Interview-windows-x64.zip`, on Linux without Wine: uv fetches the Windows
 wheels and the program runs on the python.org embeddable Python. Unzip it anywhere writable and start
