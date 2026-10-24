@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,7 @@ class InterviewSettings:
 
     language: str = "auto"
     ui_language: str = "auto"
-    listen: bool = True
+    listen: bool = sys.platform != "win32"  # call audio is captured through Pulse/PipeWire
     call_source: str = ""
     use_mic: bool = False
     mic_source: str = ""
