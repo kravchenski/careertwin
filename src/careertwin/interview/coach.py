@@ -9,8 +9,15 @@ from collections.abc import Iterator
 
 import httpx
 
+from careertwin.interview import languages
 from careertwin.interview.brief import InterviewBrief
-from careertwin.interview.prompts import SYSTEM, Suggestion, parse_suggestion, user_prompt
+from careertwin.interview.prompts import (
+    SYSTEM,
+    Suggestion,
+    parse_suggestion,
+    screenshot_prompt,
+    user_prompt,
+)
 from careertwin.interview.questions import classify
 from careertwin.llm import call_ai, parse_json_object
 
@@ -33,9 +40,10 @@ async def suggest(
     history: list[str] | None = None,
     *,
     model: str | None = None,
+    language: str | None = None,
 ) -> Suggestion:
     """One-shot suggestion through the configured Switchyard provider."""
-    prompt = user_prompt(brief, question, classify(question), history or [])
+    prompt = user_prompt(brief, question, classify(question), history or [], language)
     text = await call_ai(SYSTEM, prompt, "switchyard", model or model_name(), max_tokens=700)
     if not text.strip():
         raise CoachError("The model returned no text. Is Switchyard running with a provider?")
@@ -51,9 +59,11 @@ answer. Reply with JSON only: {"questions": [{"question": str, "kind": str, "out
 """
 
 
-async def practice_questions(brief: InterviewBrief, count: int = 8, focus: str = "") -> list[dict]:
+async def practice_questions(
+    brief: InterviewBrief, count: int = 8, focus: str = "", language: str | None = None
+) -> list[dict]:
     """Likely questions for the vacancy with answer outlines drawn from the candidate's facts."""
-    prompt = f"{brief.render()}\n\nWrite {count} questions."
+    prompt = f"{brief.render()}\n\nWrite {count} questions in {languages.name(language)}."
     if focus:
         prompt += f" Focus on: {focus}."
     text = await call_ai(
@@ -84,16 +94,27 @@ class StreamingCoach:
         self.transport = transport
 
     def stream(
-        self, question: str, history: list[str], cancel: threading.Event
+        self,
+        question: str,
+        history: list[str],
+        cancel: threading.Event,
+        language: str | None = None,
+        image: str | None = None,
     ) -> Iterator[str]:
+        """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored."""
+        if image:
+            text = screenshot_prompt(self.brief, history, language)
+            content: str | list[dict] = [
+                {"type": "text", "text": text},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
+            ]
+        else:
+            content = user_prompt(self.brief, question, classify(question), history, language)
         body = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM},
-                {
-                    "role": "user",
-                    "content": user_prompt(self.brief, question, classify(question), history),
-                },
+                {"role": "user", "content": content},
             ],
             "temperature": 0.3,
             "max_tokens": 700,

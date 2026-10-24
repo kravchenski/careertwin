@@ -119,7 +119,7 @@ def test_brief_reads_a_job_file(tmp_path, brief):
 
 def test_prompt_grounds_answer_language(brief):
     prompt = user_prompt(brief, "Расскажите о себе", Kind.INTRO, ["Interviewer: Hi"])
-    assert "Answer in Russian" in prompt and "Interviewer: Hi" in prompt
+    assert "INTERVIEW LANGUAGE: Russian" in prompt and "Interviewer: Hi" in prompt
 
 
 def test_parse_suggestion_splits_points_and_answer():
@@ -173,10 +173,12 @@ def test_streaming_coach_accepts_plain_json_and_reports_errors(brief):
 
 class FakeCoach:
     def __init__(self, reply="POINTS:\n- a\nANSWER:\nb"):
-        self.reply, self.questions = reply, []
+        self.reply, self.questions, self.languages, self.images = reply, [], [], []
 
-    def stream(self, question, history, cancel):
+    def stream(self, question, history, cancel, language=None, image=None):
         self.questions.append((question, list(history)))
+        self.languages.append(language)
+        self.images.append(image)
         yield from (self.reply[:6], self.reply[6:])
 
 
@@ -247,7 +249,7 @@ def test_ask_and_hint_now_and_errors(brief, tmp_path):
     assert wait_for(lambda: events.done)
 
     class Broken:
-        def stream(self, *args):
+        def stream(self, *args, **kwargs):
             raise CoachError("Switchyard is not reachable")
             yield
 
@@ -319,6 +321,16 @@ async def test_interview_routes(brief, monkeypatch):
 
     monkeypatch.setattr("careertwin.interview.coach.call_ai", fake_call_ai)
     client = TestClient(app)
+    seen = []
+    original = fake_call_ai
+
+    async def spying(system, user, provider, model, **kwargs):
+        seen.append(user)
+        return await original(system, user, provider, model, **kwargs)
+
+    monkeypatch.setattr("careertwin.interview.coach.call_ai", spying)
+    russian = client.post("/v1/interview/suggest", json={"question": "Tell me about yourself", "language": "ru"})
+    assert russian.json()["language"] == "ru" and "INTERVIEW LANGUAGE: Russian" in seen[-1]
     reply = client.post("/v1/interview/suggest", json={"question": "Tell me about yourself"})
     assert reply.status_code == 200
     body = reply.json()
@@ -338,25 +350,86 @@ def test_interview_tools_are_registered():
 def test_overlay_renders_a_streamed_suggestion(monkeypatch):
     pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
+    from careertwin.interview.overlay import Bridge, OverlayWindow, create_app
 
-    from careertwin.interview.overlay import Bridge, OverlayWindow
-
-    app = QApplication.instance() or QApplication([])
-    bridge, asked = Bridge(), []
-    window = OverlayWindow(bridge, on_ask=asked.append, on_hint=lambda: None, on_pause=lambda _: None)
+    app = create_app([])
+    bridge, asked, hinted = Bridge(), [], []
+    window = OverlayWindow(
+        bridge, on_ask=asked.append, on_hint=lambda: hinted.append(1), on_pause=lambda _: None,
+        sources=[("about", "ABOUT.md · 20.6k")],
+    )
     bridge.turn.emit("Interviewer", "Why us?")
     bridge.started.emit("Why us?")
-    reply = "POINTS:\n- Real product\nANSWER:\nBecause of the product."
-    bridge.chunk.emit(reply[:15])
+    reply = "POINTS:\n- **Real** product\n- Strong **team**\nANSWER:\nBecause of the product."
+    bridge.chunk.emit(reply[:20])
     bridge.done.emit(reply)
     app.processEvents()
-    assert "Why us?" in window.conversation.toPlainText()
-    assert "Real product" in window.suggestion.toPlainText()
-    assert window.answer == "Because of the product."
+    assert "Why us?" in window.transcript.toPlainText()
+    plain = window.answer.toPlainText()
+    assert "Why us?" in plain and "Real product" in plain and "Because of the product" not in plain
+    window.act_full.setChecked(True)
+    assert "Because of the product." in window.answer.toPlainText()
+    assert window.answer_text == "• Real product\n• Strong team\nBecause of the product."
+    assert window.page.text() == "1/1"
     window.input.setText("  How do you test?  ")
     window.input.returnPressed.emit()
     assert asked == ["How do you test?"]
+    window.ask.clicked.emit()
+    assert hinted == [1]
+    assert "ABOUT.md" in window.context.full
+    window.close()
+
+
+def test_overlay_pages_through_answers_and_follows_the_interview_language(monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from careertwin.interview.overlay import Bridge, OverlayWindow, create_app, render_bold
+
+    app = create_app([])
+    bridge, picked = Bridge(), []
+    window = OverlayWindow(
+        bridge, on_ask=lambda _: None, on_hint=lambda: None, on_pause=lambda _: None,
+        on_language=picked.append, on_screenshot=None, ui_language="en",
+    )
+    for number in (1, 2):
+        bridge.started.emit(f"Question {number}")
+        bridge.done.emit(f"POINTS:\n- point {number}\nANSWER:\nspoken {number}")
+    app.processEvents()
+    assert window.page.text() == "2/2" and "Question 2" in window.answer.toPlainText()
+    window.previous.click()
+    assert window.page.text() == "1/2" and "Question 1" in window.answer.toPlainText()
+    window.next.click()
+    assert window.page.text() == "2/2"
+    assert not window.shot.isEnabled()
+    bridge.language.emit("ru")
+    app.processEvents()
+    assert window.ask.title.text() == "Спросить" and window.get_answer.text() == "Получить ответ"
+    bridge.language.emit("xx")
+    assert window.ask.title.text() == "Ask"
+    window.language_actions["de"].trigger()
+    assert picked == ["de"]
+    assert render_bold("a **b** <c> **d") == 'a <b style="color:#ffffff">b</b> &lt;c&gt; d'
+    window.close()
+
+
+def test_overlay_shows_state_level_and_errors(monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from careertwin.interview.overlay import Bridge, OverlayWindow, create_app
+
+    app = create_app([])
+    bridge = Bridge()
+    window = OverlayWindow(bridge, on_ask=lambda _: None, on_hint=lambda: None, on_pause=lambda _: None)
+    bridge.state.emit("listening")
+    bridge.level.emit("Interviewer", 0.9)
+    app.processEvents()
+    assert window.pill.level == pytest.approx(0.9) and window.pill.text == ""
+    bridge.level.emit("You", 1.0)
+    assert window.pill.level == pytest.approx(0.9)
+    bridge.state.emit("thinking")
+    assert window.pill.text == "Thinking…"
+    bridge.error.emit("Switchyard is not reachable")
+    assert window.pill.kind == "error" and "not reachable" in window.pill.text
     window.close()
 
 

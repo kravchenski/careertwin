@@ -89,11 +89,13 @@ class Film:
 
 
 class Terminal:
-    def __init__(self, width: int, height: int, font: ImageFont.FreeTypeFont) -> None:
-        self.width, self.height, self.font = width, height, font
+    def __init__(
+        self, width: int, height: int, font: ImageFont.FreeTypeFont, pad: int = PAD
+    ) -> None:
+        self.width, self.height, self.font, self.pad = width, height, font, pad
         self.char = font.getlength("M")
-        self.cols = int((width - 2 * PAD) / self.char)
-        self.rows = int((height - 2 * PAD) / LINE)
+        self.cols = int((width - 2 * pad) / self.char)
+        self.rows = int((height - 2 * pad) / LINE)
         self.lines: list[Segments] = []
 
     def write(self, segments: Segments) -> None:
@@ -115,7 +117,7 @@ class Terminal:
         draw = ImageDraw.Draw(image)
         visible = self.lines[-self.rows :]
         for row, segments in enumerate(visible):
-            x, y = PAD, PAD + row * LINE
+            x, y = self.pad, self.pad + row * LINE
             for text, colour in segments:
                 draw.text((x, y), text, font=self.font, fill=colour)
                 x += self.char * len(text)
@@ -125,15 +127,17 @@ class Terminal:
 
 
 class Scene:
-    def __init__(self, film: Film, caption: str, terminal: Terminal, overlay=None) -> None:
+    def __init__(
+        self, film: Film, caption: str, terminal: Terminal, overlay=None, overlay_at=(0, 0)
+    ) -> None:
         self.film, self.caption, self.term = film, caption, terminal
-        self.overlay = overlay
+        self.overlay, self.overlay_at = overlay, overlay_at
 
     def frame(self, cursor: bool = False) -> Image.Image:
         canvas = Image.new("RGB", (WIDTH, HEIGHT), BG)
         canvas.paste(self.term.render(cursor), (0, 0))
         if self.overlay is not None:
-            canvas.paste(self.overlay, (WIDTH - self.overlay.width - 36, 30))
+            canvas.paste(self.overlay, self.overlay_at)
         draw = ImageDraw.Draw(canvas)
         draw.text((PAD, HEIGHT - 34), self.caption, font=small_font(), fill=DIM)
         return canvas
@@ -263,22 +267,29 @@ class QueueSource:
 
 def record_interview(questions: list[str]) -> tuple[list[dict], list[list[Image.Image]]]:
     """Run the real pipeline for each question; return measurements and overlay frames."""
-    from PySide6.QtWidgets import QApplication
-
     from careertwin.interview.brief import InterviewBrief
     from careertwin.interview.coach import StreamingCoach
-    from careertwin.interview.overlay import Bridge, OverlayWindow
+    from careertwin.interview.overlay import Bridge, OverlayWindow, create_app
     from careertwin.interview.questions import classify
     from careertwin.interview.session import INTERVIEWER, Callbacks, InterviewSession
     from careertwin.interview.stt import WhisperTranscriber
     from careertwin.interview.transcript import TranscriptLog
 
-    app = QApplication(sys.argv[:1])
+    app = create_app(sys.argv[:1])
     bridge = Bridge()
+    brief = InterviewBrief.load()
     window = OverlayWindow(
-        bridge, on_ask=lambda _: None, on_hint=lambda: None, on_pause=lambda _: None
+        bridge,
+        on_ask=lambda _: None,
+        on_hint=lambda: None,
+        on_pause=lambda _: None,
+        on_screenshot=lambda: None,
+        on_add_document=lambda _path: brief.sources(),
+        sources=brief.sources(),
+        ui_language="en",
     )
-    window.resize(440, 690)
+    window.resize(920, 400)
+    window.show()
 
     events: list[tuple[str, str, float]] = []
     clock = time.monotonic
@@ -290,7 +301,6 @@ def record_interview(questions: list[str]) -> tuple[list[dict], list[list[Image.
         on_status=lambda s: events.append(("status", s, clock())),
         on_error=lambda e: events.append(("error", e, clock())),
     )
-    brief = InterviewBrief.load()
     session = InterviewSession(
         brief, WhisperTranscriber("small", language="en"), StreamingCoach(brief, model="demo"),
         callbacks, debounce=0.3, log=TranscriptLog(WORK / "interviews"),
@@ -312,14 +322,14 @@ def record_interview(questions: list[str]) -> tuple[list[dict], list[list[Image.
         path = WORK / "overlay.png"
         window.grab().save(str(path))
         image = Image.open(path).convert("RGB")
-        height = HEIGHT - 60
-        scaled = image.resize((int(image.width * height / image.height), height), Image.LANCZOS)
+        width = WIDTH - 120
+        scaled = image.resize((width, int(image.height * width / image.width)), Image.LANCZOS)
         frames.append(scaled)
 
     wait("status", 2)
     stats: list[dict] = []
     frames_by_question: list[list[Image.Image]] = []
-    bridge.status.emit("Listening")
+    bridge.state.emit("listening")
     for number, question in enumerate(questions, start=1):
         mark = len(events)
         source.feed(synthesize(question))
@@ -335,12 +345,14 @@ def record_interview(questions: list[str]) -> tuple[list[dict], list[list[Image.
             }
         )
         frames: list[Image.Image] = []
+        bridge.level.emit(INTERVIEWER, 0.7)
         snapshot(frames)
         bridge.turn.emit(INTERVIEWER, heard[1])
         snapshot(frames)
         chunks = 0
         for kind, payload, _ in mine:
             if kind == "start":
+                bridge.state.emit("thinking")
                 bridge.started.emit(payload)
             elif kind == "chunk":
                 bridge.chunk.emit(payload)
@@ -348,11 +360,24 @@ def record_interview(questions: list[str]) -> tuple[list[dict], list[list[Image.
                 if chunks % 3 == 0:
                     snapshot(frames)
             elif kind == "done":
+                bridge.state.emit("listening")
+                bridge.level.emit(INTERVIEWER, 0.4)
                 bridge.done.emit(payload)
                 snapshot(frames)
         frames_by_question.append(frames)
     session.stop()
     return stats, frames_by_question
+
+
+def make_demo_cv() -> Path:
+    """A one-page CV for the fictional persona, so the overlay shows an attached CV."""
+    from weasyprint import HTML
+
+    persona = (ROOT / "scripts/demo/ABOUT.demo.md").read_text()
+    body = re.sub(r"^#+ ", "", persona, flags=re.M).replace("\n", "<br>")
+    path = WORK / "Alex_Demo_CV.pdf"
+    HTML(string=f"<body style='font-family:sans-serif;font-size:11pt'>{body}</body>").write_pdf(path)
+    return path
 
 
 def main() -> None:
@@ -364,6 +389,7 @@ def main() -> None:
             if probe.connect_ex(("127.0.0.1", port)) == 0:
                 raise SystemExit(f"port {port} is busy; stop what runs there and retry")
 
+    os.environ["CAREERTWIN_RESUME"] = str(make_demo_cv())
     python = sys.executable
     gateway = subprocess.Popen(
         [python, str(ROOT / "scripts/demo/stub_gateway.py"), "--port", str(GATEWAY_PORT)], env=ENV
@@ -442,25 +468,26 @@ def build_film(log_path: Path) -> Film:
             "Do you have experience with Kubernetes?",
         ]
     )
-    side = Terminal(WIDTH - overlays[0][0].width - 72, HEIGHT - 30, mono)
-    scene = Scene(film, "4 · Interview assistant: local Whisper, answers from your own facts", side)
-    scene.command("uv run careertwin-interview --job job.txt")
+    top = Terminal(WIDTH, 200, mono, pad=22)
+    scene = Scene(
+        film, "4 · Interview assistant: local Whisper, your ABOUT.md and CV, answers in the interview language",
+        top, overlay_at=(60, 178),
+    )
+    scene.command("uv run careertwin-interview --job job.txt --resume Alex_Demo_CV.pdf")
     scene.print([[("# demo input: two recorded questions instead of a live call", DIM)]], 0.1)
     scene.overlay = overlays[0][0]
     scene.hold(1.0)
     for item, frames in zip(stats, overlays):
         scene.overlay = frames[1]
         scene.print(
-            [
-                [("heard  ", DIM), (f'"{item["heard"]}"', FG)],
-                [("       ", FG), (f'recognised as a {item["kind"]} question', DIM)],
-            ],
-            0.5,
+            [[("heard  ", DIM), (f'"{item["heard"]}"  ', FG), (f'→ {item["kind"]} question', DIM)]], 0.5
         )
         for frame in frames[2:]:
             scene.overlay = frame
             film.add(scene.frame(), 0.14)
         scene.hold(3.5)
+        top.clear()
+        top.write([("$ ", GREEN), ("uv run careertwin-interview --job job.txt --resume Alex_Demo_CV.pdf", FG)])
     scene.hold(1.0)
 
     title_card(

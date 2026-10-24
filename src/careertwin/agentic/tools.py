@@ -293,14 +293,16 @@ async def suggest_interview_answer(
     question: str,
     job_id: str | None = None,
     notes: str = "",
+    language: str | None = None,
 ) -> dict[str, Any]:
     """Talking points and a short spoken answer for one interviewer question, grounded in the
     candidate's ABOUT context (and the vacancy when `job_id` is given). Never invents experience:
     when the context has none it says so and offers an honest framing. Use it for practice or
-    when the candidate pastes a question."""
+    when the candidate pastes a question. `language` is the interview language (en, ru, pl, de, ...);
+    answers are written in it."""
     return await _client().post(
         "/v1/interview/suggest",
-        {"question": question, "job_id": job_id, "notes": notes},
+        {"question": question, "job_id": job_id, "notes": notes, "language": language},
         timeout=180,
     )
 
@@ -310,9 +312,13 @@ async def prepare_interview_questions(
     job_id: str | None = None,
     count: Annotated[int, Field(ge=3, le=15)] = 8,
     focus: str = "",
+    language: str | None = None,
 ) -> dict[str, Any]:
     """Likely interview questions for a vacancy, each with an outline of an honest answer built
-    from the candidate's facts. `focus` narrows the topics, for example "system design"."""
+    from the candidate's facts. `focus` narrows the topics, for example "system design". `language` is
+    the interview language (en, ru, pl, de, ...)."""
     return await _client().post(
-        "/v1/interview/practice", {"job_id": job_id, "count": count, "focus": focus}, timeout=180
+        "/v1/interview/practice",
+        {"job_id": job_id, "count": count, "focus": focus, "language": language},
+        timeout=180,
     )

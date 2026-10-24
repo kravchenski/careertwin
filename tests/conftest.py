@@ -109,3 +109,4 @@ def minimal_resume_path() -> Path:
 @pytest.fixture(autouse=True)
 def isolated_candidate_context(tmp_path, monkeypatch):
     monkeypatch.setenv("CAREERTWIN_ABOUT_PATH", str(tmp_path / "ABOUT.md"))
+    monkeypatch.chdir(tmp_path)

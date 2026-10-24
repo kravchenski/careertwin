@@ -1,7 +1,8 @@
 """Orchestrates one interview: audio in, transcript and suggestions out.
 
 The session knows nothing about Qt. A front end passes callbacks and calls
-`start`, `ask`, `pause` and `stop`; every callback runs on a worker thread.
+`start`, `ask`, `ask_screenshot`, `pause` and `stop`; every callback runs on a
+worker thread.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import numpy as np
 
 from careertwin.interview.brief import InterviewBrief
 from careertwin.interview.coach import CoachError
+from careertwin.interview.languages import LanguageTracker
 from careertwin.interview.prompts import parse_suggestion
 from careertwin.interview.questions import is_question
 from careertwin.interview.stt import Transcriber
@@ -24,6 +26,8 @@ from careertwin.interview.vad import UtteranceSegmenter
 
 INTERVIEWER = "Interviewer"
 YOU = "You"
+MIN_WORDS_FOR_LANGUAGE = 3
+LEVEL_EVERY = 3
 
 
 class FrameSource(Protocol):
@@ -33,7 +37,12 @@ class FrameSource(Protocol):
 
 class Coach(Protocol):
     def stream(
-        self, question: str, history: list[str], cancel: threading.Event
+        self,
+        question: str,
+        history: list[str],
+        cancel: threading.Event,
+        language: str | None = None,
+        image: str | None = None,
     ) -> Iterator[str]: ...
 
 
@@ -44,6 +53,9 @@ class Callbacks:
     on_suggestion_chunk: Callable[[str], None] = lambda text: None
     on_suggestion_done: Callable[[str], None] = lambda text: None
     on_status: Callable[[str], None] = lambda text: None
+    on_state: Callable[[str], None] = lambda kind: None
+    on_level: Callable[[str, float], None] = lambda speaker, level: None
+    on_language: Callable[[str], None] = lambda code: None
     on_error: Callable[[str], None] = lambda text: None
 
 
@@ -55,6 +67,7 @@ class InterviewSession:
         coach: Coach,
         callbacks: Callbacks | None = None,
         *,
+        language: str | None = None,
         debounce: float = 1.0,
         log: TranscriptLog | None = None,
     ):
@@ -64,6 +77,9 @@ class InterviewSession:
         self.cb = callbacks or Callbacks()
         self.debounce = debounce
         self.log = log or TranscriptLog()
+        self.language = LanguageTracker(language)
+        if transcriber is not None and self.language.fixed:
+            transcriber.language = self.language.fixed
         self.paused = threading.Event()
         self.stopping = threading.Event()
         self._utterances: queue.Queue[tuple[str, np.ndarray] | None] = queue.Queue()
@@ -74,18 +90,31 @@ class InterviewSession:
         self._lock = threading.Lock()
         self._cancel = threading.Event()
         self._suggest_lock = threading.Lock()
+        self._listening = False
 
     def start(self, sources: dict[str, FrameSource]) -> None:
         """Listen to `{speaker: source}`; with no sources only `ask` works."""
+        self._listening = bool(sources)
         if sources:
             self._spawn(self._transcribe_loop, "stt")
+        else:
+            self.cb.on_state("idle")
         for speaker, source in sources.items():
             self._sources.append(source)
             self._spawn(lambda s=speaker, src=source: self._listen(s, src), f"listen-{speaker}")
 
     def pause(self, value: bool = True) -> None:
         self.paused.set() if value else self.paused.clear()
-        self.cb.on_status("Paused" if value else "Listening")
+        self.cb.on_state("paused" if value else "listening")
+
+    def set_language(self, value: str | None) -> str | None:
+        """Fix the interview language (`None` returns to auto-detection)."""
+        code = self.language.set_fixed(value)
+        if self.transcriber is not None:
+            self.transcriber.language = code
+        if code:
+            self.cb.on_language(code)
+        return code
 
     def stop(self) -> None:
         self.stopping.set()
@@ -107,10 +136,16 @@ class InterviewSession:
         self.cb.on_turn(INTERVIEWER, question)
         self._suggest(question)
 
+    def ask_screenshot(self, png_base64: str) -> None:
+        """Answer whatever the screenshot shows: a coding task, a slide, a question."""
+        self.log.add(INTERVIEWER, "[screenshot]")
+        self.cb.on_turn(INTERVIEWER, "[screenshot]")
+        self._suggest("[screenshot]", image=png_base64)
+
     def hint_now(self) -> None:
         """Suggest for the last thing the interviewer said, whether or not it sounded like a question."""
         for turn in reversed(self.log.turns):
-            if turn.speaker == INTERVIEWER:
+            if turn.speaker == INTERVIEWER and turn.text != "[screenshot]":
                 self._suggest(turn.text)
                 return
 
@@ -121,27 +156,36 @@ class InterviewSession:
 
     def _listen(self, speaker: str, source: FrameSource) -> None:
         segmenter = UtteranceSegmenter()
+        count = 0
         try:
             for frame in source.frames():
                 if self.stopping.is_set():
                     return
                 if self.paused.is_set():
                     continue
+                count += 1
+                if count % LEVEL_EVERY == 0:
+                    rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
+                    self.cb.on_level(speaker, min(1.0, (rms / 6000.0) ** 0.5))
                 if (utterance := segmenter.push(frame)) is not None:
                     self._utterances.put((speaker, utterance))
         except Exception as exc:
+            self.cb.on_state("error")
             self.cb.on_error(f"Audio from {speaker.lower()} stopped: {exc}")
 
     def _transcribe_loop(self) -> None:
         assert self.transcriber is not None
+        self.cb.on_state("loading")
         self.cb.on_status("Loading speech model…")
         try:
             load = getattr(self.transcriber, "load", None)
             if load:
                 load()
         except Exception as exc:
+            self.cb.on_state("error")
             self.cb.on_error(str(exc))
             return
+        self.cb.on_state("listening")
         self.cb.on_status("Listening")
         vocabulary = self.brief.vocabulary()
         while not self.stopping.is_set():
@@ -155,7 +199,18 @@ class InterviewSession:
                 self.cb.on_error(f"Transcription failed: {exc}")
                 continue
             if text:
+                self._observe_language(text)
                 self.handle_text(speaker, text)
+
+    def _observe_language(self, text: str) -> None:
+        if len(text.split()) < MIN_WORDS_FOR_LANGUAGE or self.transcriber is None:
+            return
+        changed = self.language.observe(
+            getattr(self.transcriber, "last_language", None),
+            getattr(self.transcriber, "last_probability", 0.0),
+        )
+        if changed:
+            self.cb.on_language(changed)
 
     def handle_text(self, speaker: str, text: str) -> None:
         self.log.add(speaker, text)
@@ -177,30 +232,41 @@ class InterviewSession:
         if question and not self.stopping.is_set():
             self._suggest(question)
 
-    def _suggest(self, question: str) -> None:
+    def _suggest(self, question: str, image: str | None = None) -> None:
         self._cancel.set()
         cancel = threading.Event()
         self._cancel = cancel
         threading.Thread(
-            target=self._run_suggestion, args=(question, cancel), name="coach", daemon=True
+            target=self._run_suggestion,
+            args=(question, cancel, image),
+            name="coach",
+            daemon=True,
         ).start()
 
-    def _run_suggestion(self, question: str, cancel: threading.Event) -> None:
+    def _idle_state(self) -> str:
+        return "paused" if self.paused.is_set() else "listening" if self._listening else "idle"
+
+    def _run_suggestion(self, question: str, cancel: threading.Event, image: str | None) -> None:
         with self._suggest_lock:
             if cancel.is_set():
                 return
             history = self.log.history()[:-1]
+            self.cb.on_state("thinking")
             self.cb.on_suggestion_start(question)
             text = ""
             try:
-                for chunk in self.coach.stream(question, history, cancel):
+                for chunk in self.coach.stream(
+                    question, history, cancel, self.language.current, image
+                ):
                     if cancel.is_set():
                         return
                     text += chunk
                     self.cb.on_suggestion_chunk(chunk)
             except CoachError as exc:
+                self.cb.on_state("error")
                 self.cb.on_error(str(exc))
                 return
+            self.cb.on_state(self._idle_state())
             if text.strip():
                 self.log.suggestions.append((question, parse_suggestion(text).answer))
                 self.cb.on_suggestion_done(text)

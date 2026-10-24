@@ -12,6 +12,10 @@ GPU_LIBRARY_ERROR = re.compile(r"cublas|cudnn|cuda|libcu", re.I)
 
 
 class Transcriber(Protocol):
+    language: str | None
+    last_language: str | None
+    last_probability: float
+
     def transcribe(self, pcm: np.ndarray, prompt: str = "") -> str: ...
 
 
@@ -28,6 +32,8 @@ class WhisperTranscriber:
     ):
         self.model_name = model or os.getenv("CAREERTWIN_WHISPER_MODEL", "small")
         self.language = None if language in (None, "", "auto") else language
+        self.last_language: str | None = None
+        self.last_probability = 0.0
         self.device = device
         self.compute_type = compute_type
         self._model = None
@@ -58,7 +64,7 @@ class WhisperTranscriber:
             return self._run(audio, prompt)
 
     def _run(self, audio: np.ndarray, prompt: str) -> str:
-        segments, _info = self._model.transcribe(
+        segments, info = self._model.transcribe(
             audio,
             language=self.language,
             beam_size=1,
@@ -66,4 +72,7 @@ class WhisperTranscriber:
             condition_on_previous_text=False,
             initial_prompt=prompt or None,
         )
-        return " ".join(segment.text.strip() for segment in segments).strip()
+        text = " ".join(segment.text.strip() for segment in segments).strip()
+        self.last_language = self.language or getattr(info, "language", None)
+        self.last_probability = 1.0 if self.language else getattr(info, "language_probability", 0.0)
+        return text
