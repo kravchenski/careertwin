@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import sys
 import threading
 import time
 import types
@@ -224,10 +225,10 @@ class FakeModel:
 
 @pytest.fixture
 def fake_whisper(monkeypatch):
-    import faster_whisper
-
     FakeModel.created, FakeModel.fail_cuda, FakeModel.fail_run = [], False, False
-    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    stand_in = types.ModuleType("faster_whisper")
+    stand_in.WhisperModel = FakeModel
+    monkeypatch.setitem(sys.modules, "faster_whisper", stand_in)
     monkeypatch.setattr(stt, "preload_cuda_libraries", lambda: 3)
     return FakeModel
 
