@@ -14,8 +14,11 @@ What it does
     Teams and Meet are heard without a virtual cable, and turns it into text on your computer.
     If the call plays on another output, pick that output in Settings -> Audio -> call audio.
     The first start downloads the speech model (about 480 MB for "small").
-  - Questions you type or paste, answered from your Switchyard gateway
-    (Settings -> AI model: URL, key, model).
+  - Speech recognition on your processor (Whisper), or in the cloud with Deepgram
+    (Settings -> Audio & speech -> Speech recognition): quicker on a laptop without a graphics card,
+    but the voices of the call are sent to Deepgram.
+  - Questions you type or paste, answered by the provider you pick in Settings -> AI model
+    (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio or your own address).
   - The Screenshot button copies the primary screen (or all screens, see Settings -> Screenshot)
     and asks about what is on it. The window hides itself for the moment of the capture.
 

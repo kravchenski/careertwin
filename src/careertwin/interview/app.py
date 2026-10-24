@@ -22,11 +22,12 @@ from careertwin.interview.coach import StreamingCoach, gateway_url, model_name
 from careertwin.interview.languages import normalize
 from careertwin.interview.library import ContextController, Library
 from careertwin.interview.providers import base_url
-from careertwin.interview.runtime import Runtime
+from careertwin.interview.runtime import Runtime, make_transcriber
 from careertwin.interview.screenshot import available_tools
 from careertwin.interview.session import InterviewSession
 from careertwin.interview.settings import InterviewSettings
 from careertwin.interview.stt import WhisperTranscriber
+from careertwin.interview.stt_deepgram import DeepgramError, check_key
 from careertwin.interview.transcript import TranscriptLog
 
 
@@ -94,19 +95,27 @@ def doctor(args: argparse.Namespace) -> int:
         report(True, "PySide6 installed")
     except ImportError:
         report(False, "PySide6 missing: uv sync --extra interview")
-    try:
-        import faster_whisper  # noqa: F401
-
-        report(True, f"faster-whisper installed (model {settings.whisper_model})")
+    if settings.stt_engine == "deepgram":
+        key = settings.deepgram_key or os.getenv("DEEPGRAM_API_KEY", "")
         try:
-            probe = WhisperTranscriber(settings.whisper_model, device=settings.whisper_device)
-            probe.load()
-            where = "the GPU (CUDA)" if probe.active_device == "cuda" else "the CPU"
-            report(True, f"speech recognition runs on {where}")
-        except Exception as exc:
-            report(False, f"speech model did not load: {exc}")
-    except ImportError:
-        report(False, "faster-whisper missing: uv sync --extra interview")
+            check_key(key)
+            report(True, f"speech recognition runs on Deepgram in the cloud (model {settings.deepgram_model})")
+        except DeepgramError as exc:
+            report(False, str(exc))
+    else:
+        try:
+            import faster_whisper  # noqa: F401
+
+            report(True, f"faster-whisper installed (model {settings.whisper_model})")
+            try:
+                probe = WhisperTranscriber(settings.whisper_model, device=settings.whisper_device)
+                probe.load()
+                where = "the GPU (CUDA)" if probe.active_device == "cuda" else "the CPU"
+                report(True, f"speech recognition runs on {where}")
+            except Exception as exc:
+                report(False, f"speech model did not load: {exc}")
+        except ImportError:
+            report(False, "faster-whisper missing: uv sync --extra interview")
     if sys.platform != "win32":
         for binary in ("parec", "pactl"):
             report(bool(shutil.which(binary)), f"{binary} found (pipewire-pulse)")
@@ -181,11 +190,7 @@ def main(argv: list[str] | None = None) -> None:
     problems = context.restore()
     language = normalize(settings.language)
     coach = StreamingCoach(brief)
-    transcriber = (
-        WhisperTranscriber(settings.whisper_model, language=language, device=settings.whisper_device)
-        if settings.listen
-        else None
-    )
+    transcriber = make_transcriber(settings, language) if settings.listen else None
     app = create_app(sys.argv[:1])
     bridge = Bridge()
     session = InterviewSession(

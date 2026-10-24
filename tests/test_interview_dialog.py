@@ -176,6 +176,53 @@ def test_audio_tab_lists_sources_and_applies_choices(gui, monkeypatch):
     assert gui.window.pause.isEnabled() is False
 
 
+def test_speech_engine_switches_the_active_controls_and_the_transcriber(gui, monkeypatch):
+    dialog, settings = gui.dialog, gui.runtime.settings
+    made = []
+
+    class FakeDeepgram(FakeWhisper):
+        def __init__(self, key, model, language=None):
+            super().__init__(model, language)
+            made.append((key, model, language))
+
+    monkeypatch.setattr(runtime_module, "DeepgramTranscriber", FakeDeepgram)
+    assert dialog.whisper_model.isEnabled() and not dialog.deepgram_key.isEnabled()
+    gui.choose(dialog.stt_engine, "deepgram")
+    assert settings.stt_engine == "deepgram"
+    assert not dialog.whisper_model.isEnabled() and dialog.deepgram_key.isEnabled() and dialog.deepgram_test.isEnabled()
+    assert "leaves this computer" in dialog.speech_note.text()
+    dialog.deepgram_key.setText("dg-key")
+    dialog.deepgram_key.editingFinished.emit()
+    dialog.deepgram_model.setCurrentText("nova-2")
+    dialog.deepgram_model.activated.emit(0)
+    assert (settings.deepgram_key, settings.deepgram_model) == ("dg-key", "nova-2")
+    assert made[-1][:2] == ("dg-key", "nova-2")
+    assert InterviewSettings.load().stt_engine == "deepgram"
+    gui.choose(dialog.stt_engine, "whisper")
+    assert dialog.whisper_model.isEnabled() and not dialog.deepgram_key.isEnabled()
+    assert "leaves this computer" not in dialog.speech_note.text()
+
+
+def test_the_deepgram_key_can_be_tested_from_the_window(gui, monkeypatch):
+    dialog = gui.dialog
+    asked = []
+    monkeypatch.setattr("careertwin.interview.settings_dialog.check_key", lambda key: asked.append(key))
+    monkeypatch.setattr(dialog, "run", lambda work, done: done(work(), None))
+    dialog.deepgram_key.setText("typed-key")
+    dialog._test_deepgram()
+    assert asked == ["typed-key"] and dialog.status.objectName() != "error" and dialog.status.text()
+
+    def reject(key):
+        from careertwin.interview.stt_deepgram import DeepgramError
+
+        raise DeepgramError("Deepgram rejected the API key")
+
+    monkeypatch.setattr("careertwin.interview.settings_dialog.check_key", reject)
+    monkeypatch.setattr(dialog, "run", lambda work, done: done(None, "Deepgram rejected the API key"))
+    dialog._test_deepgram()
+    assert dialog.status.objectName() == "error" and "rejected" in dialog.status.text()
+
+
 def test_model_tab_saves_the_gateway_and_lists_models(gui):
     gui.dialog.gateway_url.setText("http://127.0.0.1:9999/")
     gui.dialog.gateway_url.editingFinished.emit()
