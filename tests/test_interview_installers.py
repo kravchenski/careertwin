@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 import pytest
