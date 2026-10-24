@@ -125,7 +125,7 @@ last answer took. Details and method: [docs/INTERVIEW.md](docs/INTERVIEW.md).
 
 Many employers forbid AI help during interviews, and recording a call can need the other side's consent. Check the
 rules of each interview and tell the interviewer when you are expected to. The assistant only suggests: you decide
-what to say, and it never hides itself from screen sharing.
+what to say.
 
 ## Agents and MCP
 

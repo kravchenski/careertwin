@@ -8,7 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -107,7 +106,9 @@ def test_every_language_the_readme_names_has_a_window_translation():
         assert name in sentence and i18n.has(code)
 
 
-def test_the_readme_does_not_promise_hiding_from_screen_sharing():
+def test_the_readme_makes_no_claim_about_screen_sharing_that_the_code_contradicts():
+    """The Windows window keeps itself out of captures, so "never hides" would be false; and the
+    README is not the place to advertise evading detection."""
     lowered = README.lower()
-    assert "never hides itself from screen sharing" in lowered
+    assert "never hides" not in lowered
     assert "undetectable" not in lowered and "invisible to" not in lowered and "stealth" not in lowered
