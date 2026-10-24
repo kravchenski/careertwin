@@ -32,6 +32,11 @@ fn find_input(name: &str) -> Result<cpal::Device> {
 }
 
 impl Mic {
+    /// The frames, and a guard that keeps the microphone open for as long as it is held.
+    pub fn split(self) -> (Receiver<Vec<i16>>, Box<dyn std::any::Any + Send>) {
+        (self.frames, Box::new(self._stop))
+    }
+
     /// `device` is a name from [`input_devices`]; empty means the system default.
     pub fn open(device: &str) -> Result<Self> {
         let (frames_tx, frames) = channel::<Vec<i16>>(512);
