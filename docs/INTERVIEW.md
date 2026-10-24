@@ -130,7 +130,7 @@ The window itself is translated into English, Russian and Polish.
 | ⏸ | Pause or resume listening |
 | Dots | Live level of the call audio, so you can see it is heard; text while loading, thinking or on errors |
 | **Ask** `Ctrl ↵` | Answer the last thing the interviewer said, even if it did not sound like a question |
-| **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The window turns transparent for the capture |
+| **Screenshot** `Ctrl ⇧ ↵` | Send the screen to a vision model: a coding task, a slide, a question on screen. The solution appears as lines to say and a code block. The window hides for the moment of the capture, only when it is on the monitor being captured |
 | Input | Type or paste a question and press `Enter` |
 | `Ctrl ←` `Ctrl →` | Page through earlier answers (`2/2`) |
 | **Details** `Ctrl D` | Show or hide the detailed answer under the lines (lines layout) |
@@ -146,6 +146,32 @@ answer* (a paragraph), *key points* (a term in bold and one sentence each) and *
 **Details** button or `Ctrl D` hides it, and the *Concise* answer style skips it altogether for the
 fastest replies. The window scrolls when the answer is long.
 `Ctrl P` pauses. Questions are recognised automatically (debounced, split questions merged).
+
+## Answering the screen fast
+
+`Ctrl ⇧ ↵` only works while the interview window has the keyboard focus, and during a call the focus is on the page with the task. Two ways to press it from there:
+
+- **Windows:** `Ctrl+Shift+Enter` is registered for the whole system when the window starts, so it works in any program (if another program already owns it, the window says so and the button still works).
+- **Linux:** bind a key in your compositor to `careertwin-interview-ctl screenshot` (`careertwin-interview-ctl ask` answers the last question the same way). In niri:
+
+  ```kdl
+  binds {
+      Mod+Shift+Return { spawn "careertwin-interview-ctl" "screenshot"; }
+  }
+  ```
+
+  Under niri the command captures only the monitor that has the focus, so a task shown on one monitor is sent without the other half of a dual-monitor desktop.
+
+What the window does to keep its own part short (measured on a 3840×1080 desktop with `grim`):
+
+| Step | Before | Now |
+|---|---|---|
+| Capture and encode | 200 ms PNG, 1.8 MB | 30 ms JPEG, 0.5 MB (half of that for one monitor) |
+| Waiting for the window to vanish | 250 ms | 60 ms, and none when the window is on another monitor |
+| What the model reads first | a 4,000-character prompt, your whole CV and ABOUT, the conversation | 1,000 characters, and a one-line list of your main technologies |
+| Connection | opened for every answer | kept open, and opened when the window starts |
+
+The rest is the model, and it varies much more than anything the window can do. On this gateway the first words of a screenshot answer took 4 to 30 seconds on most free vision models, and about 1 to 2 seconds on `ovhcloud/Qwen2.5-VL-72B-Instruct`, with the whole solution (about 700 characters) in 6 to 9 seconds; one request in five stalled for over a minute. So pick a fast model in *Settings → AI → Model for screenshots*; the window shows how long the last one took when you hover the status dots. Two seconds is realistic for the first lines, not for a long solution.
 
 ## How it works
 

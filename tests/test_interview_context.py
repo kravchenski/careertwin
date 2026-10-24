@@ -413,7 +413,7 @@ def test_the_prompt_can_ask_for_the_main_answer_only(about):
     main = user_prompt(brief, "Why this internship?", Kind.MOTIVATION, [], "en", "standard", "main")
     assert "ANSWER LAYOUT: main answer only" in main and "only the ANSWER section" in main
     assert "ANSWER LAYOUT: lines to say" in user_prompt(brief, "Why?", Kind.MOTIVATION, [], "en")
-    assert "main answer only" in screenshot_prompt(brief, [], "en", "standard", "main")
+    assert "main answer only" in screenshot_prompt(brief, "en", "main")
     assert "reply with just \"ANSWER:\"" in SYSTEM and "start the paragraph at once" in SYSTEM
     assert "Never invent routines, methods, habits, tools or examples" in SYSTEM
     assert "time-boxed" not in SYSTEM

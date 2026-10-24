@@ -184,6 +184,14 @@ class InterviewBrief:
             parts.append(f"CANDIDATE NOTES FOR THIS INTERVIEW\n{self.notes}")
         return "\n\n".join(parts)
 
+    def stack_hint(self, limit: int = 8) -> str:
+        """The candidate's main technologies, so a coding task is solved in a language they know."""
+        terms = _skill_terms(self.candidate)
+        for doc in self.documents:
+            if doc.enabled:
+                terms += _skill_terms(doc.text)
+        return ", ".join(list(dict.fromkeys(terms))[:limit])
+
     def vocabulary(self) -> str:
         """Names worth biasing speech recognition toward: the vacancy and your skills."""
         words = [self.company, self.job_title]

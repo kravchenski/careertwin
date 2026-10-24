@@ -88,6 +88,11 @@ def read_pixels(gdi32, memory, bitmap, width: int, height: int) -> np.ndarray:
 
 def capture_png(all_screens: bool = False) -> bytes:
     """The primary screen, or every screen side by side, as PNG bytes."""
+    return encode_png(bgra_to_rgb(capture_pixels(all_screens)))
+
+
+def capture_pixels(all_screens: bool = False) -> np.ndarray:
+    """The primary screen, or every screen side by side, as top-down BGRA rows (height, width, 4)."""
     user32, gdi32 = _libraries()
     try:
         user32.SetProcessDPIAware()  # real pixels; a no-op once the window has set its own awareness
@@ -116,4 +121,4 @@ def capture_png(all_screens: bool = False) -> bytes:
         gdi32.DeleteObject(bitmap)
         gdi32.DeleteDC(memory)
         user32.ReleaseDC(None, screen)
-    return encode_png(bgra_to_rgb(pixels))
+    return pixels

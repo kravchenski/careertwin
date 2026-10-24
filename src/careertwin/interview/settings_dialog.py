@@ -66,7 +66,8 @@ STRINGS = {
         "mic_source": "Microphone", "default_mic": "Default microphone",
         "whisper_model": "Speech model",
         "speech_note": "Bigger models are more accurate and slower. A new model downloads on first use.",
-        "gateway_url": "Gateway URL", "gateway_key": "API key", "model_id": "Model",
+        "gateway_url": "Gateway URL", "gateway_key": "API key", "model_id": "Model", "vision_id": "Model for screenshots",
+        "vision_hint": "Optional. A fast model that understands images answers a screenshot much sooner: some free models need 10 to 40 seconds. Empty means the model above.",
         "provider": "Provider", "provider_other": "Other (own address)",
         "engine": "Speech recognition", "engine_whisper": "Whisper on this computer", "engine_deepgram": "Deepgram (cloud)",
         "deepgram_key": "Deepgram API key", "deepgram_test": "Test the key", "deepgram_ok": "Deepgram accepts the key",
@@ -117,7 +118,8 @@ STRINGS = {
         "mic_source": "Микрофон", "default_mic": "Микрофон по умолчанию",
         "whisper_model": "Модель речи",
         "speech_note": "Большие модели точнее и медленнее. Новая модель скачивается при первом использовании.",
-        "gateway_url": "Адрес шлюза", "gateway_key": "API-ключ", "model_id": "Модель",
+        "gateway_url": "Адрес шлюза", "gateway_key": "API-ключ", "model_id": "Модель", "vision_id": "Модель для скриншотов",
+        "vision_hint": "Необязательно. Быстрая модель, понимающая картинки, отвечает по скриншоту намного скорее: некоторым бесплатным нужно 10–40 секунд. Пусто значит модель выше.",
         "provider": "Провайдер", "provider_other": "Другой (свой адрес)",
         "engine": "Распознавание речи", "engine_whisper": "Whisper на этом компьютере", "engine_deepgram": "Deepgram (облако)",
         "deepgram_key": "API-ключ Deepgram", "deepgram_test": "Проверить ключ", "deepgram_ok": "Deepgram принимает ключ",
@@ -168,7 +170,8 @@ STRINGS = {
         "mic_source": "Mikrofon", "default_mic": "Domyślny mikrofon",
         "whisper_model": "Model mowy",
         "speech_note": "Większe modele są dokładniejsze i wolniejsze. Nowy model pobiera się przy pierwszym użyciu.",
-        "gateway_url": "Adres bramki", "gateway_key": "Klucz API", "model_id": "Model",
+        "gateway_url": "Adres bramki", "gateway_key": "Klucz API", "model_id": "Model", "vision_id": "Model do zrzutów ekranu",
+        "vision_hint": "Opcjonalnie. Szybki model rozumiejący obrazy odpowiada na zrzut znacznie szybciej: niektóre darmowe potrzebują 10–40 sekund. Puste oznacza model powyżej.",
         "provider": "Dostawca", "provider_other": "Inny (własny adres)",
         "engine": "Rozpoznawanie mowy", "engine_whisper": "Whisper na tym komputerze", "engine_deepgram": "Deepgram (chmura)",
         "deepgram_key": "Klucz API Deepgram", "deepgram_test": "Sprawdź klucz", "deepgram_ok": "Deepgram przyjmuje klucz",
@@ -837,9 +840,12 @@ class SettingsDialog(QDialog):
         self.provider_label = QLabel()
         self.model_id = QComboBox()
         self.model_id.setEditable(True)
+        self.vision_id = QComboBox()
+        self.vision_id.setEditable(True)
+        self.vision_hint = self._hint()
         self.load_models = QPushButton()
         self.test_gateway = QPushButton()
-        self.model_labels = [QLabel() for _ in range(3)]
+        self.model_labels = [QLabel() for _ in range(4)]
         model_row = QHBoxLayout()
         model_row.addWidget(self.model_id, 1)
         model_row.addWidget(self.load_models)
@@ -847,6 +853,8 @@ class SettingsDialog(QDialog):
         form.addRow(self.model_labels[0], self.gateway_url)
         form.addRow(self.model_labels[1], self.gateway_key)
         form.addRow(self.model_labels[2], model_row)
+        form.addRow(self.model_labels[3], self.vision_id)
+        form.addRow("", self.vision_hint)
         self.model_form = form
         row = QHBoxLayout()
         row.addWidget(self.test_gateway)
@@ -860,6 +868,8 @@ class SettingsDialog(QDialog):
         self.gateway_key.editingFinished.connect(lambda: self._set("gateway_key", self.gateway_key.text()))
         self.model_id.lineEdit().editingFinished.connect(self._set_model)
         self.model_id.activated.connect(lambda _i: self._set_model())
+        self.vision_id.lineEdit().editingFinished.connect(self._set_vision_model)
+        self.vision_id.activated.connect(lambda _i: self._set_vision_model())
         self.load_models.clicked.connect(self._load_models)
         self.test_gateway.clicked.connect(self._test_gateway)
 
@@ -879,8 +889,11 @@ class SettingsDialog(QDialog):
                 self.gateway_key.setText("")
             self._set("gateway_key", "")
             self._set("model", "")
+            self._set("vision_model", "")
             with QSignalBlocker(self.model_id):
                 self.model_id.setCurrentText("auto")
+            with QSignalBlocker(self.vision_id):
+                self.vision_id.setCurrentText("")
         with QSignalBlocker(self.gateway_url):
             self.gateway_url.setText(provider.url)
         self._set("gateway_url", provider.url)
@@ -904,6 +917,10 @@ class SettingsDialog(QDialog):
         text = self.model_id.currentText().strip()
         self._set("model", "" if text in {"", "auto"} else text)
 
+    def _set_vision_model(self) -> None:
+        text = self.vision_id.currentText().strip()
+        self._set("vision_model", "" if text in {"", "auto"} else text)
+
     def _load_models(self) -> None:
         self.run(self.rt.models, self._models_loaded)
 
@@ -916,6 +933,10 @@ class SettingsDialog(QDialog):
             self.model_id.clear()
             self.model_id.addItems(models if "auto" in models else ["auto", *models])
             self.model_id.setCurrentText(current or "auto")
+        with QSignalBlocker(self.vision_id):
+            self.vision_id.clear()
+            self.vision_id.addItems(["", *models])
+            self.vision_id.setCurrentText(self.rt.settings.vision_model)
         self.say(self.t("models_loaded", n=len(models)))
 
     def _test_gateway(self) -> None:
@@ -1042,6 +1063,8 @@ class SettingsDialog(QDialog):
         self._sync_engine()
         with QSignalBlocker(self.model_id):
             self.model_id.setCurrentText(settings.model or "auto")
+        with QSignalBlocker(self.vision_id):
+            self.vision_id.setCurrentText(settings.vision_model)
         self._sync_provider()
 
     def retranslate(self) -> None:
@@ -1091,8 +1114,9 @@ class SettingsDialog(QDialog):
         self.stt_engine.setItemText(0, self.t("engine_whisper"))
         self.stt_engine.setItemText(1, self.t("engine_deepgram"))
         self._sync_engine()
-        for label, key in zip(self.model_labels, ("gateway_url", "gateway_key", "model_id")):
+        for label, key in zip(self.model_labels, ("gateway_url", "gateway_key", "model_id", "vision_id")):
             label.setText(self.t(key))
+        self.vision_hint.setText(self.t("vision_hint"))
         self.load_models.setText(self.t("load_models"))
         self.test_gateway.setText(self.t("test"))
         self.provider_label.setText(self.t("provider"))

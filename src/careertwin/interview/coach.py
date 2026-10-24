@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -20,6 +21,7 @@ from careertwin.interview.prepare import (
     questions_prompt,
 )
 from careertwin.interview.prompts import (
+    SCREENSHOT_SYSTEM,
     SYSTEM,
     Suggestion,
     parse_suggestion,
@@ -124,14 +126,39 @@ class StreamingCoach:
         api_key: str | None = None,
         style: str = "standard",
         layout: str = "lines",
+        vision_model: str | None = None,
     ):
         self.brief = brief
         self.model = model
+        self.vision_model = vision_model
+        self._http: httpx.Client | None = None
         self.transport = transport
         self.url = url
         self.api_key = api_key
         self.style = style
         self.layout = layout
+
+    def _client(self) -> httpx.Client:
+        """One client for the whole call: its open connection saves the handshake on each answer."""
+        if self._http is None:
+            self._http = httpx.Client(timeout=httpx.Timeout(120, connect=5), transport=self.transport)
+        return self._http
+
+    def _auth(self) -> dict[str, str]:
+        key = self.api_key or os.getenv("SWITCHYARD_API_KEY")
+        return {"Authorization": f"Bearer {key}"} if key else {}
+
+    def warm_up(self) -> None:
+        """Open the connection to the gateway now, so the first answer of a call does not pay for it."""
+        with contextlib.suppress(httpx.HTTPError):
+            self._client().get(
+                f"{base_url(self.url or gateway_url())}/v1/models", headers=self._auth(), timeout=5
+            )
+
+    def close(self) -> None:
+        if self._http is not None:
+            self._http.close()
+            self._http = None
 
     def complete(self, system: str, prompt: str, *, max_tokens: int = 2500, temperature: float = 0.3) -> str:
         """One blocking completion through the configured gateway, model and key."""
@@ -173,7 +200,7 @@ class StreamingCoach:
         If the chosen model fails before saying anything (rate limit, outage) on a Switchyard
         gateway, the request is repeated once on automatic routing, so one bad provider does not
         cost a live answer. Other providers have no "auto", so their error is shown as it is."""
-        model = self.model or model_name()
+        model = (image and self.vision_model) or self.model or model_name()
         started = False
         try:
             for chunk in self._stream_model(model, question, history, cancel, language, image):
@@ -208,11 +235,14 @@ class StreamingCoach:
         language: str | None,
         image: str | None,
     ) -> Iterator[str]:
+        system, temperature, max_tokens = SYSTEM, 0.3, 1800
         if image:
-            text = screenshot_prompt(self.brief, history, language, self.style, self.layout)
+            # The picture is the question: no CV, no history, so the model has little to read first.
+            system, temperature, max_tokens = SCREENSHOT_SYSTEM, 0.2, 1200
+            url = image if image.startswith("data:") else f"data:image/png;base64,{image}"
             content: str | list[dict] = [
-                {"type": "text", "text": text},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
+                {"type": "text", "text": screenshot_prompt(self.brief, language, self.layout)},
+                {"type": "image_url", "image_url": {"url": url}},
             ]
         else:
             content = user_prompt(
@@ -221,26 +251,23 @@ class StreamingCoach:
         body = {
             "model": model,
             "messages": [
-                {"role": "system", "content": SYSTEM},
+                {"role": "system", "content": system},
                 {"role": "user", "content": content},
             ],
-            "temperature": 0.3,
-            "max_tokens": 1800,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
             "stream": True,
         }
-        headers = {"Accept": "text/event-stream"}
-        if key := self.api_key or os.getenv("SWITCHYARD_API_KEY"):
-            headers["Authorization"] = f"Bearer {key}"
+        headers = {"Accept": "text/event-stream", **self._auth()}
         base = base_url(self.url or gateway_url())
         try:
-            with httpx.Client(timeout=httpx.Timeout(120, connect=5), transport=self.transport) as client:
-                with client.stream(
-                    "POST", f"{base}/v1/chat/completions", json=body, headers=headers
-                ) as response:
-                    if response.status_code >= 400:
-                        response.read()
-                        raise CoachError(failed(base, model, response.status_code, response.text))
-                    yield from _chunks(response, cancel)
+            with self._client().stream(
+                "POST", f"{base}/v1/chat/completions", json=body, headers=headers
+            ) as response:
+                if response.status_code >= 400:
+                    response.read()
+                    raise CoachError(failed(base, model, response.status_code, response.text))
+                yield from _chunks(response, cancel)
         except httpx.HTTPError as exc:
             raise CoachError(unreachable(base, exc)) from exc
 

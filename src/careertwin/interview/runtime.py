@@ -7,6 +7,7 @@ imports Qt, so the whole behaviour is testable without a display.
 from __future__ import annotations
 
 import sys
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -40,7 +41,7 @@ from careertwin.interview.stt_deepgram import DeepgramTranscriber
 
 AUDIO_KEYS = {"listen", "call_source", "use_mic", "mic_source"}
 SPEECH_KEYS = {"stt_engine", "whisper_model", "whisper_device", "deepgram_key", "deepgram_model"}
-COACH_KEYS = {"gateway_url", "gateway_key", "model", "answer_style", "answer_layout"}
+COACH_KEYS = {"gateway_url", "gateway_key", "model", "vision_model", "answer_style", "answer_layout"}
 WINDOW_KEYS = {"pinned", "frameless", "opacity", "font_scale", "show_full_answer", "ui_language"}
 
 
@@ -105,6 +106,7 @@ class Runtime:
         self.coach.url = self.settings.gateway_url or None
         self.coach.api_key = self.settings.gateway_key or None
         self.coach.model = self.settings.model or None
+        self.coach.vision_model = self.settings.vision_model or None
         self.coach.style = self.settings.answer_style
         self.coach.layout = self.settings.answer_layout
 
@@ -173,6 +175,10 @@ class Runtime:
 
     # ---- gateway -----------------------------------------------------------
 
+    def warm_up(self) -> None:
+        """Open the connection to the AI provider in the background, before the first question."""
+        threading.Thread(target=self.coach.warm_up, name="warm-up", daemon=True).start()
+
     def gateway(self) -> str:
         return base_url(self.settings.gateway_url or gateway_url())
 
@@ -231,6 +237,6 @@ class Runtime:
     def screenshot_ready(self) -> bool:
         return self.settings.screenshot_enabled and bool(self.screenshot_tools())
 
-    def capture(self) -> str:
-        """Capture the screen with the configured tool; return base64 PNG."""
-        return screenshot.to_base64(screenshot.capture_png(self.settings.screenshot_tool))
+    def capture(self, output: str | None = None) -> str:
+        """Capture the screen (or one monitor) with the configured tool; return it as a data URL."""
+        return screenshot.capture(self.settings.screenshot_tool, output).data_url()
