@@ -284,7 +284,6 @@ def record_interview(questions: list[str]) -> tuple[list[dict], list[list[Image.
         on_hint=lambda: None,
         on_pause=lambda _: None,
         on_screenshot=lambda: None,
-        on_add_document=lambda _path: brief.sources(),
         sources=brief.sources(),
         ui_language="en",
     )

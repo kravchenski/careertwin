@@ -54,7 +54,7 @@ PRACTICE_SYSTEM = """\
 You prepare a candidate for an interview. From the candidate context and vacancy, write the \
 questions this interviewer is most likely to ask, mixing technical, behavioral and motivation \
 questions. For each give a short outline of an honest answer using ONLY facts in the context; \
-if the context has no support, say "No direct experience on record" and outline a truthful \
+if the context has no support, say so honestly in first person and outline a truthful \
 answer. Reply with JSON only: {"questions": [{"question": str, "kind": str, "outline": [str]}]}.\
 """
 
@@ -87,11 +87,22 @@ async def practice_questions(
 class StreamingCoach:
     """Blocking, cancellable token stream for the live overlay."""
 
-    def __init__(self, brief: InterviewBrief, *, model: str | None = None,
-                 transport: httpx.BaseTransport | None = None):
+    def __init__(
+        self,
+        brief: InterviewBrief,
+        *,
+        model: str | None = None,
+        transport: httpx.BaseTransport | None = None,
+        url: str | None = None,
+        api_key: str | None = None,
+        style: str = "standard",
+    ):
         self.brief = brief
-        self.model = model or model_name()
+        self.model = model
         self.transport = transport
+        self.url = url
+        self.api_key = api_key
+        self.style = style
 
     def stream(
         self,
@@ -103,15 +114,17 @@ class StreamingCoach:
     ) -> Iterator[str]:
         """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored."""
         if image:
-            text = screenshot_prompt(self.brief, history, language)
+            text = screenshot_prompt(self.brief, history, language, self.style)
             content: str | list[dict] = [
                 {"type": "text", "text": text},
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
             ]
         else:
-            content = user_prompt(self.brief, question, classify(question), history, language)
+            content = user_prompt(
+                self.brief, question, classify(question), history, language, self.style
+            )
         body = {
-            "model": self.model,
+            "model": self.model or model_name(),
             "messages": [
                 {"role": "system", "content": SYSTEM},
                 {"role": "user", "content": content},
@@ -121,12 +134,13 @@ class StreamingCoach:
             "stream": True,
         }
         headers = {"Accept": "text/event-stream"}
-        if key := os.getenv("SWITCHYARD_API_KEY"):
+        if key := self.api_key or os.getenv("SWITCHYARD_API_KEY"):
             headers["Authorization"] = f"Bearer {key}"
+        base = (self.url or gateway_url()).rstrip("/")
         try:
             with httpx.Client(timeout=httpx.Timeout(120, connect=5), transport=self.transport) as client:
                 with client.stream(
-                    "POST", f"{gateway_url()}/v1/chat/completions", json=body, headers=headers
+                    "POST", f"{base}/v1/chat/completions", json=body, headers=headers
                 ) as response:
                     if response.status_code >= 400:
                         response.read()
@@ -136,7 +150,7 @@ class StreamingCoach:
                     yield from _chunks(response, cancel)
         except httpx.HTTPError as exc:
             raise CoachError(
-                f"Switchyard is not reachable at {gateway_url()} ({type(exc).__name__})"
+                f"Switchyard is not reachable at {base} ({type(exc).__name__})"
             ) from exc
 
 

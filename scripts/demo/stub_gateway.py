@@ -23,9 +23,10 @@ TASK_URL = "https://example.com/jobs/python-developer"
 
 INCIDENT = (
     "POINTS:\n"
-    "- Situation: order API p95 latency doubled after a release\n"
-    "- Action: traced it to a query without an index, added the index\n"
-    "- Result: normal within the hour, plus a latency alert\n"
+    "- After a release our order API's **p95 latency doubled**.\n"
+    "- I traced it to a query on customer id with **no index**.\n"
+    "- I added the **index** and a latency alert.\n"
+    "- It was **back to normal within the hour**.\n"
     "ANSWER:\n"
     "After a release at Northwind our order API got twice as slow. I traced it to a query on "
     "customer id that had no index, added one, and we were back to normal within the hour. "
@@ -33,16 +34,17 @@ INCIDENT = (
 )
 KUBERNETES = (
     "POINTS:\n"
-    "- No direct experience on record: Kubernetes was coursework only\n"
-    "- Closest real work: Docker deployments, GitHub Actions in CI\n"
-    "- Say you learn fast and name what you would study first\n"
+    "- I haven't run **Kubernetes** in production, only on a lab cluster at university.\n"
+    "- At Northwind I deployed with **Docker** and automated releases in **GitHub Actions**.\n"
+    "- I know the problems it solves, and I learn new tools quickly.\n"
+    "- I'd be glad to learn it properly on the job.\n"
     "ANSWER:\n"
     "I have not run Kubernetes in production. I worked with it on a lab cluster at university. "
     "At Northwind I deployed everything with Docker and automated releases in GitHub Actions, "
     "so I know the problems it solves, and I would be glad to learn it properly on the job."
 )
 GENERIC = (
-    "POINTS:\n- Answer from your real experience\nANSWER:\n"
+    "POINTS:\n- I would answer from the work in my **profile**.\nANSWER:\n"
     "I would answer from the work described in my profile."
 )
 

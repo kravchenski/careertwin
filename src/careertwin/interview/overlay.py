@@ -20,7 +20,6 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -29,16 +28,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizeGrip,
     QSizePolicy,
-    QSlider,
     QTextBrowser,
     QToolButton,
     QVBoxLayout,
     QWidget,
-    QWidgetAction,
 )
 
 from careertwin.interview import languages
 from careertwin.interview.prompts import split_partial
+from careertwin.interview.runtime import Runtime
 from careertwin.interview.session import INTERVIEWER, YOU, Callbacks
 
 BACKGROUND = QColor(19, 20, 30, 232)
@@ -66,6 +64,10 @@ STRINGS = {
         "paused": "Paused", "thinking": "Thinking…", "idle": "Type a question",
         "no_screenshot": "Screenshots need grim (Wayland), spectacle, or maim/scrot (X11)",
         "drop_cv": "drop a PDF here to add a CV", "cv_added": "CV added",
+        "settings": "Settings…", "context_menu": "Context…",
+        "no_context": "No context yet",
+        "no_context_hint": "Open Settings → Docs and add your CV, or write about yourself in About me.",
+        "shot_off": "Screenshots are turned off in Settings",
     },
     "ru": {
         "ask": "Спросить", "screenshot": "Скриншот", "get_answer": "Получить ответ",
@@ -79,6 +81,10 @@ STRINGS = {
         "paused": "Пауза", "thinking": "Думаю…", "idle": "Введите вопрос",
         "no_screenshot": "Для скриншотов нужен grim (Wayland), spectacle или maim/scrot (X11)",
         "drop_cv": "перетащите PDF, чтобы добавить резюме", "cv_added": "Резюме добавлено",
+        "settings": "Настройки…", "context_menu": "Контекст…",
+        "no_context": "Контекста пока нет",
+        "no_context_hint": "Откройте Настройки → Документы и добавьте резюме или напишите о себе во вкладке «Обо мне».",
+        "shot_off": "Скриншоты выключены в настройках",
     },
     "pl": {
         "ask": "Zapytaj", "screenshot": "Zrzut ekranu", "get_answer": "Odpowiedz",
@@ -92,6 +98,10 @@ STRINGS = {
         "paused": "Pauza", "thinking": "Myślę…", "idle": "Wpisz pytanie",
         "no_screenshot": "Zrzuty ekranu wymagają grim (Wayland), spectacle lub maim/scrot (X11)",
         "drop_cv": "upuść tu plik PDF, aby dodać CV", "cv_added": "Dodano CV",
+        "settings": "Ustawienia…", "context_menu": "Kontekst…",
+        "no_context": "Brak kontekstu",
+        "no_context_hint": "Otwórz Ustawienia → Dokumenty i dodaj CV albo napisz o sobie w zakładce „O mnie”.",
+        "shot_off": "Zrzuty ekranu są wyłączone w ustawieniach",
     },
 }
 MENU_LANGUAGES = ["en", "ru", "pl", "uk", "de", "fr", "es", "it", "pt", "cs"]
@@ -269,10 +279,17 @@ class Pill(QWidget):
 class ElidedLabel(QLabel):
     """A one-line label that shortens its text with an ellipsis instead of widening the window."""
 
+    clicked = Signal()
+
     def __init__(self) -> None:
         super().__init__()
         self.full = ""
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
 
     def set_full_text(self, text: str) -> None:
         self.full = text
@@ -308,11 +325,11 @@ class OverlayWindow(QWidget):
         self,
         bridge: Bridge,
         *,
-        on_ask: Callable[[str], None],
-        on_hint: Callable[[], None],
-        on_pause: Callable[[bool], None],
+        runtime: Runtime | None = None,
+        on_ask: Callable[[str], None] | None = None,
+        on_hint: Callable[[], None] | None = None,
+        on_pause: Callable[[bool], None] | None = None,
         on_screenshot: Callable[[], None] | None = None,
-        on_add_document: Callable[[str], list[tuple[str, str]]] | None = None,
         on_language: Callable[[str | None], None] | None = None,
         sources: list[tuple[str, str]] | None = None,
         listening: bool = True,
@@ -327,10 +344,18 @@ class OverlayWindow(QWidget):
         self.setAcceptDrops(True)
         self.resize(900, 400)
         self.setMinimumSize(560, 280)
-        self._on_ask, self._on_hint, self._on_pause = on_ask, on_hint, on_pause
-        self._on_screenshot, self._on_add_document = on_screenshot, on_add_document
+        self.runtime = runtime
+        session = runtime.session if runtime else None
+        self._on_ask = on_ask or (session.ask if session else lambda _text: None)
+        self._on_hint = on_hint or (session.hint_now if session else lambda: None)
+        self._on_pause = on_pause or (session.pause if session else lambda _paused: None)
+        self._on_screenshot = on_screenshot
         self._on_language = on_language
         self.sources = sources or []
+        self.pinned = pinned
+        self.font_scale = 100
+        self.ui_locked = False
+        self.settings_dialog = None
         self.ui = ui_language if ui_language in STRINGS else "en"
         self.entries: list[Entry] = []
         self.index = -1
@@ -369,7 +394,7 @@ class OverlayWindow(QWidget):
         self.pill = StatusPill()
         self.ask = Pill("", "")
         self.shot = Pill("", "")
-        self.shot.setEnabled(on_screenshot is not None)
+        self.shot.setEnabled(on_screenshot is not None or bool(runtime and runtime.screenshot_ready()))
         self.menu_button = QToolButton()
         self.menu_button.setText("☰")
         self.menu_button.setStyleSheet(f"font-size: 22px; color: {TEXT};")
@@ -424,6 +449,7 @@ class OverlayWindow(QWidget):
         root.addLayout(footer)
         self.context = ElidedLabel()
         self.context.setObjectName("dim")
+        self.context.clicked.connect(lambda: self.open_settings("docs"))
         root.addWidget(self.context)
 
         self._build_menu(pinned)
@@ -463,29 +489,18 @@ class OverlayWindow(QWidget):
 
     def _build_menu(self, pinned: bool) -> None:
         self.menu = QMenu(self)
+        self.act_settings = QAction(self)
+        self.act_context = QAction(self)
         self.act_transcript = QAction(self, checkable=True)
         self.act_full = QAction(self, checkable=True)
         self.act_pin = QAction(self, checkable=True, checked=pinned)
-        self.act_cv = QAction(self)
         self.act_quit = QAction(self)
+        self.act_settings.triggered.connect(lambda: self.open_settings("language"))
+        self.act_context.triggered.connect(lambda: self.open_settings("docs"))
         self.act_transcript.toggled.connect(self.transcript.setVisible)
-        self.act_full.toggled.connect(self._toggle_full)
-        self.act_pin.toggled.connect(self.set_pinned)
-        self.act_cv.triggered.connect(self._choose_document)
+        self.act_full.toggled.connect(lambda value: self._quick("show_full_answer", value))
+        self.act_pin.toggled.connect(lambda value: self._quick("pinned", value))
         self.act_quit.triggered.connect(self.close)
-        slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setRange(35, 100)
-        slider.setValue(100)
-        slider.setFixedWidth(150)
-        slider.valueChanged.connect(lambda value: self.setWindowOpacity(value / 100))
-        self.opacity_label = QLabel()
-        opacity = QWidget()
-        row = QHBoxLayout(opacity)
-        row.setContentsMargins(18, 4, 18, 4)
-        row.addWidget(self.opacity_label)
-        row.addWidget(slider)
-        self.opacity_action = QWidgetAction(self)
-        self.opacity_action.setDefaultWidget(opacity)
         self.language_menu = QMenu(self)
         self.language_group = QActionGroup(self)
         self.language_actions: dict[str | None, QAction] = {}
@@ -495,21 +510,31 @@ class OverlayWindow(QWidget):
             self.language_group.addAction(action)
             self.language_menu.addAction(action)
             self.language_actions[code] = action
+        for item in (self.act_settings, self.act_context):
+            self.menu.addAction(item)
+        self.menu.addSeparator()
         for item in (self.act_transcript, self.act_full, self.act_pin):
             self.menu.addAction(item)
-        self.menu.addAction(self.opacity_action)
-        self.menu.addSeparator()
-        self.menu.addAction(self.act_cv)
         self.language_menu_action = self.menu.addMenu(self.language_menu)
         self.menu.addSeparator()
         self.menu.addAction(self.act_quit)
         self.menu_button.setMenu(self.menu)
 
+    def _quick(self, name: str, value: bool) -> None:
+        """A menu toggle: saved through the runtime when there is one, else applied locally."""
+        if self.runtime:
+            try:
+                self.runtime.update(name, value)
+            except ValueError as exc:
+                self.show_error(str(exc))
+        else:
+            self.apply_setting(name, value)
+
     def _translate(self) -> None:
         keys = KEYS
         self.ask.set_texts(self.tr_("ask"), keys["ask"])
         self.shot.set_texts(self.tr_("screenshot"), keys["screenshot"])
-        self.shot.setToolTip("" if self._on_screenshot else self.tr_("no_screenshot"))
+        self._refresh_screenshot()
         self.input.setPlaceholderText(self.tr_("placeholder"))
         self.get_answer.setText(self.tr_("get_answer"))
         self.previous.setText(keys["previous"])
@@ -517,22 +542,45 @@ class OverlayWindow(QWidget):
         self.act_transcript.setText(self.tr_("transcript"))
         self.act_full.setText(self.tr_("full_answer"))
         self.act_pin.setText(self.tr_("pin"))
-        self.act_cv.setText(self.tr_("add_cv"))
+        self.act_settings.setText(self.tr_("settings"))
+        self.act_context.setText(self.tr_("context_menu"))
         self.act_quit.setText(self.tr_("quit"))
-        self.opacity_label.setText(self.tr_("opacity"))
         self.language_menu_action.setText(self.tr_("language"))
         for code, action in self.language_actions.items():
             action.setText(self.tr_("auto") if code is None else languages.NATIVE.get(code, languages.name(code)))
         self._update_context()
         self.transcript.setPlaceholderText("")
 
+    def _refresh_screenshot(self) -> None:
+        """Enable the Screenshot pill only when a tool exists and the setting is on."""
+        if self.runtime:
+            ready = self.runtime.screenshot_ready()
+            reason = "" if ready else self.tr_(
+                "no_screenshot" if self.runtime.settings.screenshot_enabled else "shot_off"
+            )
+        else:
+            ready = self._on_screenshot is not None
+            reason = "" if ready else self.tr_("no_screenshot")
+        self.shot.setEnabled(ready)
+        self.shot.setToolTip(reason)
+
+    def refresh_controls(self) -> None:
+        """Re-read everything that depends on the context and settings."""
+        self._refresh_screenshot()
+        self._update_context()
+        self._render()
+
     def _update_context(self) -> None:
-        labels = " · ".join(label for _kind, label in self.sources)
-        hint = f"  ·  {self.tr_('drop_cv')}" if self._on_add_document else ""
+        sources = self.runtime.context.sources() if self.runtime else self.sources
+        labels = " · ".join(label for _kind, label in sources)
+        hint = f"  ·  {self.tr_('drop_cv')}"
         self.context.set_full_text(f"{self.tr_('context')}: {labels}{hint}" if labels else hint.lstrip(" ·"))
 
-    def set_ui_language(self, code: str) -> None:
-        """Switch the window to the interview language when we have a translation."""
+    def set_ui_language(self, code: str, manual: bool = False) -> None:
+        """Switch the window language. Automatic switches follow the interview language and
+        are ignored once the interface language is chosen in Settings."""
+        if self.ui_locked and not manual:
+            return
         new = code if code in STRINGS else "en"
         if new == self.ui:
             return
@@ -540,12 +588,59 @@ class OverlayWindow(QWidget):
         self._translate()
         self.pill.show_state(self.last_state[0], self._state_text(self.last_state[0]))
         self._render()
+        if self.settings_dialog is not None:
+            self.settings_dialog.retranslate()
 
     def set_sources(self, sources: list[tuple[str, str]]) -> None:
         self.sources = sources
         self._update_context()
 
+    def apply_setting(self, name: str, value) -> None:
+        """Apply one saved setting to the window (called by the runtime and at start)."""
+        if name == "pinned":
+            self.pinned = bool(value)
+            self.act_pin.blockSignals(True)
+            self.act_pin.setChecked(self.pinned)
+            self.act_pin.blockSignals(False)
+            self.set_pinned(self.pinned)
+        elif name == "frameless":
+            self.frameless = bool(value)
+            self.set_pinned(self.pinned)
+            self.update()
+        elif name == "opacity":
+            self.setWindowOpacity(int(value) / 100)
+        elif name == "font_scale":
+            self.font_scale = int(value)
+            self._render()
+        elif name == "show_full_answer":
+            self.full_answer = bool(value)
+            self.act_full.blockSignals(True)
+            self.act_full.setChecked(self.full_answer)
+            self.act_full.blockSignals(False)
+            self._render()
+        elif name == "ui_language":
+            self.ui_locked = value != "auto"
+            if self.ui_locked:
+                self.set_ui_language(str(value), manual=True)
+        elif name == "listen":
+            self.pause.setEnabled(bool(value))
+
+    def apply_settings(self, settings) -> None:
+        for name in ("opacity", "font_scale", "show_full_answer", "ui_language", "listen"):
+            self.apply_setting(name, getattr(settings, name))
+
+    def open_settings(self, tab: str = "docs") -> None:
+        """Show the settings dialog (created on first use) on the given tab."""
+        if self.runtime is None:
+            return
+        from careertwin.interview.settings_dialog import SettingsDialog
+
+        if self.settings_dialog is None:
+            self.settings_dialog = SettingsDialog(self, self.runtime)
+        self.settings_dialog.show_tab(tab)
+
     def set_pinned(self, pinned: bool) -> None:
+        self.pinned = pinned
         flags = Qt.WindowType.Window
         if self.frameless:
             flags |= Qt.WindowType.FramelessWindowHint
@@ -591,31 +686,49 @@ class OverlayWindow(QWidget):
         self._render()
 
     def _choose_language(self, code: str | None) -> None:
-        if self._on_language:
+        if self.runtime:
+            try:
+                self.runtime.update("language", code or "auto")
+            except ValueError as exc:
+                self.show_error(str(exc))
+        elif self._on_language:
             self._on_language(code)
-        if code:
+        if code and not self.runtime:
             self.set_ui_language(code)
 
-    def _choose_document(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, self.tr_("add_cv"), "", "CV (*.pdf *.docx *.txt *.md)"
-        )
-        if path:
-            self._add_document(path)
-
-    def _add_document(self, path: str) -> None:
-        if not self._on_add_document:
+    def add_files(self, paths: list[str]) -> None:
+        """Add CVs or other documents about you to the context."""
+        if not self.runtime:
             return
-        try:
-            self.set_sources(self._on_add_document(path))
-        except Exception as exc:
-            self.show_error(str(exc))
+        errors = self.runtime.context.add_documents(paths)
+        self.refresh_controls()
+        if errors:
+            self.show_error(errors[0])
         else:
             self.pill.show_state(self.last_state[0], self.tr_("cv_added"))
 
     def _screenshot(self) -> None:
-        if self._on_screenshot and self.shot.isEnabled():
-            self._on_screenshot()
+        if not self.shot.isEnabled():
+            return
+        if not self.runtime:
+            if self._on_screenshot:
+                self._on_screenshot()
+            return
+        previous = self.windowOpacity()
+        self.setWindowOpacity(0.0)
+        QApplication.processEvents()
+
+        def capture() -> None:
+            try:
+                data = self.runtime.capture()
+            except Exception as exc:
+                self.setWindowOpacity(previous)
+                self.show_error(str(exc))
+                return
+            self.setWindowOpacity(previous)
+            self.runtime.session.ask_screenshot(data)
+
+        QTimer.singleShot(self.runtime.settings.screenshot_delay_ms, capture)
 
     def _submit(self) -> None:
         text = self.input.text().strip()
@@ -628,9 +741,7 @@ class OverlayWindow(QWidget):
             event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:
-        for url in event.mimeData().urls():
-            if url.isLocalFile():
-                self._add_document(url.toLocalFile())
+        self.add_files([url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()])
 
     def mousePressEvent(self, event) -> None:
         child = self.childAt(event.position().toPoint())
@@ -692,24 +803,30 @@ class OverlayWindow(QWidget):
         self.page.setText(f"{self.index + 1}/{total}" if total else "–")
         self.previous.setEnabled(self.index > 0)
         self.next.setEnabled(0 <= self.index < total - 1)
+        scale = self.font_scale / 100
+        px = lambda size: round(size * scale)  # noqa: E731
         if not total:
-            hint = self.tr_("waiting_hint", ask=f"{self.tr_('ask')} ({KEYS['ask']})")
+            if self.runtime and self.runtime.context.brief.is_empty():
+                title, hint = self.tr_("no_context"), self.tr_("no_context_hint")
+            else:
+                title = self.tr_("waiting")
+                hint = self.tr_("waiting_hint", ask=f"{self.tr_('ask')} ({KEYS['ask']})")
             self.answer.setHtml(
-                f'<p style="color:{MUTED}; font-size:16px">{html.escape(self.tr_("waiting"))}<br>'
-                f'<span style="font-size:13px">{html.escape(hint)}</span></p>'
+                f'<p style="color:{MUTED}; font-size:{px(16)}px">{html.escape(title)}<br>'
+                f'<span style="font-size:{px(13)}px">{html.escape(hint)}</span></p>'
             )
             return
         entry = self.entries[self.index]
         points, spoken = split_partial(entry.raw)
         parts = [
-            f'<div style="font-size:19px; font-weight:700; color:{STRONG}">'
+            f'<div style="font-size:{px(19)}px; font-weight:700; color:{STRONG}">'
             f"{html.escape(entry.question)}</div>"
         ]
         if points:
             items = "".join(f"<li>{render_bold(point)}</li>" for point in points)
-            parts.append(f'<ul style="font-size:16px">{items}</ul>')
+            parts.append(f'<ul style="font-size:{px(16)}px">{items}</ul>')
         if spoken and (self.full_answer or not points):
-            parts.append(f'<p style="font-size:16px; color:{TEXT}">{render_bold(spoken)}</p>')
+            parts.append(f'<p style="font-size:{px(16)}px; color:{TEXT}">{render_bold(spoken)}</p>')
         scroll = self.answer.verticalScrollBar().value()
         self.answer.setHtml("".join(parts))
         self.answer.verticalScrollBar().setValue(scroll)

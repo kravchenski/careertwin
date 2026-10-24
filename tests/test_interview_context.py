@@ -288,3 +288,13 @@ def test_app_parser_accepts_resume_and_language_options():
         ["--resume", "a.pdf", "--resume", "b.pdf", "--language", "ru", "--framed", "--no-pin"]
     )
     assert args.resume == ["a.pdf", "b.pdf"] and args.language == "ru" and args.framed and args.no_pin
+
+
+def test_the_system_prompt_asks_for_words_to_say_not_advice():
+    from careertwin.interview.prompts import KIND_HINTS, STYLE_HINTS, SYSTEM
+
+    assert "the actual words to say" in SYSTEM and "never advice" in SYSTEM
+    assert "Greet warmly" in SYSTEM and "Wrong:" in SYSTEM and "Right:" in SYSTEM
+    assert "first person" in SYSTEM and "No bluff" in SYSTEM
+    assert "say the greeting" in KIND_HINTS[Kind.SMALL_TALK].lower().replace("small talk: ", "")
+    assert all("lines" in hint for hint in STYLE_HINTS.values())
