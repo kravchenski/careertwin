@@ -431,7 +431,6 @@ strings! {
     StatusChat => ("Write to me. I'm here.", "Пишите мне, я здесь."),
     LessonTerm => ("Term {n} of {total}", "Термин {n} из {total}"),
     StageNative => ("In your words", "Своими словами"),
-    StageEnglish => ("In English", "По-английски"),
     WriteToTutor => ("Write to the tutor…", "Напишите репетитору…"),
     CloseChat => ("Finish chat", "Закрыть чат"),
     VoiceOff => ("Mute the tutor", "Отключить голос"),
@@ -448,8 +447,13 @@ strings! {
         "Десять минут живого разговора. Ошибки не страшны: я отвечаю как человек."
     ),
     HomeLineTechnical => (
-        "Today: {topic}, {n} terms. First in your words, then in English.",
-        "Сегодня: {topic}, терминов: {n}. Сначала своими словами, потом по-английски."
+        "Today: {topic}, {n} terms. First in your words, then {lang}.",
+        "Сегодня: {topic}, терминов: {n}. Сначала своими словами, потом {lang}."
+    ),
+    PracticeLanguage => ("I practise in", "Я тренируюсь на языке"),
+    PracticeLanguageHint => (
+        "Terms lessons, the introduction, live coding and the chat use it. The English tab stays English. The tutor's voice has to speak that language: cloud voices do, the offline one speaks English only.",
+        "Его используют уроки по терминам, самопрезентация, живое кодирование и чат. Вкладка «Английский» остаётся английской. Голос должен уметь говорить на этом языке: облачные умеют, офлайн-голос говорит только по-английски."
     ),
     HomeLineNoPlan => (
         "Paste the vacancy and I will work out what they are likely to ask.",
@@ -573,9 +577,39 @@ impl Tr {
     }
 }
 
+/// "in English" or "по-английски": the language being practised, as a phrase for a sentence.
+pub fn language_phrase(tr: Tr, name: &str) -> String {
+    if tr.is_russian() {
+        let adverb = match name {
+            "English" => "по-английски",
+            "German" => "по-немецки",
+            "Spanish" => "по-испански",
+            "French" => "по-французски",
+            "Italian" => "по-итальянски",
+            "Portuguese" => "по-португальски",
+            "Polish" => "по-польски",
+            "Ukrainian" => "по-украински",
+            "Russian" => "по-русски",
+            other => return format!("на языке {other}"),
+        };
+        adverb.to_owned()
+    } else {
+        format!("in {name}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_practised_language_reads_as_a_phrase_in_both_languages() {
+        let (en, ru) = (Tr::new(UiLanguage::En), Tr::new(UiLanguage::Ru));
+        assert_eq!(language_phrase(en, "German"), "in German");
+        assert_eq!(language_phrase(ru, "German"), "по-немецки");
+        assert_eq!(language_phrase(ru, "English"), "по-английски");
+        assert_eq!(language_phrase(ru, "Klingon"), "на языке Klingon");
+    }
 
     fn places(text: &str) -> Vec<String> {
         let mut found: Vec<String> =

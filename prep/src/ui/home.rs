@@ -73,7 +73,14 @@ fn main_action(core: &Core, track: Track) -> (String, String, Nav) {
                     let topic = &plan.topics[index];
                     (
                         tr.fill(K::HomeStartTopic, &[("topic", &topic.name)]),
-                        tr.fill(K::HomeLineTechnical, &[("topic", &topic.name), ("n", &topic.terms.len().to_string())]),
+                        tr.fill(
+                            K::HomeLineTechnical,
+                            &[
+                                ("topic", &topic.name),
+                                ("n", &topic.terms.len().to_string()),
+                                ("lang", &crate::i18n::language_phrase(tr, core.settings.practice_name())),
+                            ],
+                        ),
                         Nav::Tutor { mode: Mode::Terms, topic: Some(index) },
                     )
                 }

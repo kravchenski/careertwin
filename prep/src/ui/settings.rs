@@ -208,6 +208,16 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
     field(ui, tr.get(K::YourName), &mut edit.settings.profile.name, tr.get(K::YourName), false);
     field(ui, tr.get(K::YourEmail), &mut edit.settings.profile.email, "name@example.com", false);
 
+    widgets::caps(ui, tr.get(K::PracticeLanguage));
+    ui.horizontal_wrapped(|ui| {
+        for name in ["English", "German", "Spanish", "French", "Italian", "Polish"] {
+            if chip(ui, name, edit.settings.practice_name() == name).clicked() {
+                edit.settings.practice_language = if name == "English" { String::new() } else { name.to_owned() };
+            }
+        }
+    });
+    ui.label(RichText::new(tr.get(K::PracticeLanguageHint)).font(theme::sans(13.0)).color(FAINT));
+
     section(ui, tr.get(K::SecFocus));
     ui.horizontal_wrapped(|ui| {
         let timer = &mut edit.settings.pomodoro;

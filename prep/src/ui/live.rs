@@ -308,10 +308,10 @@ fn lesson_row(core: &Core, lesson: &LessonView, ui: &mut Ui) {
         );
         ui.label(RichText::new(&lesson.name).font(theme::semibold(15.0)).color(SNOW));
         let (label, color) = match lesson.stage {
-            Stage::Native => (K::StageNative, BLUSH),
-            Stage::English => (K::StageEnglish, BERRY),
+            Stage::Native => (tr.get(K::StageNative).to_owned(), BLUSH),
+            Stage::English => (crate::i18n::language_phrase(tr, core.settings.practice_name()), BERRY),
         };
-        ui.label(RichText::new(tr.get(label).to_uppercase()).font(theme::mono_bold(11.0)).color(color));
+        ui.label(RichText::new(label.to_uppercase()).font(theme::mono_bold(11.0)).color(color));
         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(lesson.total as f32 * 14.0, 10.0), Sense::hover());
             for i in 0..lesson.total {

@@ -1852,3 +1852,27 @@ fn russian_screens_for_a_look() {
     harness.run_steps(3);
     shot(&mut harness, "ru-help");
 }
+
+#[test]
+fn another_practised_language_is_chosen_in_settings_and_shows_in_the_lesson() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    harness.run();
+    harness.get_by_label_contains("then in English");
+    open_settings(&mut harness);
+    // the choice sits low in the settings window, below what a headless window shows
+    harness_draft(&mut harness).settings.practice_language = "German".into();
+    harness.run_steps(2);
+    harness.get_by_label("Save").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().core.settings.practice_name(), "German");
+    harness.get_by_label_contains("then in German");
+    // a lesson started now practises German
+    let wired = tutoring(&mut harness, Mode::Terms);
+    let _ = wired;
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.lesson = Some(LessonView { index: 0, total: 2, name: "Encapsulation".into(), stage: Stage::English });
+    }
+    harness.run_steps(2);
+    harness.get_by_label("IN GERMAN");
+}

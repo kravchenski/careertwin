@@ -450,6 +450,12 @@ impl Core {
         });
     }
 
+    /// The language the lessons practise, when it is not English; empty otherwise.
+    pub fn practice_target(&self) -> String {
+        let name = self.settings.practice_name();
+        if name == "English" { String::new() } else { name.to_owned() }
+    }
+
     pub fn save_notes(&self) {
         let _ = self.notebook.save(&self.paths.notes_file());
     }
@@ -909,6 +915,7 @@ impl PrepApp {
     fn start_tutor(&mut self, mode: Mode, topic: Option<usize>) {
         let core = &mut self.core;
         let mut spec = InterviewerSpec::tutoring(core.track, mode, core.ui_lang(), 20);
+        spec.target = core.practice_target();
         match mode {
             Mode::Terms => {
                 let Some(plan) = &core.syllabus else {
@@ -967,6 +974,7 @@ impl PrepApp {
     fn start_coding(&mut self, task: Task) {
         let core = &mut self.core;
         let mut spec = InterviewerSpec::tutoring(core.track, Mode::Coding, core.ui_lang(), 30);
+        spec.target = core.practice_target();
         spec.focus = task.title.clone();
         spec.task = Some(task.clone());
         let now = Instant::now();

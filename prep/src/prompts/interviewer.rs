@@ -150,6 +150,9 @@ pub struct InterviewerSpec {
     /// The task of a live-coding call.
     #[serde(default)]
     pub task: Option<crate::coding::Task>,
+    /// The name of the language being practised, when it is not `language` (for instance "German").
+    #[serde(default)]
+    pub target: String,
 }
 
 impl InterviewerSpec {
@@ -168,6 +171,7 @@ impl InterviewerSpec {
             native: Lang::En,
             lesson: None,
             task: None,
+            target: String::new(),
         }
     }
 
@@ -179,6 +183,11 @@ impl InterviewerSpec {
         spec.native = native;
         spec.minutes = minutes;
         spec
+    }
+
+    /// The language being practised, by name.
+    pub fn target_name(&self) -> &str {
+        if self.target.trim().is_empty() { self.language.name() } else { self.target.trim() }
     }
 
     pub fn total_seconds(&self) -> u32 {

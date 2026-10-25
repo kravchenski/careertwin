@@ -139,6 +139,7 @@ async fn a_real_model_tutors_terms_in_your_language_then_in_english() {
     )
     .unwrap();
     let mut spec = InterviewerSpec::tutoring(Track::Technical, Mode::Terms, Lang::Ru, 20);
+    spec.target = std::env::var("LIVE_TARGET").unwrap_or_default();
     spec.lesson = Some(Lesson {
         topic: "Object-oriented programming".into(),
         terms: vec![

@@ -186,7 +186,7 @@ fn tag_rules(extra: &str) -> String {
 
 fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
     let native = spec.native.name();
-    let target = spec.language.name();
+    let target = spec.target_name();
     format!(
         "THE LESSON\n\
          Today's topic is \"{topic}\". You go through its terms one by one, in this order. This is your reference: \
@@ -224,7 +224,7 @@ fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
 }
 
 fn intro_rules(spec: &InterviewerSpec) -> String {
-    let target = spec.language.name();
+    let target = spec.target_name();
     format!(
         "THE LESSON\n\
          The introduction: \"tell me about yourself\" opens nearly every interview and sets the mood for the rest. \
@@ -288,7 +288,7 @@ fn chat_rules() -> String {
 
 /// Which language the tutor uses, and when it switches.
 fn language_rules(spec: &InterviewerSpec) -> String {
-    let (native, target) = (spec.native.name(), spec.language.name());
+    let (native, target) = (spec.native.name(), spec.target_name());
     if spec.mode == Mode::Coding {
         return format!(
             "\nLANGUAGE\nSpeak {target} by default, because the real interview is in {target}. If they speak or write \
@@ -407,7 +407,7 @@ pub fn state_note(
         } else if let Some(term) = lesson.terms.get(state.index) {
             let stage = match state.stage {
                 Stage::Native => format!("stage one, in {}", spec.native.name()),
-                Stage::English => format!("stage two, in {}", spec.language.name()),
+                Stage::English => format!("stage two, in {}", spec.target_name()),
             };
             note.push_str(&format!(
                 "\n[LESSON: term {} of {}, \"{}\", {stage}; they have answered {} time{} in this stage.",
@@ -496,6 +496,29 @@ mod tests {
             assert!(text.contains(must), "missing: {must}");
         }
         assert!(text.contains("VACANCY: Backend Engineer at Acme"));
+    }
+
+    #[test]
+    fn another_language_can_be_practised_instead_of_english() {
+        let mut german = spec(Mode::Terms);
+        german.target = "German".into();
+        let text = system(&german, &brief());
+        for must in [
+            "Stage two, in German",
+            "say it in German",
+            "Accept imperfect German",
+            "The person thinks in Russian and is practising German",
+        ] {
+            assert!(text.contains(must), "missing: {must}");
+        }
+        assert!(!text.contains("practising English") && !text.contains("Stage two, in English"));
+        let mut state = LessonState::new(2);
+        state.native_done();
+        assert!(state_note(&german, 60, 1, Clock::Normal, Some(&state)).contains("stage two, in German"));
+        // and nothing changes when none is chosen
+        assert!(system(&spec(Mode::Terms), &brief()).contains("Stage two, in English"));
+        assert_eq!(german.target_name(), "German");
+        assert_eq!(spec(Mode::Terms).target_name(), "English");
     }
 
     #[test]
