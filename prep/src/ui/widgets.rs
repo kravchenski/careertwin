@@ -242,7 +242,7 @@ pub fn muted(ui: &mut Ui, text: &str) {
 }
 
 pub fn title(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text).font(theme::serif(34.0)).color(SNOW));
+    ui.label(RichText::new(text).font(theme::heading(34.0)).color(SNOW));
 }
 
 pub fn card_frame() -> Frame {

@@ -28,6 +28,10 @@ pub const GOOD: Color32 = rgb(0x8FBF9A);
 pub fn serif(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("serif".into()))
 }
+/// Titles and big numbers: the display font when it is on this computer, the serif font otherwise.
+pub fn heading(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name("heading".into()))
+}
 pub fn serif_italic(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("serif_italic".into()))
 }
@@ -58,7 +62,62 @@ const FONTS: [(&str, &[u8]); 8] = [
     ("jetbrains_bold", include_bytes!("../../assets/fonts/JetBrainsMono-SemiBold.ttf")),
 ];
 
+/// Looks for a display font the person has put on this computer: SOUTHGHETTO, a free font with
+/// Cyrillic by S. Shebestova. It is never shipped with the program, because its licence does not
+/// say that it may be passed on; it is found in the font folders or in the program's own `fonts`
+/// folder, by the name of its file.
+pub fn find_display_font() -> Option<Vec<u8>> {
+    let mut folders: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(dirs) = directories::BaseDirs::new() {
+        folders.push(dirs.data_dir().join("fonts"));
+        folders.push(dirs.home_dir().join(".fonts"));
+    }
+    if let Ok(paths) = crate::config::Paths::discover() {
+        folders.push(paths.data.join("fonts"));
+    }
+    folders.push("/usr/local/share/fonts".into());
+    folders.push("/usr/share/fonts".into());
+    folders.iter().find_map(|folder| find_font_in(folder, 0))
+}
+
+/// A real font file whose name says `southghetto`, in `folder` or below it.
+fn find_font_in(folder: &std::path::Path, depth: usize) -> Option<Vec<u8>> {
+    let entries = std::fs::read_dir(folder).ok()?;
+    let mut subfolders = Vec::new();
+    for entry in entries.flatten().take(2000) {
+        let path = entry.path();
+        if path.is_dir() {
+            subfolders.push(path);
+            continue;
+        }
+        let name = path.file_name()?.to_string_lossy().to_lowercase();
+        let font_file = name.ends_with(".ttf") || name.ends_with(".otf");
+        if font_file
+            && name.replace([' ', '-', '_'], "").contains("southghetto")
+            && let Ok(bytes) = std::fs::read(&path)
+            && looks_like_a_font(&bytes)
+        {
+            return Some(bytes);
+        }
+    }
+    if depth >= 3 {
+        return None;
+    }
+    subfolders.iter().find_map(|sub| find_font_in(sub, depth + 1))
+}
+
+/// The first bytes of a TrueType or OpenType file: a renamed archive or a broken download is not one.
+fn looks_like_a_font(bytes: &[u8]) -> bool {
+    matches!(bytes.get(..4), Some([0, 1, 0, 0] | b"OTTO" | b"true"))
+}
+
 pub fn fonts() -> FontDefinitions {
+    fonts_with(None)
+}
+
+/// The fonts of the program. With `display`, headings are set in it, and any letter it lacks falls
+/// back to the serif font; without, headings are set in the serif font.
+pub fn fonts_with(display: Option<Vec<u8>>) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
     for (name, bytes) in FONTS {
         definitions.font_data.insert(name.to_owned(), Arc::new(FontData::from_static(bytes)));
@@ -78,12 +137,20 @@ pub fn fonts() -> FontDefinitions {
     family("serif_italic", "ptserif_italic");
     family("mono", "jetbrains");
     family("mono_bold", "jetbrains_bold");
+    let mut heading = vec![];
+    if let Some(bytes) = display {
+        definitions.font_data.insert("display".to_owned(), Arc::new(FontData::from_owned(bytes)));
+        heading.push("display".to_owned());
+    }
+    heading.push("ptserif".to_owned());
+    heading.extend(fallback.iter().cloned());
+    definitions.families.insert(FontFamily::Name("heading".into()), heading);
     definitions
 }
 
 /// Fonts, colours and spacing for the whole program.
 pub fn install(ctx: &egui::Context) {
-    ctx.set_fonts(fonts());
+    ctx.set_fonts(fonts_with(find_display_font()));
     ctx.set_theme(egui::Theme::Dark);
     ctx.all_styles_mut(|style| {
         style.text_styles = [
@@ -175,6 +242,39 @@ mod tests {
             assert!(definitions.font_data.contains_key(&list[0]), "{name}");
             assert!(list.len() > 1, "{name} keeps egui's fonts behind it");
         }
+    }
+
+    #[test]
+    fn headings_use_the_display_font_when_there_is_one_and_the_serif_when_not() {
+        let without = fonts();
+        let list = without.families.get(&FontFamily::Name("heading".into())).unwrap();
+        assert_eq!(list[0], "ptserif");
+        let with = fonts_with(Some(include_bytes!("../../assets/fonts/PTSerif-Bold.ttf").to_vec()));
+        let list = with.families.get(&FontFamily::Name("heading".into())).unwrap();
+        assert_eq!(&list[..2], ["display", "ptserif"], "a letter the display font lacks falls to the serif");
+        assert!(with.font_data.contains_key("display") && !without.font_data.contains_key("display"));
+        assert!(
+            !with.families[&FontFamily::Name("serif".into())].contains(&"display".to_owned()),
+            "text stays as it was"
+        );
+    }
+
+    #[test]
+    fn the_display_font_is_found_by_its_name_anywhere_below_a_font_folder_and_nothing_else_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = include_bytes!("../../assets/fonts/PTSerif-Bold.ttf");
+        let nested = dir.path().join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("SOUTH GHETTO-Regular.ttf"), real).unwrap();
+        std::fs::write(dir.path().join("Other.ttf"), real).unwrap();
+        assert_eq!(find_font_in(dir.path(), 0).as_deref(), Some(&real[..]));
+        // a download that is not a font is passed over, and so is a file of another name
+        let broken = tempfile::tempdir().unwrap();
+        std::fs::write(broken.path().join("southghetto.ttf"), b"PK\x03\x04 not a font").unwrap();
+        std::fs::write(broken.path().join("southghetto.zip"), real).unwrap();
+        assert!(find_font_in(broken.path(), 0).is_none());
+        assert!(find_font_in(&dir.path().join("missing"), 0).is_none());
+        assert!(looks_like_a_font(real) && !looks_like_a_font(b"") && !looks_like_a_font(b"PK\x03\x04"));
     }
 
     #[test]

@@ -376,7 +376,7 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
         column(ui, 780.0, |ui| {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new(&view.session.title).font(theme::serif(26.0)).color(SNOW));
+                ui.label(RichText::new(&view.session.title).font(theme::heading(26.0)).color(SNOW));
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     if chat {
                         ui.label(RichText::new(clock(view.elapsed())).font(theme::mono(13.0)).color(MUTED));

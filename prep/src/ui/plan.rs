@@ -169,7 +169,7 @@ fn summary(ui: &mut Ui, tr: Tr, plan: &Syllabus, progress: &Progress) {
         let known = (plan.vital_coverage(progress) * 100.0).round() as u32;
         ui.label(
             RichText::new(tr.fill(K::PlanCoverage, &[("n", &covered.to_string())]))
-                .font(theme::serif(24.0))
+                .font(theme::heading(24.0))
                 .color(SNOW),
         );
         widgets::progress(ui, ui.available_width(), plan.coverage(progress));

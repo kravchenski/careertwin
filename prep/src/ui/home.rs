@@ -113,7 +113,7 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
         };
         let (button, line, go) = main_action(core, track);
         ui.vertical_centered(|ui| {
-            ui.label(RichText::new(tr.get(title)).font(theme::serif(36.0)).color(SNOW));
+            ui.label(RichText::new(tr.get(title)).font(theme::heading(36.0)).color(SNOW));
             ui.add_space(2.0);
             ui.set_max_width(600.0);
             ui.label(RichText::new(line).font(theme::serif_italic(19.0)).color(MUTED));
@@ -234,7 +234,7 @@ fn today(core: &Core, ui: &mut Ui) {
                 ui.set_width(each - 32.0);
                 ui.vertical(|ui| {
                     widgets::caps(ui, caption);
-                    ui.label(RichText::new(value).font(theme::serif(24.0)).color(SNOW));
+                    ui.label(RichText::new(value).font(theme::heading(24.0)).color(SNOW));
                     widgets::progress(ui, ui.available_width(), fraction);
                 });
             });

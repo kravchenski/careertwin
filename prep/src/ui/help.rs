@@ -27,7 +27,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(tr.get(K::HelpTitle)).font(theme::serif(30.0)).color(SNOW));
+                ui.label(RichText::new(tr.get(K::HelpTitle)).font(theme::heading(30.0)).color(SNOW));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if icon_button(ui, Icon::Close, tr.get(K::Close), 34.0, None).clicked() {
                         close = true;

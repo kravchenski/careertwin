@@ -85,7 +85,7 @@ fn field(ui: &mut Ui, label: &str, text: &mut String, hint: &str, password: bool
 
 fn section(ui: &mut Ui, title: &str) {
     ui.add_space(16.0);
-    ui.label(RichText::new(title).font(theme::serif(21.0)).color(SNOW));
+    ui.label(RichText::new(title).font(theme::heading(21.0)).color(SNOW));
     ui.add_space(4.0);
 }
 
@@ -143,7 +143,7 @@ pub fn show(core: &mut Core, draft: &mut Option<Draft>, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(tr.get(K::SettingsTitle)).font(theme::serif(30.0)).color(SNOW));
+                ui.label(RichText::new(tr.get(K::SettingsTitle)).font(theme::heading(30.0)).color(SNOW));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if widgets::icon_button(ui, widgets::Icon::Close, tr.get(K::Close), 34.0, None).clicked() {
                         action = Some(Action::Cancel);

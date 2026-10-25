@@ -172,7 +172,7 @@ pub fn paint(core: &mut Core, stage: &mut Picture, ui: &mut Ui, area: Rect) -> O
                 UiBuilder::new().max_rect(Rect::from_center_size(area.center(), vec2(560.0, 200.0))),
                 |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new(tr.get(K::StageFailed)).font(theme::serif(24.0)).color(SNOW));
+                        ui.label(RichText::new(tr.get(K::StageFailed)).font(theme::heading(24.0)).color(SNOW));
                         ui.label(RichText::new(message).font(theme::sans(14.5)).color(BERRY));
                         ui.add_space(8.0);
                         if ghost_button(ui, tr.get(K::StageAgain)).clicked() {
@@ -213,7 +213,7 @@ pub fn paint(core: &mut Core, stage: &mut Picture, ui: &mut Ui, area: Rect) -> O
 
     // the title and the scene dots
     ui.scope_builder(UiBuilder::new().max_rect(header).layout(Layout::left_to_right(Align::Center)), |ui| {
-        ui.label(RichText::new(&player.board.title).font(theme::serif(24.0)).color(SNOW));
+        ui.label(RichText::new(&player.board.title).font(theme::heading(24.0)).color(SNOW));
     });
 
     // the panels

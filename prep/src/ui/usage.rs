@@ -23,7 +23,7 @@ fn tile(ui: &mut Ui, width: f32, caption: &str, value: &str) {
             ui.set_width(width - 28.0);
             ui.vertical(|ui| {
                 widgets::caps(ui, caption);
-                ui.label(RichText::new(value).font(theme::serif(26.0)).color(SNOW));
+                ui.label(RichText::new(value).font(theme::heading(26.0)).color(SNOW));
             });
         });
 }
@@ -54,7 +54,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(tr.get(K::UsageTitle)).font(theme::serif(30.0)).color(SNOW));
+                ui.label(RichText::new(tr.get(K::UsageTitle)).font(theme::heading(30.0)).color(SNOW));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if icon_button(ui, Icon::Close, tr.get(K::Close), 34.0, None).clicked() {
                         close = true;
@@ -64,7 +64,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
             ui.add_space(8.0);
             widgets::caps(ui, tr.get(K::UsageToday));
             ui.horizontal(|ui| {
-                ui.label(RichText::new(length(tr, today.seconds)).font(theme::serif(34.0)).color(SNOW));
+                ui.label(RichText::new(length(tr, today.seconds)).font(theme::heading(34.0)).color(SNOW));
                 ui.label(
                     RichText::new(tr.fill(K::UsageGoal, &[("n", &(goal / 60).to_string())]))
                         .font(theme::mono(12.5))
