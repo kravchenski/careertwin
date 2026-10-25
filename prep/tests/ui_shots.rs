@@ -72,7 +72,10 @@ pub fn harness(
     let Fixture { app, _dir, _runtime } = fixture;
     let harness = Harness::builder()
         .with_size(egui::vec2(width, height))
-        .with_context_setup(theme::install)
+        // the fonts of the machine come in only when screenshots are taken, so the tests are the same everywhere
+        .with_context_setup(|ctx| {
+            theme::install_with(ctx, std::env::var("UI_SHOTS").ok().and_then(|_| theme::find_display_font()))
+        })
         .build_ui_state(|ui, app: &mut PrepApp| app.show(ui), app);
     (harness, _dir, _runtime)
 }

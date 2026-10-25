@@ -91,6 +91,8 @@ pub fn find_display_font() -> Option<Vec<u8>> {
 fn find_font_in(folder: &std::path::Path, name_part: &str, depth: usize) -> Option<Vec<u8>> {
     let entries = std::fs::read_dir(folder).ok()?;
     let mut subfolders = Vec::new();
+    // several weights of one family may sit in a folder: the shortest name is the regular one
+    let mut best: Option<(usize, Vec<u8>)> = None;
     for entry in entries.flatten().take(2000) {
         let path = entry.path();
         if path.is_dir() {
@@ -103,9 +105,13 @@ fn find_font_in(folder: &std::path::Path, name_part: &str, depth: usize) -> Opti
             && name.replace([' ', '-', '_'], "").contains(name_part)
             && let Ok(bytes) = std::fs::read(&path)
             && looks_like_a_font(&bytes)
+            && best.as_ref().is_none_or(|(length, _)| name.len() < *length)
         {
-            return Some(bytes);
+            best = Some((name.len(), bytes));
         }
+    }
+    if let Some((_, bytes)) = best {
+        return Some(bytes);
     }
     if depth >= 3 {
         return None;
@@ -164,7 +170,12 @@ pub fn fonts_with(display: Option<Vec<u8>>) -> FontDefinitions {
 
 /// Fonts, colours and spacing for the whole program.
 pub fn install(ctx: &egui::Context) {
-    ctx.set_fonts(fonts_with(find_display_font()));
+    install_with(ctx, find_display_font());
+}
+
+/// [`install`] with the display font given, so that a test does not depend on the fonts of the machine.
+pub fn install_with(ctx: &egui::Context, display: Option<Vec<u8>>) {
+    ctx.set_fonts(fonts_with(display));
     ctx.set_theme(egui::Theme::Dark);
     ctx.all_styles_mut(|style| {
         style.text_styles = [
@@ -295,6 +306,16 @@ mod tests {
         assert!(find_font_in(broken.path(), "southghetto", 0).is_none());
         assert!(find_font_in(&dir.path().join("missing"), "southghetto", 0).is_none());
         assert!(looks_like_a_font(real) && !looks_like_a_font(b"") && !looks_like_a_font(b"PK\x03\x04"));
+    }
+
+    #[test]
+    fn of_several_weights_in_one_folder_the_regular_one_is_taken() {
+        let dir = tempfile::tempdir().unwrap();
+        let regular = include_bytes!("../../assets/fonts/PTSerif-Regular.ttf");
+        let bold = include_bytes!("../../assets/fonts/PTSerif-Bold.ttf");
+        std::fs::write(dir.path().join("Ralev001-ExtraBold.ttf"), bold).unwrap();
+        std::fs::write(dir.path().join("Ralev001.ttf"), regular).unwrap();
+        assert_eq!(find_font_in(dir.path(), "ralev", 0).as_deref(), Some(&regular[..]));
     }
 
     #[test]
