@@ -19,6 +19,7 @@ pub mod llm;
 pub mod models;
 pub mod notes;
 pub mod ops;
+pub mod polite;
 pub mod pomodoro;
 pub mod prompts;
 pub mod secrets;

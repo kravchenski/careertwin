@@ -348,6 +348,10 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
     let now = Instant::now();
     let mut deps = deps;
     let mut mic = deps.mic.take();
+    // the voice loads while the model thinks of its first words, not after them
+    if let Some(tts) = deps.tts.clone() {
+        tokio::spawn(tts.warm_up());
+    }
     let mut call = Call {
         deps,
         config,

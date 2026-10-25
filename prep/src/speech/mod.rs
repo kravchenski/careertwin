@@ -76,6 +76,10 @@ pub trait Tts: Send + Sync {
     fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>>;
     /// Names the engine and model, so a cache never mixes two voices up.
     fn id(&self) -> String;
+    /// Loads what the first sentence would otherwise wait for, while the model is still thinking.
+    fn warm_up(&self) -> BoxFuture<'static, ()> {
+        futures_util::FutureExt::boxed(async {})
+    }
 }
 
 /// The Whisper model the offline engine uses: the one chosen, or the one that suits this computer.

@@ -57,6 +57,19 @@ impl Tts for LocalTts {
         "kokoro-local|v1_0".into()
     }
 
+    fn warm_up(&self) -> BoxFuture<'static, ()> {
+        let slot = Arc::clone(&self.model);
+        let folder = self.folder.clone();
+        async move {
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::polite::lower_this_thread();
+                let _ = LocalTts::model(&slot, &folder);
+            })
+            .await;
+        }
+        .boxed()
+    }
+
     fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
         let slot = Arc::clone(&self.model);
         let folder = self.folder.clone();
@@ -73,6 +86,7 @@ impl Tts for LocalTts {
                 )));
             }
             tokio::task::spawn_blocking(move || {
+                crate::polite::lower_this_thread();
                 let model = LocalTts::model(&slot, &folder)?;
                 let request = SynthesisRequest::new(&text)
                     .with_language(language_tag(&voice.name))

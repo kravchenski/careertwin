@@ -215,6 +215,7 @@ pub fn render_at(params: &Params, size: usize) -> ColorImage {
         let frame = &frame;
         for (index, rows) in pixels.chunks_mut(band * size).enumerate() {
             scope.spawn(move || {
+                crate::polite::lower_this_thread();
                 for (offset, row) in rows.chunks_mut(size).enumerate() {
                     let y = ((index * band + offset) as f32 + 0.5) / size as f32 * 2.0 - 1.0;
                     for (column, target) in row.iter_mut().enumerate() {

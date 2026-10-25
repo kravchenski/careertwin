@@ -7,25 +7,51 @@ const ABBREVIATIONS: [&str; 20] = [
 ];
 /// A sentence this long without a full stop is cut at a comma instead.
 const LONG_RUN: usize = 200;
+/// The first thing said in a reply is cut early, because the voice needs time to make each piece
+/// and a long first sentence is a long silence: at its first comma once it has this many letters...
+const FIRST_CLAUSE_MIN: usize = 16;
+/// ...or, with no comma, after the first word that ends past this many.
+const FIRST_RUN: usize = 48;
 
 /// Accepts pieces of any size and hands back sentences as they complete.
 #[derive(Default)]
 pub struct SentenceSplitter {
     buffer: String,
+    /// Set once something of this reply has been handed back.
+    emitted: bool,
 }
 
 impl SentenceSplitter {
     pub fn push(&mut self, piece: &str) -> Vec<String> {
         self.buffer.push_str(piece);
         let mut out = Vec::new();
-        while let Some(end) = self.next_boundary() {
+        loop {
+            let early = if self.emitted { None } else { self.first_clause() };
+            let Some(end) = [self.next_boundary(), early].into_iter().flatten().min() else { break };
             let sentence: String = self.buffer.drain(..end).collect();
             let sentence = clean_for_speech(&sentence);
             if !sentence.is_empty() {
+                self.emitted = true;
                 out.push(sentence);
             }
         }
         out
+    }
+
+    /// Where the first piece of a reply may end before its first sentence is over.
+    fn first_clause(&self) -> Option<usize> {
+        let chars: Vec<(usize, char)> = self.buffer.char_indices().collect();
+        for (n, &(index, ch)) in chars.iter().enumerate() {
+            let after = index + ch.len_utf8();
+            let next_is_space = chars.get(n + 1).is_some_and(|&(_, c)| c.is_whitespace());
+            if n >= FIRST_CLAUSE_MIN && matches!(ch, ',' | ';' | ':') && next_is_space {
+                return Some(after);
+            }
+            if n >= FIRST_RUN && ch.is_whitespace() {
+                return Some(after);
+            }
+        }
+        None
     }
 
     /// The rest, once the reply is over.
@@ -164,6 +190,45 @@ mod tests {
         }
         out.extend(splitter.finish());
         out
+    }
+
+    #[test]
+    fn a_long_first_sentence_is_cut_early_so_the_voice_can_start() {
+        let reply = run(&[
+            "Yeah, a hash map maps keys to values using a hash function that puts each key into a bucket, and then lookups are fast. Next one.",
+        ]);
+        assert_eq!(reply[0], "Yeah, a hash map maps keys to values using a hash");
+        assert_eq!(
+            reply[1], "function that puts each key into a bucket, and then lookups are fast.",
+            "only the first piece is cut early"
+        );
+        assert_eq!(reply[2], "Next one.");
+        // a comma that comes after a few words is the better place to cut
+        let reply =
+            run(&["Right, so a hash map stores values by key, and a lookup is quick, which is the point. Fine."]);
+        assert_eq!(reply[0], "Right, so a hash map stores values by key,");
+    }
+
+    #[test]
+    fn a_first_sentence_with_no_comma_is_cut_after_a_few_words_and_a_short_one_is_not() {
+        let long =
+            run(&["A hash map is a structure that stores pairs of keys and values and finds them again very quickly."]);
+        assert!(long.len() == 2 && long[0].len() >= 48 && long[0].len() < 60, "{long:?}");
+        assert_eq!(
+            run(&["Hi Alex, I'm Daniel from the platform team."]),
+            vec!["Hi Alex, I'm Daniel from the platform team."]
+        );
+    }
+
+    #[test]
+    fn the_early_cut_works_with_a_reply_that_arrives_in_small_pieces() {
+        let pieces: Vec<&str> = "Sure, a hash map stores values by key, so a lookup does not need to scan. Right?"
+            .split_inclusive(' ')
+            .collect();
+        assert_eq!(
+            run(&pieces),
+            vec!["Sure, a hash map stores values by key,", "so a lookup does not need to scan.", "Right?"]
+        );
     }
 
     #[test]
