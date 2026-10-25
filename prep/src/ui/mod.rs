@@ -949,9 +949,18 @@ impl PrepApp {
         }
         let effective = core.settings.effective();
         let brief = core.working_brief();
-        let (mic, guard) = match (spec.mode.spoken(), (core.services.mic)(&effective.audio.input_device)) {
-            (true, Ok((frames, guard))) => (Some(frames), Some(guard)),
-            _ => (None, None),
+        // a call that cannot hear you says so and stays that way: it must not look as if it were deaf by itself
+        let mut mic_problem = None;
+        let (mic, guard) = if spec.mode.spoken() {
+            match (core.services.mic)(&effective.audio.input_device) {
+                Ok((frames, guard)) => (Some(frames), Some(guard)),
+                Err(error) => {
+                    mic_problem = Some(core.tr.fill(K::NoMicrophone, &[("error", &error.to_string())]));
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
         };
         let voice = crate::speech::voice_for(&effective, spec.language);
         let other =
@@ -992,7 +1001,10 @@ impl PrepApp {
             wake: Arc::clone(&core.wake),
         };
         let handle = crate::conversation::start(deps, config);
-        self.screen = Screen::Live(Box::new(live::LiveView::new(session, spec, handle, guard)));
+        let mut view = live::LiveView::new(session, spec, handle, guard);
+        view.error = mic_problem.clone();
+        view.mic_problem = mic_problem;
+        self.screen = Screen::Live(Box::new(view));
     }
 
     /// Starts a lesson made from what the person brought: the same two stages as any terms lesson.

@@ -89,6 +89,14 @@ strings! {
     StatusThinking => ("{name} is thinking…", "{name} думает…"),
     StatusSpeaking => ("{name} is speaking", "{name} говорит"),
     StatusListening => ("Your turn. I'm listening.", "Ваша очередь. Я слушаю."),
+    StatusUnclear => (
+        "I heard you, but no words came out. Say it again, a little closer to the microphone.",
+        "Я слышу, но слов не разобрать. Скажите ещё раз, чуть ближе к микрофону."
+    ),
+    NoMicrophone => (
+        "The microphone could not be opened: {error}. Choose another input in Settings, or type your answers.",
+        "Микрофон не открылся: {error}. Выберите другой вход в настройках или пишите ответы текстом."
+    ),
     StatusMuted => ("Microphone is off", "Микрофон выключен"),
     StatusFinished => ("The call has ended", "Звонок завершён"),
     Live => ("LIVE", "ЭФИР"),

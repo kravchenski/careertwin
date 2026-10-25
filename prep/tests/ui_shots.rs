@@ -1394,6 +1394,8 @@ fn the_interview_tab_starts_the_introduction_coach_and_the_english_tab_a_convers
     assert_eq!(view.spec.mode, Mode::Interview);
     assert_eq!(view.spec.track, Track::English);
     assert!(harness.state().core.pomodoro.running(), "the timer starts with the conversation");
+    // a call that cannot open the microphone says so, and keeps saying it
+    harness.get_by_label_contains("The microphone could not be opened");
 }
 
 #[test]

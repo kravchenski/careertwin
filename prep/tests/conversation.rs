@@ -398,6 +398,16 @@ async fn with_headphones_talking_over_the_interviewer_stops_it_and_keeps_what_wa
 }
 
 #[tokio::test(start_paused = true)]
+async fn speech_that_gives_no_words_is_reported_as_not_understood() {
+    let mut call = start(Setup { replies: vec![greeting()], stt: vec![""], ..Setup::default() });
+    call.listening().await;
+    call.say_aloud(1500).await;
+    assert!(call.until(10_000, |log| log.iter().any(|e| matches!(e, Event::Unclear))).await, "{:?}", call.states());
+    assert_eq!(*call.states().last().unwrap(), State::Listening, "and the call goes on listening");
+    assert_eq!(call.llm.calls(), 1, "nothing was answered");
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_hallucinated_thank_you_from_a_cough_is_not_an_answer() {
     let mut call = start(Setup { replies: vec![greeting()], stt: vec!["Thank you."], ..Setup::default() });
     call.listening().await;

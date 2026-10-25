@@ -122,6 +122,8 @@ pub enum Event {
         speaker: f32,
     },
     Error(String),
+    /// Something was said but no words came out of it: too quiet, too far, or only noise.
+    Unclear,
     /// The tutor wrote a tag that the window should act on: a note, a picture to show.
     Tag(Tag),
     /// Where the terms lesson is.
@@ -163,6 +165,9 @@ enum Internal {
     Transcribed { result: Result<Transcript, SpeechError>, speech_ms: u32 },
     Done(TurnResult),
 }
+
+/// Speech at least this long that turns out to be no words is reported as not understood.
+const UNCLEAR_AFTER_MS: u32 = 1000;
 
 struct TurnResult {
     id: u64,
@@ -689,7 +694,13 @@ impl Call {
                 self.report(error.to_string());
                 self.back_to_listening_if_idle();
             }
-            Ok(transcript) if speech::is_noise(&transcript.text, speech_ms) => self.back_to_listening_if_idle(),
+            Ok(transcript) if speech::is_noise(&transcript.text, speech_ms) => {
+                // a real stretch of speech that gave nothing is said aloud on the screen, not swallowed
+                if speech_ms >= UNCLEAR_AFTER_MS {
+                    self.emit(Event::Unclear);
+                }
+                self.back_to_listening_if_idle();
+            }
             Ok(transcript) => {
                 let text = match self.pending.take() {
                     Some(previous) => format!("{} {}", previous.text, transcript.text.trim()),

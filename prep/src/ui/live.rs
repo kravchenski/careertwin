@@ -62,6 +62,10 @@ pub struct LiveView {
     pub typed: String,
     pub muted: bool,
     pub error: Option<String>,
+    /// Why there is no microphone, when there should be one. It stays on the screen for the whole call.
+    pub mic_problem: Option<String>,
+    /// When something was said that the program could not make words of.
+    pub unclear_at: Option<Instant>,
     pub show_transcript: bool,
     pub finished: bool,
     pub has_microphone: bool,
@@ -108,6 +112,8 @@ impl LiveView {
             typed: String::new(),
             muted: false,
             error: None,
+            mic_problem: None,
+            unclear_at: None,
             show_transcript: false,
             finished: false,
             has_microphone,
@@ -155,7 +161,10 @@ impl LiveView {
                     }
                     // an error stays on the screen until the tutor says something again
                     if who == Who::Interviewer {
-                        self.error = None;
+                        self.error = self.mic_problem.clone();
+                    }
+                    if who == Who::You {
+                        self.unclear_at = None;
                     }
                     if append && self.items.last().is_some_and(|i| i.who == who) {
                         if let Some(last) = self.items.last_mut() {
@@ -186,6 +195,7 @@ impl LiveView {
                     }
                 }
                 Event::Error(message) => self.error = Some(message),
+                Event::Unclear => self.unclear_at = Some(Instant::now()),
                 Event::Lesson(view) => self.lesson = Some(view),
                 Event::TermProgress { name, half, score, .. } => {
                     self.effects.push(Effect::Progress { term: name, half, score });
@@ -330,6 +340,9 @@ fn status_text(core: &Core, view: &LiveView) -> String {
         State::Thinking => tr.fill(K::StatusThinking, &[("name", name)]),
         State::Speaking => tr.fill(K::StatusSpeaking, &[("name", name)]),
         State::Listening if view.is_chat() => tr.get(K::StatusChat).to_owned(),
+        State::Listening if view.unclear_at.is_some_and(|at| at.elapsed() < Duration::from_secs(8)) => {
+            tr.get(K::StatusUnclear).to_owned()
+        }
         State::Listening => tr.get(K::StatusListening).to_owned(),
         State::Muted => tr.get(K::StatusMuted).to_owned(),
         State::Finished => tr.get(K::StatusFinished).to_owned(),
