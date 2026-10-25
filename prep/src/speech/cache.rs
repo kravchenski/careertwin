@@ -51,6 +51,10 @@ impl Tts for CachedTts {
         self.inner.id()
     }
 
+    fn warm_up(&self) -> BoxFuture<'static, ()> {
+        self.inner.warm_up()
+    }
+
     fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
         let inner = Arc::clone(&self.inner);
         let path = self.dir.join(format!("{}.wav", key(&inner.id(), &voice, &text)));

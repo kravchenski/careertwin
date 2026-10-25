@@ -124,8 +124,23 @@ impl SentenceSplitter {
     }
 }
 
+/// The invisible and the look-alike characters some models write (a narrow no-break space, a
+/// non-breaking hyphen, a soft hyphen in the middle of a word), as the plain ones a voice engine
+/// reads: they would otherwise be heard as a stop, or as a gap inside a word.
+fn plain_characters(text: &str) -> String {
+    text.chars()
+        .filter_map(|c| match c {
+            '\u{00AD}' | '\u{200B}'..='\u{200D}' | '\u{2060}' | '\u{FEFF}' => None,
+            '\u{00A0}' | '\u{202F}' | '\u{2007}' | '\u{2009}' | '\u{200A}' => Some(' '),
+            '\u{2010}' | '\u{2011}' | '\u{2012}' => Some('-'),
+            other => Some(other),
+        })
+        .collect()
+}
+
 /// Plain speech from a reply that may carry Markdown: nothing a voice would read out as symbols.
 pub fn clean_for_speech(text: &str) -> String {
+    let text = plain_characters(text);
     let mut lines = Vec::new();
     let mut in_code = false;
     for line in text.lines() {
@@ -229,6 +244,15 @@ mod tests {
             run(&pieces),
             vec!["Sure, a hash map stores values by key,", "so a lookup does not need to scan.", "Right?"]
         );
+    }
+
+    #[test]
+    fn look_alike_and_invisible_characters_become_plain_ones_before_a_voice_reads_them() {
+        assert_eq!(
+            clean_for_speech("Хеш\u{2011}таблица\u{202F}\u{2014}\u{202F}это тре\u{00AD}к."),
+            "Хеш-таблица — это трек."
+        );
+        assert_eq!(clean_for_speech("a\u{200B}b\u{00A0}c"), "ab c");
     }
 
     #[test]

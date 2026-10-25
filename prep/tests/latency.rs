@@ -15,16 +15,84 @@ use careertwin_prep::audio::vad::FRAME_MS;
 use careertwin_prep::brief::Brief;
 use careertwin_prep::config::LlmSettings;
 use careertwin_prep::conversation::{self, Command, Config, Deps, Event, Knobs, State};
-use careertwin_prep::llm::HttpLlm;
+use careertwin_prep::llm::{ChatOptions, HttpLlm, Llm, LlmError, Message};
 use careertwin_prep::models::STT_MODELS;
 use careertwin_prep::prompts::Lang;
 use careertwin_prep::prompts::interviewer::InterviewerSpec;
 use careertwin_prep::session::{Speaker as Who, Track};
 use careertwin_prep::speech::stt_local::LocalStt;
 use careertwin_prep::speech::tts_local::LocalTts;
-use careertwin_prep::speech::{SttHint, Tts, Voice};
+use careertwin_prep::speech::{Speech, SpeechError, SttHint, Tts, Voice};
 use careertwin_prep::testing::FakeSpeaker;
+use futures_util::FutureExt;
+use futures_util::StreamExt;
+use futures_util::future::BoxFuture;
+use futures_util::stream::BoxStream;
 use tokio::sync::mpsc::UnboundedReceiver;
+
+/// The model, with a stopwatch: when each request goes out and when its first words come back.
+struct Timed {
+    inner: HttpLlm,
+    started: Instant,
+}
+
+impl Llm for Timed {
+    fn complete(&self, messages: Vec<Message>, options: ChatOptions) -> BoxFuture<'static, Result<String, LlmError>> {
+        self.inner.complete(messages, options)
+    }
+
+    fn stream(&self, messages: Vec<Message>, options: ChatOptions) -> BoxStream<'static, Result<String, LlmError>> {
+        let (asked, started) = (Instant::now(), self.started);
+        println!("    {:.1}s: the model is asked ({} messages)", started.elapsed().as_secs_f32(), messages.len());
+        let mut first = true;
+        self.inner
+            .stream(messages, options)
+            .inspect(move |piece| {
+                if first && piece.is_ok() {
+                    first = false;
+                    println!(
+                        "    {:.1}s: its first words come back, {:.1}s after the request",
+                        started.elapsed().as_secs_f32(),
+                        asked.elapsed().as_secs_f32()
+                    );
+                }
+            })
+            .boxed()
+    }
+}
+
+/// The voice, with a stopwatch: when each piece starts to be made and when it is done.
+struct TimedVoice {
+    inner: Arc<LocalTts>,
+    started: Instant,
+}
+
+impl Tts for TimedVoice {
+    fn id(&self) -> String {
+        self.inner.id()
+    }
+
+    fn warm_up(&self) -> BoxFuture<'static, ()> {
+        self.inner.warm_up()
+    }
+
+    fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
+        let (started, begun) = (self.started, Instant::now());
+        let short: String = text.chars().take(40).collect();
+        println!("    {:.1}s: voice starts {short:?}", started.elapsed().as_secs_f32());
+        let made = self.inner.synthesize(text, voice);
+        async move {
+            let result = made.await;
+            println!(
+                "    {:.1}s: voice done {short:?} in {:.1}s",
+                started.elapsed().as_secs_f32(),
+                begun.elapsed().as_secs_f32()
+            );
+            result
+        }
+        .boxed()
+    }
+}
 
 fn models_dir() -> PathBuf {
     std::env::var_os("PREP_MODELS_DIR")
@@ -67,7 +135,11 @@ async fn the_wait_between_your_last_word_and_the_first_word_of_the_answer() {
     println!("the question lasts {:.1}s", question.seconds());
 
     let model = std::env::var("PREP_LLM_MODEL").unwrap_or_else(|_| "auto".into());
-    let llm = Arc::new(HttpLlm::new(&LlmSettings::default(), Vec::new()).expect("the gateway address is fine"));
+    let started = Instant::now();
+    let llm = Arc::new(Timed {
+        inner: HttpLlm::new(&LlmSettings::default(), Vec::new()).expect("the gateway address is fine"),
+        started,
+    });
     let (mic_tx, mic) = tokio::sync::mpsc::channel(4096);
     let (commands_tx, commands) = tokio::sync::mpsc::unbounded_channel();
     let (events_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
@@ -85,12 +157,11 @@ async fn the_wait_between_your_last_word_and_the_first_word_of_the_answer() {
     let deps = Deps {
         llm,
         stt: stt.clone(),
-        tts: Some(tts.clone() as Arc<dyn Tts>),
+        tts: Some(Arc::new(TimedVoice { inner: tts.clone(), started }) as Arc<dyn Tts>),
         speaker: FakeSpeaker::new(),
         mic: Some(mic),
         wake: Arc::new(|| {}),
     };
-    let started = Instant::now();
     tokio::spawn(conversation::run(deps, config, commands, events_tx));
 
     let greeting = next(&mut events, started, |e| matches!(e, Event::State(State::Speaking))).await;

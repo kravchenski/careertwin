@@ -15,12 +15,15 @@ use crate::prompts::Lang;
 pub struct LocalTts {
     folder: PathBuf,
     model: Arc<Mutex<Option<Arc<dyn TtsModel>>>>,
+    /// One piece is made at a time, in the order asked for. Several at once share the same cores and
+    /// all finish late, and the piece that is wanted first is the one the person waits for.
+    queue: Arc<tokio::sync::Semaphore>,
 }
 
 impl LocalTts {
     /// `folder` holds the Kokoro files (see [`crate::models::kokoro_assets`]).
     pub fn new(folder: PathBuf) -> Self {
-        Self { folder, model: Arc::new(Mutex::new(None)) }
+        Self { folder, model: Arc::new(Mutex::new(None)), queue: Arc::new(tokio::sync::Semaphore::new(1)) }
     }
 
     fn model(
@@ -73,6 +76,7 @@ impl Tts for LocalTts {
     fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
         let slot = Arc::clone(&self.model);
         let folder = self.folder.clone();
+        let queue = Arc::clone(&self.queue);
         async move {
             if voice.language != Lang::En {
                 return Err(SpeechError::Status(
@@ -85,6 +89,9 @@ impl Tts for LocalTts {
                     voice.name
                 )));
             }
+            // asking for the turn is where the order is kept: the queue lets in whoever asked first
+            let _turn =
+                queue.acquire_owned().await.map_err(|_| SpeechError::Status("the offline voice stopped".into()))?;
             tokio::task::spawn_blocking(move || {
                 crate::polite::lower_this_thread();
                 let model = LocalTts::model(&slot, &folder)?;
@@ -104,6 +111,45 @@ impl Tts for LocalTts {
             .map_err(|e| SpeechError::Status(format!("the offline voice stopped: {e}")))?
         }
         .boxed()
+    }
+}
+
+/// The offline voices together: Kokoro for English and Piper for Russian.
+pub struct LocalVoices {
+    english: LocalTts,
+    russian: super::tts_piper::PiperTts,
+}
+
+impl LocalVoices {
+    pub fn new(english_folder: PathBuf, russian_folder: PathBuf) -> Self {
+        Self { english: LocalTts::new(english_folder), russian: super::tts_piper::PiperTts::new(russian_folder) }
+    }
+}
+
+impl Tts for LocalVoices {
+    fn id(&self) -> String {
+        format!("{}+{}", self.english.id(), self.russian.id())
+    }
+
+    fn warm_up(&self) -> BoxFuture<'static, ()> {
+        let (english, russian) = (self.english.warm_up(), self.russian.warm_up());
+        async move {
+            futures_util::future::join(english, russian).await;
+        }
+        .boxed()
+    }
+
+    fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
+        match voice.language {
+            Lang::En => self.english.synthesize(text, voice),
+            Lang::Ru if crate::models::PIPER_HERE => self.russian.synthesize(text, voice),
+            Lang::Ru => async {
+                Err(SpeechError::Status(
+                    "The offline voice speaks English only here. For Russian, use a voice server or the cloud.".into(),
+                ))
+            }
+            .boxed(),
+        }
     }
 }
 

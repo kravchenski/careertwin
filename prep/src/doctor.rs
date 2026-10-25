@@ -50,6 +50,9 @@ pub async fn run(settings: &Settings, paths: &Paths, options: &Options) -> Vec<C
     checks.push(model_check(&effective).await);
     checks.push(recognition_check(&effective, paths, options.probes).await);
     checks.push(voice_check(&effective, paths, options.probes).await);
+    if let Some(check) = russian_voice_check(&effective, paths, options.probes).await {
+        checks.push(check);
+    }
     if options.devices {
         checks.push(microphone_check(&effective.audio.input_device).await);
         checks.push(speakers_check(&effective.audio.output_device));
@@ -150,6 +153,32 @@ async fn voice_check(settings: &Settings, paths: &Paths, probe: bool) -> Check {
         Ok(speech) => Check::pass("voice", format!("{} spoke {:.1} s", voice_name(settings), speech.seconds())),
         Err(error) => Check::fail("voice", error.to_string()),
     }
+}
+
+/// The Russian half of a lesson is spoken by its own offline voice; the cloud voices speak both.
+async fn russian_voice_check(settings: &Settings, paths: &Paths, probe: bool) -> Option<Check> {
+    if settings.tts.engine != TtsEngine::Local {
+        return None;
+    }
+    if !crate::models::PIPER_HERE {
+        return Some(Check::fail(
+            "russian voice",
+            "the offline voice speaks English only on this computer; for Russian use a voice server or the cloud",
+        ));
+    }
+    let name = crate::models::piper_voice_or_default(&settings.tts.voice_ru).to_owned();
+    let tts = match speech::build_tts(settings, paths) {
+        Ok(Some(tts)) => tts,
+        _ => return None,
+    };
+    if !probe {
+        return Some(Check::pass("russian voice", format!("offline Piper, {name} (not tried)")));
+    }
+    let voice = speech::voice_for(settings, crate::prompts::Lang::Ru);
+    Some(match tts.synthesize("Готово.".into(), voice).await {
+        Ok(speech) => Check::pass("russian voice", format!("offline Piper, {name} spoke {:.1} s", speech.seconds())),
+        Err(error) => Check::fail("russian voice", error.to_string()),
+    })
 }
 
 async fn microphone_check(device: &str) -> Check {

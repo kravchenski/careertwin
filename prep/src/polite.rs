@@ -14,6 +14,17 @@ pub fn lower_this_thread() {
     }
 }
 
+/// Puts a program this one started at the ordinary priority too. The program is started first and
+/// this is done right after, before it has begun its own threads, which take after it.
+pub fn lower_process(pid: u32) {
+    #[cfg(unix)]
+    if let Some(pid) = i32::try_from(pid).ok().and_then(rustix::process::Pid::from_raw) {
+        let _ = rustix::process::setpriority_process(Some(pid), WORKER_NICE);
+    }
+    #[cfg(not(unix))]
+    let _ = pid;
+}
+
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     #[test]

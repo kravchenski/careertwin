@@ -22,6 +22,8 @@ local-stt = ["dep:whisper-rs"]
 # Offline voices (Kokoro for English, Qwen3-TTS for many languages) on candle, in pure Rust.
 local-tts = ["dep:any-tts"]
 local = ["local-stt", "local-tts"]
+# The offline voice on an NVIDIA graphics card (needs the CUDA toolkit to build; use it when the card is there).
+gpu = ["local", "any-tts/cuda"]
 
 [dependencies]
 any-tts = { version = "0.2.0", optional = true, default-features = false, features = ["kokoro", "qwen3-tts", "download"] }
@@ -39,7 +41,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 thiserror = "2.0.21"
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "process"] }
 tokio-util = "0.7.20"
 toml = "1.1.8"
 whisper-rs = { version = "0.16.0", optional = true, features = ["log_backend"] }

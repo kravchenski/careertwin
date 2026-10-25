@@ -297,6 +297,16 @@ impl Core {
             wanted.push("Kokoro");
             self.download("Kokoro", assets, crate::speech::local_tts_folder(&self.paths));
         }
+        // Kokoro cannot speak Russian, and half of every lesson is in it
+        if cfg!(feature = "local-tts")
+            && crate::models::PIPER_HERE
+            && settings.tts.engine == crate::config::TtsEngine::Local
+            && let Some(assets) =
+                crate::models::piper_assets(crate::models::piper_voice_or_default(&settings.tts.voice_ru))
+        {
+            wanted.push("Piper (Russian)");
+            self.download("Piper (Russian)", assets, crate::speech::local_ru_folder(&self.paths));
+        }
         // a model that was chosen and then changed back is not fetched any more
         let unwanted: Vec<u64> = self
             .downloads
