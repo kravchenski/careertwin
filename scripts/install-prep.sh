@@ -29,9 +29,6 @@ fi
 FEATURES="local"
 if [[ -n "${LIGHT:-}" ]]; then
   FEATURES="gui"
-elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && command -v nvcc >/dev/null 2>&1; then
-  FEATURES="local,cuda"
-  echo "NVIDIA GPU and CUDA found: building the offline engines with CUDA (much faster voice and hearing)."
 fi
 
 echo "Building CareerTwin Prep (features: $FEATURES). The first build takes a while."

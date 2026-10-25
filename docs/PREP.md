@@ -175,8 +175,8 @@ Measured on a 12-core laptop CPU, release build, GPU not used (`cargo test --rel
 
 The program makes Whisper read only as much audio as the clip needs, which made short answers about four times faster
 than reading a full 30-second window. On a CPU with fewer cores than that the voice can fall behind real time; then use
-a cloud or server voice and keep hearing offline. With an NVIDIA GPU and CUDA the installer builds both engines with
-CUDA and they are much faster.
+a cloud or server voice and keep hearing offline. Both engines run on the CPU. A GPU build is not wired up yet: the dependencies have a `cuda` feature, but this
+program does not enable it.
 
 The offline voice speaks English. For Russian prompts and explanations use a voice server or a cloud voice, or turn
 the Russian voice off: the interviewer then writes those parts.
