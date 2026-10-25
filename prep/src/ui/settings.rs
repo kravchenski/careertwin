@@ -239,6 +239,8 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
                 .labelled_by(caption.id);
         });
     });
+    ui.add_space(6.0);
+    ui.checkbox(&mut edit.settings.pomodoro.auto_start, RichText::new(tr.get(K::TimerAutoStart)).color(MUTED));
 
     section(ui, tr.get(K::SecProfile));
     field(ui, tr.get(K::AboutFile), &mut edit.settings.about_path, "~/Documents/job-search/ABOUT.md", false);

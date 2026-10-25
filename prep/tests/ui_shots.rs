@@ -42,6 +42,8 @@ pub fn fixture_full(language: &str, options: Options) -> Fixture {
     let paths = Paths::under(dir.path().join("home"));
     let mut settings = Settings::default();
     settings.about_path = about.to_string_lossy().into_owned();
+    // the real program starts the timer by itself; most tests want to start it themselves
+    settings.pomodoro.auto_start = false;
     settings.ui_language = if language == "ru" {
         careertwin_prep::config::UiLanguage::Ru
     } else {
@@ -1911,4 +1913,30 @@ fn when_every_term_is_learned_the_main_button_is_live_coding_and_a_plan_without_
     harness.get_all_by_label("Live coding").next().unwrap().click();
     harness.run_steps(3);
     assert!(matches!(harness.state().screen, Screen::Code(_)));
+}
+
+#[test]
+fn the_timer_starts_by_itself_when_the_program_opens_unless_it_is_turned_off() {
+    // the real default
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    harness.run();
+    assert!(!harness.state().core.pomodoro.running(), "the test fixture keeps it still");
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::under(dir.path().join("home"));
+    let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
+    let make = |auto_start: bool| {
+        let mut settings = Settings::default();
+        settings.pomodoro.auto_start = auto_start;
+        let services = Services {
+            llm: FakeLlm::new(vec![]),
+            stt: None,
+            tts: None,
+            speaker: FakeSpeaker::new(),
+            mic: Arc::new(|_| Err(anyhow::anyhow!("no microphone in a test"))),
+        };
+        PrepApp::new(paths.clone(), settings, services, Problems::default(), runtime.handle().clone(), Arc::new(|| {}))
+    };
+    assert!(make(true).core.pomodoro.running(), "it is on by default and starts with the program");
+    assert!(!make(false).core.pomodoro.running());
+    assert!(Settings::default().pomodoro.auto_start);
 }

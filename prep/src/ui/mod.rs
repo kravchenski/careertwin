@@ -701,7 +701,11 @@ impl PrepApp {
         let deck = Deck::load(&paths.deck_file());
         let tr = Tr::new(settings.ui_language);
         let stats = Stats::load(&paths.stats_file());
-        let pomodoro = Pomodoro::new(settings.pomodoro);
+        let mut pomodoro = Pomodoro::new(settings.pomodoro);
+        // the timer starts with the program, so a day of work is counted from the moment you sit down
+        if settings.pomodoro.auto_start {
+            pomodoro.start(Instant::now());
+        }
         let syllabus = Syllabus::load(&paths.syllabus_file());
         let progress = Progress::load(&paths.progress_file());
         let notebook = Notebook::load(&paths.notes_file());

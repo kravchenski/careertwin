@@ -88,7 +88,8 @@ screen, and it does not try to. The review is told what it saw.
   remembering and the slips to avoid; in a chat, an answer worth keeping is saved on its own; you can add your own, star
   the ones that matter, and copy everything as Markdown.
 - **Focus timer** (top right): a Pomodoro of 25 minutes of work and 5 of rest, a long rest after four blocks, with a soft
-  chime. The lengths are in Settings. When a block ends during a call, the tutor is told and suggests a break at the next
+  chime. It starts by itself when the program opens and again after each break; a click pauses it, and Settings can turn
+  the automatic start off. The lengths are in Settings. When a block ends during a call, the tutor is told and suggests a break at the next
   natural pause. `Ctrl+Shift+T` starts or pauses it.
 - **The panel at the bottom** shows your name and address, and how today is going against your goal; its menu has
   Settings (`Ctrl+Shift+,`), Usage, Language, Help and Quit. **Usage** shows today, the week and the total, and the

@@ -40,7 +40,14 @@ pub fn pill(core: &mut Core, ui: &mut Ui, compact: bool) {
     let running = core.pomodoro.running();
     let label = if running { tr.get(K::TimerPause) } else { tr.get(K::TimerStart) };
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, label));
-    let response = response.on_hover_text(tr.get(K::TimerLabel));
+    let explain = tr.fill(
+        K::TimerExplain,
+        &[
+            ("focus", &core.settings.pomodoro.focus_minutes.to_string()),
+            ("rest", &core.settings.pomodoro.short_minutes.to_string()),
+        ],
+    );
+    let response = response.on_hover_text(explain);
     let focus = core.pomodoro.phase() == Phase::Focus;
     let accent = if focus { BERRY } else { GOOD };
     let hovered = response.hovered();

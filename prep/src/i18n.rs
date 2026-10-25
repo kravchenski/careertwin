@@ -350,6 +350,14 @@ strings! {
     LongMinutes => ("Long break, min", "Долгий перерыв, мин"),
     LongEvery => ("Long break after", "Долгий после"),
     GoalMinutes => ("Goal per day, min", "Цель на день, мин"),
+    TimerAutoStart => (
+        "Start the timer when the program opens, and again after each break",
+        "Запускать таймер при входе в программу и снова после каждого перерыва"
+    ),
+    TimerExplain => (
+        "Focus timer (Pomodoro): {focus} min of work, then {rest} min of rest. Click to pause or start.",
+        "Таймер фокуса (помодоро): {focus} мин работы, потом {rest} мин отдыха. Нажмите, чтобы остановить или запустить."
+    ),
 
     // the plan: the vacancy ranked by the 80/20 rule
     CardPlan => ("Your plan", "Ваш план"),
