@@ -204,7 +204,7 @@ pub fn ui(core: &mut Core, view: &mut TranslateView, ui: &mut Ui) -> Option<Nav>
             for note in &result.notes {
                 ui.horizontal_top(|ui| {
                     ui.label(RichText::new("•").color(BERRY));
-                    ui.label(RichText::new(note).font(theme::sans(15.0)).color(SNOW));
+                    ui.add(widgets::wrapping(RichText::new(note).font(theme::sans(15.0)).color(SNOW)));
                 });
             }
         }

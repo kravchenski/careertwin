@@ -1158,6 +1158,63 @@ fn after_a_call_the_review_is_made_and_then_the_notes_that_matter() {
     harness.get_by_label("Give one number for every story.");
 }
 
+/// What a real model writes: long sentences in every field, in Russian and in English.
+const LONG_REVIEW: &str = r#"{"summary": "Хороший старт: вы назвали причину и исправление, но рассказ получился без цифр, и интервьюер не поймёт масштаб проблемы. Добавьте числа и скажите, что вы будете отслеживать в следующий раз, чтобы это не повторилось.",
+ "scores": [{"name": "Accuracy", "value": 4, "note": "Причина названа верно, но не хватило объяснения, почему именно этот индекс подходит под запрос и что ещё стоило проверить"},
+            {"name": "Depth", "value": 3, "note": "Нет чисел: ни времени ответа до исправления, ни после него, ни количества запросов в секунду"},
+            {"name": "English", "value": 3, "note": "Артикли и времена: см. заметки ниже"}],
+ "answers": [{"turn": 1, "good": ["Вы сразу назвали причину и исправление, не уходя в сторону и не пересказывая весь инцидент с самого начала.", "Хорошо, что упомянули оповещение: интервьюеры любят слышать, что вы думаете о том, как заметить проблему раньше."],
+   "issues": ["Нет ни одного числа: интервьюер не может понять, насколько всё было плохо и насколько стало лучше после изменения индекса.", "Фраза 'I have added a index' неверна по двум причинам: нужно простое прошедшее время и артикль 'an' перед гласным звуком."],
+   "better_answer": "After the release the p95 latency of the orders endpoint doubled, from about 120 to 240 milliseconds. I traced it to a query that filtered by customer_id without an index, so I added the index and an alert on p95 above 200 milliseconds, and latency was back to normal within the hour.",
+   "missed_points": ["Не сказано, как вы нашли именно этот запрос: через трассировку, журнал медленных запросов или метрики базы данных.", "Why an alert matters: it turns a surprise in production into a ticket you can handle during the day."]}],
+ "language_notes": [{"said": "I have added a index to the table", "better": "I added an index to the table", "why": "Для завершённого действия в прошлом используйте простое прошедшее время, а перед словом, которое начинается с гласного звука, ставится 'an', а не 'a'."}],
+ "priorities": ["Давайте одно число для каждой истории: время ответа, количество запросов или долю ошибок до и после исправления.", "Скажите, что вы будете отслеживать после исправления и как узнаете, что проблема не вернулась.", "Используйте простое прошедшее время для завершённых событий и следите за артиклями перед гласными звуками."],
+ "phrases": [{"english": "the p95 latency of the orders endpoint doubled after the release", "meaning": "задержка p95 у эндпоинта заказов выросла вдвое после релиза, так говорят, когда называют масштаб проблемы"},
+             {"english": "I traced it to a slow query", "meaning": "я нашёл причину в медленном запросе"}]}"#;
+
+const LONG_DIGEST: &str = r#"{"vital": ["Добавляйте индекс на столбец, по которому фильтруете, и говорите об этом одной фразой с числом до и после.", "Одно число на каждую историю: время ответа, количество запросов в секунду или долю ошибок, иначе рассказ звучит как пересказ без доказательств."],
+  "mistakes": ["Говорите 'I added an index', а не 'I have added a index': завершённое действие в прошлом и артикль перед гласным звуком."],
+  "next": "Потренируйте второй ответ вслух, с числами, и запишите, как вы заметите, что проблема вернулась.",
+  "hook": "Два ответа из пяти готовы к собеседованию, остальные три стоит ещё раз проговорить."}"#;
+
+#[test]
+fn a_long_review_stays_inside_its_cards_and_every_line_can_be_read() {
+    use careertwin_prep::testing::Reply;
+    let (mut harness, _d, _r) =
+        harness(fixture_with("en", vec![Reply::text(LONG_REVIEW), Reply::text(LONG_DIGEST)]), 1120.0, 2300.0);
+    let wired = live(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    for text in ["I have added a index.", "p95 went back to normal."] {
+        wired.events.send(Event::Turn { who: Who::You, text: text.into(), language: None, append: false }).unwrap();
+    }
+    harness.run();
+    harness.get_by_label("End call").click();
+    wait_until(&mut harness, "the notes appear", |h| h.state().core.notebook.notes.len() == 3);
+    harness.run_steps(3);
+    shot(&mut harness, "review-long-en");
+    // every piece of text sits inside the window, and a long one takes more than one line instead
+    // of running past the edge of its card
+    for (text, lines) in [
+        ("Добавляйте индекс на столбец", 2.0),
+        ("Нет ни одного числа", 2.0),
+        ("Вы сразу назвали причину", 2.0),
+        ("Давайте одно число для каждой истории", 2.0),
+        ("Причина названа верно", 2.0),
+        ("задержка p95 у эндпоинта", 2.0),
+    ] {
+        let rect = harness.get_by_label_contains(text).rect();
+        assert!(rect.right() <= 1120.0 - 10.0, "{text:?} runs off the window: {rect:?}");
+        assert!(rect.height() >= lines * 16.0, "{text:?} should wrap onto {lines} lines: {rect:?}");
+    }
+    // the notes made from the same call hold the same long lines
+    harness.get_by_label("Open notes").click();
+    harness.run_steps(3);
+    shot(&mut harness, "notes-long-en");
+    let rect = harness.get_by_label_contains("Добавляйте индекс на столбец").rect();
+    assert!(rect.right() <= 1120.0 - 10.0, "a long note runs off the window: {rect:?}");
+    assert!(rect.height() >= 32.0, "and wraps instead: {rect:?}");
+}
+
 // ---- the tutor ----
 
 use careertwin_prep::prompts::Lang;

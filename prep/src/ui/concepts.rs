@@ -378,7 +378,7 @@ pub fn ui(core: &mut Core, view: &mut ConceptsView, ui: &mut Ui) -> Option<Nav> 
                                 .font(theme::mono_bold(15.0))
                                 .color(if answer.correct { GOOD } else { BERRY }),
                         );
-                        ui.label(RichText::new(&card.question).font(theme::sans(15.0)).color(SNOW));
+                        ui.add(widgets::wrapping(RichText::new(&card.question).font(theme::sans(15.0)).color(SNOW)));
                     });
                 }
                 ui.add_space(18.0);

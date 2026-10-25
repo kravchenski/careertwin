@@ -326,6 +326,12 @@ pub fn quiet_icon(ui: &mut Ui, icon: Icon, label: &str, size: f32) -> Response {
     response
 }
 
+/// A label that wraps at the room it has left. Inside a row a label is otherwise a single line, and a long
+/// one runs past the edge of its card and of the window, and drags the card's width out with it.
+pub fn wrapping(text: impl Into<egui::WidgetText>) -> egui::Label {
+    egui::Label::new(text).wrap_mode(egui::TextWrapMode::Wrap)
+}
+
 /// The main action: a berry pill.
 pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
     let font = theme::semibold(15.5);

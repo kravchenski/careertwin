@@ -314,7 +314,7 @@ fn term_block(ui: &mut Ui, tr: Tr, topic: &Topic, index: usize, progress: &Progr
                     if icon_button(ui, Icon::Play, tr.get(K::Listen), 30.0, None).clicked() {
                         *action = Some(Action::Listen(term.english.clone()));
                     }
-                    ui.label(RichText::new(&term.english).font(theme::sans(15.0)).color(SNOW));
+                    ui.add(widgets::wrapping(RichText::new(&term.english).font(theme::sans(15.0)).color(SNOW)));
                 });
             }
             ui.add_space(6.0);
