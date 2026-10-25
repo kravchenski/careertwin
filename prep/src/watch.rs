@@ -64,6 +64,8 @@ pub struct Watcher {
     away_since: Option<Instant>,
     /// A look is in progress.
     pub looking: bool,
+    /// How many times the tutor has looked at the code.
+    pub looks: u32,
 }
 
 impl Watcher {
@@ -78,6 +80,7 @@ impl Watcher {
             away: Vec::new(),
             away_since: None,
             looking: false,
+            looks: 0,
         }
     }
 
@@ -158,6 +161,7 @@ impl Watcher {
         self.looked_at = Some(now);
         self.looked_code = self.code.clone();
         self.looking = true;
+        self.looks += 1;
     }
 
     /// The look is over.

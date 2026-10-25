@@ -931,8 +931,9 @@ const TERMS: &str = r#"{"terms": [{"name": "Encapsulation", "plain": "The object
   "follow_ups": ["Why is it useful?"], "visual": "A box with a hidden core."}]}"#;
 
 fn wait_until(harness: &mut Harness<'_, PrepApp>, what: &str, done: impl Fn(&Harness<'_, PrepApp>) -> bool) {
-    for _ in 0..200 {
-        harness.run();
+    for _ in 0..600 {
+        // a spinner asks for frames for as long as a job runs, so the window is stepped, not settled
+        harness.run_steps(2);
         if done(harness) {
             return;
         }
@@ -1574,7 +1575,7 @@ fn code_is_written_in_the_editor_and_the_tutor_is_given_it() {
     assert!(view.coding.as_ref().unwrap().text.contains("seen = {}"));
     // once it has been still for a moment the tutor is sent the code
     let mut sent = None;
-    for _ in 0..80 {
+    for _ in 0..400 {
         std::thread::sleep(std::time::Duration::from_millis(25));
         harness.run_steps(2);
         while let Ok(command) = wired.commands.try_recv() {
@@ -1621,7 +1622,7 @@ fn a_block_that_comes_in_all_at_once_is_noticed_and_the_tutor_asks_about_it_with
     assert_eq!(pastes.len(), 1, "the paste was seen");
     assert!(pastes[0].chars >= 100);
     let mut said = None;
-    for _ in 0..200 {
+    for _ in 0..600 {
         std::thread::sleep(std::time::Duration::from_millis(25));
         harness.run_steps(2);
         while let Ok(command) = wired.commands.try_recv() {
@@ -1654,10 +1655,18 @@ fn a_quiet_look_at_good_code_says_nothing() {
             std::time::Instant::now() - std::time::Duration::from_secs(120),
         );
     }
-    for _ in 0..60 {
+    // wait for the look to be made and finished, however busy the machine is
+    for _ in 0..600 {
         std::thread::sleep(std::time::Duration::from_millis(25));
         harness.run_steps(2);
+        let Screen::Live(view) = &harness.state().screen else { panic!() };
+        let watcher = &view.coding.as_ref().unwrap().watcher;
+        if watcher.looks > 0 && !watcher.looking {
+            break;
+        }
     }
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    assert!(view.coding.as_ref().unwrap().watcher.looks > 0, "the tutor looked at the code");
     let mut spoke = false;
     while let Ok(command) = wired.commands.try_recv() {
         spoke |= matches!(command, Command::Speak(_));
