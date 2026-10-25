@@ -1327,9 +1327,11 @@ impl PrepApp {
                         nav = Some(Nav::Notes);
                     }
                 });
-                let size = vec2(focus::PILL_WIDTH, 44.0);
+                // the timer keeps its full form while there is room beside the tabs, and shrinks when not
+                let compact = pill.right() + 14.0 + focus::PILL_WIDTH > bar.right();
+                let size = vec2(if compact { focus::PILL_COMPACT } else { focus::PILL_WIDTH }, 44.0);
                 let right = Rect::from_min_size(pos2(bar.right() - size.x, bar.center().y - size.y / 2.0), size);
-                ui.scope_builder(UiBuilder::new().max_rect(right), |ui| focus::pill(&mut self.core, ui));
+                ui.scope_builder(UiBuilder::new().max_rect(right), |ui| focus::pill(&mut self.core, ui, compact));
             });
         nav
     }

@@ -166,6 +166,8 @@ pub async fn question_bank(
 pub struct ResearchProgress {
     pub done: AtomicUsize,
     pub total: AtomicUsize,
+    /// Why a topic could not be given its terms, for the topics that were left without.
+    pub failures: std::sync::Mutex<Vec<String>>,
 }
 
 /// How many topics have their terms written at the same time.
@@ -216,6 +218,7 @@ pub async fn research(
         .await;
     let mut first_error = None;
     let mut any = false;
+    let mut again: Vec<usize> = Vec::new();
     for (index, result) in written {
         match result {
             Ok(terms) => {
@@ -223,8 +226,23 @@ pub async fn research(
                 any = true;
             }
             Err(error) => {
+                if let Ok(mut failures) = progress.failures.lock() {
+                    failures.push(format!("{}: {error}", syllabus.topics[index].name));
+                }
                 first_error.get_or_insert(error);
+                again.push(index);
             }
+        }
+    }
+    // a model that was busy with three requests at once is usually fine with one: the topics that
+    // failed get one more try, a topic at a time
+    again.sort_unstable();
+    for index in again {
+        let topic = syllabus.topics[index].clone();
+        if let Ok(terms) = topic_terms(llm, model, brief, &topic, native).await {
+            syllabus.topics[index].terms = terms;
+            any = true;
+            first_error = None;
         }
     }
     match (any, first_error) {

@@ -14,6 +14,8 @@ use crate::i18n::K;
 use crate::pomodoro::{self, Phase, Signal};
 
 pub const PILL_WIDTH: f32 = 168.0;
+/// The narrow form for a small window: the ring and the time, no label and no skip button.
+pub const PILL_COMPACT: f32 = 112.0;
 const PILL_HEIGHT: f32 = 44.0;
 /// How long a message stays before it goes away on its own.
 const TOAST_SECONDS: u64 = 14;
@@ -29,10 +31,11 @@ fn phase_label(core: &Core) -> &'static str {
 
 /// The ring and the time left. A click starts or pauses; a right click resets; the small arrow
 /// skips to the next phase.
-pub fn pill(core: &mut Core, ui: &mut Ui) {
+pub fn pill(core: &mut Core, ui: &mut Ui, compact: bool) {
     let tr = core.tr;
     let now = Instant::now();
-    let (rect, response) = ui.allocate_exact_size(vec2(PILL_WIDTH, PILL_HEIGHT), Sense::click());
+    let width = if compact { PILL_COMPACT } else { PILL_WIDTH };
+    let (rect, response) = ui.allocate_exact_size(vec2(width, PILL_HEIGHT), Sense::click());
     let response = pointer(response);
     let running = core.pomodoro.running();
     let label = if running { tr.get(K::TimerPause) } else { tr.get(K::TimerStart) };
@@ -71,20 +74,22 @@ pub fn pill(core: &mut Core, ui: &mut Ui) {
         theme::mono_bold(15.0),
         SNOW,
     );
-    painter.text(
-        pos2(rect.left() + 46.0, rect.center().y + 9.0),
-        Align2::LEFT_CENTER,
-        phase_label(core).to_uppercase(),
-        theme::mono(10.0),
-        if running { accent } else { FAINT },
-    );
+    if !compact {
+        painter.text(
+            pos2(rect.left() + 46.0, rect.center().y + 9.0),
+            Align2::LEFT_CENTER,
+            phase_label(core).to_uppercase(),
+            theme::mono(10.0),
+            if running { accent } else { FAINT },
+        );
+    }
     if response.clicked() {
         core.pomodoro.toggle(now);
     }
     if response.secondary_clicked() {
         core.pomodoro.reset();
     }
-    if core.pomodoro.in_progress(now) {
+    if !compact && core.pomodoro.in_progress(now) {
         let skip = Rect::from_center_size(pos2(rect.right() - 22.0, rect.center().y), vec2(30.0, 30.0));
         let skipped = pointer(ui.interact(skip, ui.scope_id().with("timer-skip"), Sense::click()));
         skipped.widget_info(|| WidgetInfo::labeled(Role::Button, true, tr.get(K::TimerSkip)));

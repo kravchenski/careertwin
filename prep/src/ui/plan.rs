@@ -13,7 +13,7 @@ use super::{Core, Nav, scrolling_column};
 use crate::i18n::{K, Tr};
 use crate::prompts::Lang;
 use crate::prompts::tutor::Mode;
-use crate::syllabus::{Progress, Syllabus, Topic};
+use crate::syllabus::{Progress, Syllabus, Topic, TopicKind};
 
 #[derive(Default)]
 pub struct PlanView {
@@ -224,7 +224,14 @@ fn topic_card(
             if name.clicked() {
                 *action = Some(Action::Open(index));
             }
-            ui.label(RichText::new(topic.kind.label().to_uppercase()).font(theme::mono(10.5)).color(FAINT));
+            let kind = match topic.kind {
+                TopicKind::Concept => K::TopicConcept,
+                TopicKind::Framework => K::TopicFramework,
+                TopicKind::Language => K::TopicLanguage,
+                TopicKind::Practice => K::TopicPractice,
+                TopicKind::Behaviour => K::TopicBehaviour,
+            };
+            ui.label(RichText::new(tr.get(kind).to_uppercase()).font(theme::mono(10.5)).color(FAINT));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 meter(ui, &tr.fill(K::PlanEffort, &[("n", &topic.effort.to_string())]), topic.effort, MUTED);
                 ui.add_space(8.0);

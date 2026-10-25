@@ -1793,3 +1793,62 @@ fn docs_live_coding_with_a_question_from_the_tutor() {
     harness.run_steps(3);
     shot(&mut harness, "docs-coding");
 }
+
+#[test]
+fn the_smallest_window_still_fits_the_bar_in_both_languages() {
+    for language in ["en", "ru"] {
+        let (mut harness, _d, _r) = harness(fixture(language), 760.0, 560.0);
+        harness.run();
+        shot(&mut harness, &format!("smallest-{language}"));
+        // the tabs, the notebook button and the timer all fit without sitting on each other
+        let tabs: Vec<_> = harness.get_all_by_role(egui::accesskit::Role::Tab).map(|node| node.rect()).collect();
+        assert_eq!(tabs.len(), 3);
+        let tabs_left = tabs.iter().map(|r| r.left()).fold(f32::MAX, f32::min);
+        let tabs_right = tabs.iter().map(|r| r.right()).fold(0.0, f32::max);
+        let timer = harness.get_by_label(if language == "en" { "Start the timer" } else { "Запустить таймер" }).rect();
+        let notes = harness.get_by_label(if language == "en" { "Notes" } else { "Заметки" }).rect();
+        assert!(notes.right() < tabs_left, "{language}: the notebook button {notes:?} meets the tabs at {tabs_left}");
+        assert!(
+            tabs_right < timer.left(),
+            "{language}: the tabs end at {tabs_right}, the timer starts at {}",
+            timer.left()
+        );
+    }
+}
+
+#[test]
+fn russian_screens_for_a_look() {
+    if std::env::var("UI_SHOTS").is_err() {
+        return;
+    }
+    let (mut harness, _d, _r) = harness(fixture("ru"), 1120.0, 860.0);
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    harness.state_mut().core.notebook.add(
+        careertwin_prep::notes::NoteKind::Vital,
+        "OOP",
+        "Инкапсуляция прячет состояние: наружу торчат только методы.",
+        careertwin_prep::session::now(),
+    );
+    harness.run();
+    shot(&mut harness, "ru-home");
+    harness.state_mut().screen = Screen::Plan(Box::default());
+    harness.run_steps(3);
+    shot(&mut harness, "ru-plan");
+    harness.state_mut().screen = Screen::Notes(Box::default());
+    harness.run_steps(3);
+    shot(&mut harness, "ru-notes");
+    harness.state_mut().screen = Screen::Show(Box::default());
+    harness.run_steps(3);
+    shot(&mut harness, "ru-show");
+    harness.state_mut().screen =
+        Screen::Code(Box::new(careertwin_prep::ui::code::SetupView::new(&harness.state().core)));
+    harness.run_steps(3);
+    shot(&mut harness, "ru-code-setup");
+    harness.state_mut().core.usage_open = true;
+    harness.run_steps(3);
+    shot(&mut harness, "ru-usage");
+    harness.state_mut().core.usage_open = false;
+    harness.state_mut().core.help_open = true;
+    harness.run_steps(3);
+    shot(&mut harness, "ru-help");
+}

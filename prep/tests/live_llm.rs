@@ -434,3 +434,69 @@ async fn a_real_model_talks_through_a_coding_task_without_handing_over_the_answe
     }
     let _ = commands.send(Command::Finish);
 }
+
+/// The research of a vacancy on a real model: the plan it makes, ranked by the 80/20 rule.
+///
+/// `cargo test --test live_llm research -- --ignored --nocapture`
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a model gateway"]
+async fn a_real_model_researches_a_vacancy_and_ranks_what_will_be_asked() {
+    let url = std::env::var("LIVE_URL").unwrap_or_else(|_| "http://127.0.0.1:3260".into());
+    let model = std::env::var("LIVE_MODEL").unwrap_or_else(|_| "auto".into());
+    let llm = HttpLlm::new(
+        &LlmSettings { url, key: Secret::default(), model: model.clone(), fast_model: String::new() },
+        vec![],
+    )
+    .unwrap();
+    let mut brief = Brief { candidate: DEMO.to_owned(), ..Brief::default() };
+    brief.set_vacancy(
+        "AI Native Full Stack Developer",
+        "Acme",
+        "We are looking for a full stack developer who builds products with LLMs. You will work with TypeScript, React and \
+         Node.js on the front end and back end, design APIs, integrate LLM APIs (prompting, tool calling, RAG, evaluation), \
+         use PostgreSQL and Redis, write tests and ship with Docker and CI. You use AI coding tools every day and review \
+         their output critically.",
+    );
+    let progress = careertwin_prep::ops::ResearchProgress::default();
+    let started = std::time::Instant::now();
+    let plan = careertwin_prep::ops::research(&llm, &model, &brief, Lang::Ru, &progress).await.expect("a plan");
+    println!("\nPLAN for {} ({:.1}s)\n{}\n", plan.role, started.elapsed().as_secs_f32(), plan.summary);
+    for failure in progress.failures.lock().unwrap().iter() {
+        println!("  first try failed: {failure}");
+    }
+    let vital = plan.vital();
+    for (index, topic) in plan.topics.iter().enumerate() {
+        println!(
+            "  {} {:<34} {:?} likely {} effort {} value {:.1} terms {}   {}",
+            if vital.contains(&index) { "★" } else { " " },
+            topic.name,
+            topic.kind,
+            topic.likelihood,
+            topic.effort,
+            topic.value(),
+            topic.terms.len(),
+            topic.why
+        );
+    }
+    if let Some(topic) = plan.topics.iter().find(|t| !t.terms.is_empty()) {
+        println!("\nTERMS of {}:", topic.name);
+        for term in &topic.terms {
+            println!(
+                "  - {}\n      plain:   {}\n      like:    {}\n      english: {}\n      next:    {:?}\n      picture: {}",
+                term.name, term.plain, term.analogy, term.english, term.follow_ups, term.visual
+            );
+        }
+    }
+    // a topic that was left without terms must be writable when asked for again
+    for topic in plan.topics.iter().filter(|t| t.terms.is_empty()).take(3) {
+        let asked = std::time::Instant::now();
+        match careertwin_prep::ops::topic_terms(&llm, &model, &brief, topic, Lang::Ru).await {
+            Ok(terms) => {
+                println!("  again: {} -> {} terms ({:.1}s)", topic.name, terms.len(), asked.elapsed().as_secs_f32())
+            }
+            Err(error) => println!("  again: {} FAILED ({:.1}s): {error}", topic.name, asked.elapsed().as_secs_f32()),
+        }
+    }
+    assert!(plan.topics.len() >= 6);
+    assert!(plan.topics.iter().filter(|t| !t.terms.is_empty()).count() >= 3);
+}
