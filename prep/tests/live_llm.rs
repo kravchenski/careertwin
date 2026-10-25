@@ -120,3 +120,113 @@ async fn a_real_model_interviews_like_a_person() {
     }
     let _ = commands.send(Command::Finish);
 }
+
+/// The tutor on a real model: a terms lesson with a learner who knows one term, is unsure of the
+/// next and says "I don't know" once. It prints the whole conversation and what the call
+/// understood from the tags.
+///
+/// `LIVE_URL=http://127.0.0.1:3260 LIVE_MODEL=auto cargo test --test live_llm tutor -- --ignored --nocapture`
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a model gateway"]
+async fn a_real_model_tutors_terms_in_your_language_then_in_english() {
+    use careertwin_prep::prompts::tutor::{Lesson, Mode};
+    use careertwin_prep::syllabus::Term;
+    let url = std::env::var("LIVE_URL").unwrap_or_else(|_| "http://127.0.0.1:3260".into());
+    let model = std::env::var("LIVE_MODEL").unwrap_or_else(|_| "auto".into());
+    let llm = HttpLlm::new(
+        &LlmSettings { url, key: Secret::default(), model: model.clone(), fast_model: String::new() },
+        vec![],
+    )
+    .unwrap();
+    let mut spec = InterviewerSpec::tutoring(Track::Technical, Mode::Terms, Lang::Ru, 20);
+    spec.lesson = Some(Lesson {
+        topic: "Object-oriented programming".into(),
+        terms: vec![
+            Term {
+                name: "Encapsulation".into(),
+                plain: "Объект прячет своё внутреннее устройство и показывает наружу только то, что нужно.".into(),
+                analogy: "Кофемашина: нажимаешь кнопку и не лезешь в бойлер.".into(),
+                english: "Encapsulation means an object hides its internal state and exposes only what is needed."
+                    .into(),
+                follow_ups: vec!["Why is it useful?".into()],
+                visual: String::new(),
+            },
+            Term {
+                name: "Polymorphism".into(),
+                plain: "Один и тот же вызов работает по-разному для разных объектов.".into(),
+                analogy: "Кнопка «воспроизвести» в плеере: для музыки, видео и подкаста она делает своё.".into(),
+                english:
+                    "Polymorphism lets us call the same method on different objects and get behaviour that fits each."
+                        .into(),
+                follow_ups: vec!["Can you give an example?".into()],
+                visual: String::new(),
+            },
+        ],
+    });
+    let mut brief = Brief { candidate: DEMO.to_owned(), ..Brief::default() };
+    brief.set_vacancy("Backend Engineer", "Acme", "Python, FastAPI and PostgreSQL.");
+    let config = Config {
+        spec,
+        brief,
+        knobs: Knobs::default(),
+        model,
+        headphones: false,
+        voice: Voice { name: "alloy".into(), speed: 1.0, instructions: String::new(), language: Lang::En },
+        voice_alt: None,
+        stt_hint: SttHint::default(),
+    };
+    let deps = Deps {
+        llm: Arc::new(llm),
+        stt: FakeStt::new(&[]),
+        tts: Some(FakeTts::new()),
+        speaker: FakeSpeaker::new(),
+        mic: None,
+        wake: Arc::new(|| {}),
+    };
+    let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (event_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let (tap_tx, mut tap) = tokio::sync::mpsc::unbounded_channel();
+    // a relay that prints what the call understood and passes everything on
+    tokio::spawn(async move {
+        while let Some(event) = events.recv().await {
+            match &event {
+                Event::Tag(tag) => println!("          [tag] {tag:?}"),
+                Event::TermProgress { name, half, score, .. } => {
+                    println!("          [progress] {name} {half:?} {score}")
+                }
+                Event::Lesson(view) => println!(
+                    "          [lesson] term {} of {}: {} ({:?})",
+                    view.index + 1,
+                    view.total,
+                    view.name,
+                    view.stage
+                ),
+                _ => {}
+            }
+            if tap_tx.send(event).is_err() {
+                break;
+            }
+        }
+    });
+    tokio::spawn(conversation::run(deps, config, command_rx, event_tx));
+
+    let answers = [
+        "Это когда мы прячем внутренности объекта и даём доступ только через методы.",
+        "Encapsulation is when an object hides its data and gives access only by methods. It helps to change the inside without breaking others.",
+        "Хм, честно, не знаю, что это.",
+        "Ну, наверное, когда у разных классов один метод, но они делают разное?",
+        "Polymorphism means one method name, different behaviour in different classes. For example, the speak method for a dog and a cat.",
+    ];
+    let started = std::time::Instant::now();
+    let first = turn_text(&mut tap, Who::Interviewer).await;
+    println!("\n[{:>4.1}s] TUTOR: {first}", started.elapsed().as_secs_f32());
+    for answer in answers {
+        listening(&mut tap).await;
+        println!("[{:>4.1}s] YOU:   {answer}", started.elapsed().as_secs_f32());
+        let _ = commands.send(Command::Say(answer.into()));
+        let reply = turn_text(&mut tap, Who::Interviewer).await;
+        println!("[{:>4.1}s] TUTOR: {reply}", started.elapsed().as_secs_f32());
+        assert!(!reply.contains("[["), "a tag leaked into the words: {reply}");
+    }
+    let _ = commands.send(Command::Finish);
+}

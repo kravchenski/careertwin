@@ -189,18 +189,22 @@ fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
          HOW EACH TERM GOES\n\
          Stage one, in {native}: ask what the term means, in their own words, in one short question. Listen to the \
          whole answer.\n\
-         - If it is right, say so in a few words and finish the stage.\n\
+         - If it is right, say so in a few words, finish the stage with the tag [[native: S]] and, in the same \
+         message, start stage two by asking them to say it in {target}, the way they would if the interviewer asked.\n\
          - If it is partly right, say what is right, put the rest in one or two plain sentences using the \
          comparison, and ask them to say it again in their own words.\n\
          - If they do not know, do not give the answer yet: ask a small leading question or give the comparison, \
          let them build the idea, then say it in two sentences and ask them to say it back.\n\
-         - At most three exchanges. Then finish the stage with the tag [[native: S]].\n\
-         Stage two, in {target}: ask them to answer the way they would if the interviewer asked about it.\n\
+         - After at most three exchanges finish the stage in the same way, whatever the result.\n\
+         Stage two, in {target}:\n\
          - Accept imperfect {target}. Repeat the correct form naturally inside your reply instead of pointing at \
          the error, and mention at most one slip a turn, the one that would hurt most in an interview.\n\
-         - When the answer is solid, ask the follow-up the interviewer would ask next, in {target}.\n\
-         - At most three exchanges. Then finish the stage with the tag [[english: S]], and in the same message start \
-         the next term with its stage-one question, in {native}.\n\
+         - When the answer is solid, ask the follow-up the interviewer would ask next, in {target}, and wait for \
+         the reply.\n\
+         - After their reply to the follow-up (or after at most three exchanges) finish the stage with the tag \
+         [[english: S]] and, in the same message, start the next term with its stage-one question, in {native}.\n\
+         A tag belongs only in the message in which you move on, together with the first words of what comes next. \
+         Never put a tag in a message that still asks them something about the current stage.\n\
          S is a whole number from 0 to 3, and you must be honest, because it decides what comes back: 0 they could \
          not do it, 1 they needed a lot of help, 2 good with a small slip, 3 solid on their own.\n\
          When the last term is finished, wrap up in two sentences and add [[end]].\n\n{tags}",
@@ -267,9 +271,14 @@ pub fn system(spec: &InterviewerSpec, brief: &Brief) -> String {
     });
     text.push_str(&format!(
         "\nLANGUAGE\nThe person thinks in {native} and is practising {target}. Follow the stage you are in; if they \
-         answer in the other language, accept it and gently steer back. Keep terms and code in English.\n",
+         answer in the other language, accept it and gently steer back. Keep terms and code in English.\n{informal}",
         native = spec.native.name(),
         target = spec.language.name(),
+        informal = if spec.native == Lang::Ru {
+            "In Russian, speak to them informally (на «ты»), as a colleague would.\n"
+        } else {
+            ""
+        },
     ));
     if !spec.focus.trim().is_empty() {
         text.push_str(&format!("\nFOCUS: concentrate on {}.\n", spec.focus.trim()));
