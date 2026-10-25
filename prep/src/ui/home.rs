@@ -50,7 +50,7 @@ pub fn ways(track: Track) -> Vec<Card> {
 fn main_action(core: &Core, track: Track) -> (String, String, Nav) {
     let tr = core.tr;
     match track {
-        Track::English => (tr.get(K::HomeStart).to_owned(), tr.get(K::HomeLineEnglish).to_owned(), Nav::QuickCall),
+        Track::English => (tr.get(K::HomeStudy).to_owned(), tr.get(K::HomeLineStudy).to_owned(), Nav::Study),
         Track::Interview => (
             tr.get(K::HomeIntroStart).to_owned(),
             tr.get(K::HomeLineInterview).to_owned(),

@@ -1163,6 +1163,32 @@ fn the_tutor_ends_this_part(harness: &mut Harness<'_, PrepApp>) {
 }
 
 #[test]
+fn the_english_tab_makes_a_lesson_of_what_you_bring_and_starts_it() {
+    use careertwin_prep::testing::Reply;
+    let lesson = r#"{"topic": "Phrasal verbs", "terms": [{"name": "give up", "plain": "Сдаться, перестать пытаться.", "analogy": "Как бросить бег на полпути.", "english": "I will not give up.", "follow_ups": ["When did you last give up?"], "visual": "A runner stops."}, {"name": "look after", "plain": "Заботиться о ком-то.", "analogy": "Как няня.", "english": "I look after my cat.", "follow_ups": ["Who do you look after?"], "visual": "A person feeds a cat."}]}"#;
+    let replies = vec![Reply::text(lesson), Reply::text("Hi Alex. In your own words, what does give up mean?")];
+    let (mut harness, _d, _r) = harness(fixture_with("en", replies), 1120.0, 900.0);
+    harness.run();
+    harness.get_by_label("English").click();
+    harness.run_steps(2);
+    harness.get_by_label("Study something together").click();
+    harness.run_steps(3);
+    harness.get_by_label("Study together");
+    // nothing to study yet, so nothing to start
+    assert!(harness.query_by_label("Start the lesson").is_some());
+    harness.get_all_by_role(egui::accesskit::Role::MultilineTextInput).next().unwrap().focus();
+    harness.run();
+    harness.get_all_by_role(egui::accesskit::Role::MultilineTextInput).next().unwrap().type_text("give up, look after");
+    harness.run();
+    harness.get_by_label("Start the lesson").click();
+    wait_until(&mut harness, "the lesson starts", |h| matches!(h.state().screen, Screen::Live(_)));
+    let Screen::Live(view) = &harness.state().screen else { panic!("the lesson should have started") };
+    assert_eq!(view.spec.mode, Mode::Terms);
+    let lesson = view.spec.lesson.as_ref().unwrap();
+    assert_eq!((lesson.topic.as_str(), lesson.terms.len()), ("Phrasal verbs", 2));
+}
+
+#[test]
 fn the_interview_goes_from_topic_to_topic_then_to_code_and_the_cross_ends_it() {
     use careertwin_prep::testing::Reply;
     let replies = vec![Reply::text("Let us start."), Reply::text("Next topic."), Reply::text("And more.")];
@@ -1360,7 +1386,9 @@ fn the_interview_tab_starts_the_introduction_coach_and_the_english_tab_a_convers
     assert!(harness.state().core.pomodoro.running(), "the first conversation started the timer");
     harness.state_mut().core.pomodoro.pause(std::time::Instant::now());
     assert!(!harness.state().core.pomodoro.running());
-    harness.get_by_label("Start talking").click();
+    harness.get_by_label("Study something together").click();
+    harness.run_steps(3);
+    harness.get_by_label("Just talk, no material").click();
     harness.run_steps(3);
     let Screen::Live(view) = &harness.state().screen else { panic!("the conversation should have started") };
     assert_eq!(view.spec.mode, Mode::Interview);

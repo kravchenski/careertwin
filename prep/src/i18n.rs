@@ -465,6 +465,27 @@ strings! {
     HomeStart => ("Start talking", "Начать разговор"),
     HomeStartTopic => ("Start: {topic}", "Начать: {topic}"),
     HomeStartRun => ("Start the interview", "Начать собеседование"),
+    HomeStudy => ("Study something together", "Учить что-то вместе"),
+    HomeLineStudy => (
+        "Bring a text, your notes, new words or a topic. We go through it in your words first, then in English, and I fix your grammar.",
+        "Принесите текст, конспект, новые слова или тему. Сначала разберём своими словами, потом по-английски, и я поправлю грамматику."
+    ),
+    StudyTitle => ("Study together", "Учим вместе"),
+    StudyHint => (
+        "Paste a text, your notes, a list of new words, or write a topic…",
+        "Вставьте текст, конспект, список новых слов или напишите тему…"
+    ),
+    StudyDrop => (
+        "You can also drop a text file on this window.",
+        "Можно также бросить на это окно текстовый файл."
+    ),
+    StudyOnlyText => (
+        "Only text files can be read for now (.txt, .md, .csv, .json, .srt). Paste the text instead.",
+        "Пока читаются только текстовые файлы (.txt, .md, .csv, .json, .srt). Вставьте текст сюда."
+    ),
+    StudyStart => ("Start the lesson", "Начать урок"),
+    StudyTalk => ("Just talk, no material", "Просто поговорить, без материала"),
+    StudyBusy => ("Preparing the lesson…", "Готовлю урок…"),
     HomeLineRun => (
         "About an hour and a half: the terms first in your words, then again {lang} with your grammar, then code. We begin with {topic}.",
         "Около полутора часов: сначала термины своими словами, потом ещё раз {lang}, с разбором грамматики, потом код. Начнём с темы «{topic}»."

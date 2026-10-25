@@ -21,6 +21,7 @@ pub mod settings;
 pub mod setup;
 pub mod show;
 pub mod stage;
+pub mod study;
 pub mod syntax;
 pub mod theme;
 pub mod translate;
@@ -74,6 +75,7 @@ pub enum Screen {
     Notes(Box<notebook::NotebookView>),
     Show(Box<show::ShowView>),
     Code(Box<code::SetupView>),
+    Study(Box<study::StudyView>),
 }
 
 /// How long the full technical interview is meant to last, and how long it keeps taking topics
@@ -109,6 +111,8 @@ pub enum Nav {
     },
     /// A call with the defaults of the tab, with no setup page.
     QuickCall,
+    /// Bring something to study: the tutor makes a lesson of it.
+    Study,
     /// The whole technical interview: the topics of the plan one after another, then code. The
     /// tutor leads it from start to end.
     FullInterview,
@@ -144,6 +148,7 @@ pub enum Outcome {
     Downloaded { name: String, result: Result<(), String> },
     Researched(Result<Syllabus, OpError>),
     Terms { topic: String, result: Result<Vec<Term>, OpError> },
+    Study(Result<(String, Vec<Term>), OpError>),
     Digested { session_id: String, result: Result<Digest, OpError> },
     Storyboard { stage: u64, result: Result<Storyboard, OpError> },
     Task(Result<crate::coding::Task, OpError>),
@@ -597,6 +602,17 @@ impl Core {
         });
     }
 
+    /// Asks for a lesson made from what the person brought.
+    pub fn study(&mut self, material: String) {
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.model;
+        let native = self.ui_lang();
+        let label = self.tr.get(K::StudyBusy).to_owned();
+        self.jobs.spawn(label, async move {
+            Outcome::Study(crate::ops::study_lesson(llm.as_ref(), &model, &material, native).await)
+        });
+    }
+
     pub fn translate(&mut self, text: String) {
         let llm = self.services.llm.clone();
         let model = self.settings.effective().llm.model;
@@ -824,6 +840,7 @@ impl PrepApp {
                     Screen::Notes(view) => notebook::ui(&mut self.core, view, ui),
                     Screen::Show(view) => show::ui(&mut self.core, view, ui),
                     Screen::Code(view) => code::setup(&mut self.core, view, ui),
+                    Screen::Study(view) => study::ui(&mut self.core, view, ui),
                 };
                 next = next.take().or(screen_nav);
             });
@@ -897,6 +914,7 @@ impl PrepApp {
             Nav::Concepts => self.screen = Screen::Concepts(Box::new(concepts::ConceptsView::new(&self.core))),
             Nav::Phrases => self.screen = Screen::Phrases(Box::default()),
             Nav::Translate => self.screen = Screen::Translate(Box::default()),
+            Nav::Study => self.screen = Screen::Study(Box::default()),
             Nav::Prepare => self.screen = Screen::Prepare(Box::default()),
             Nav::QuickCall => {
                 let spec = InterviewerSpec::new(self.core.track);
@@ -975,6 +993,19 @@ impl PrepApp {
         };
         let handle = crate::conversation::start(deps, config);
         self.screen = Screen::Live(Box::new(live::LiveView::new(session, spec, handle, guard)));
+    }
+
+    /// Starts a lesson made from what the person brought: the same two stages as any terms lesson.
+    fn start_study(&mut self, topic: String, mut terms: Vec<Term>) {
+        let core = &mut self.core;
+        terms.truncate(8);
+        let mut spec = InterviewerSpec::tutoring(core.track, Mode::Terms, core.ui_lang(), 20);
+        spec.target = core.practice_target();
+        spec.minutes = (terms.len() as u32 * 4).clamp(10, 40);
+        spec.focus = topic.clone();
+        spec.lesson = Some(Lesson { topic, terms });
+        let headphones = core.settings.audio.headphones;
+        self.start_call(spec, headphones);
     }
 
     /// Starts the full technical interview.
@@ -1317,6 +1348,23 @@ impl PrepApp {
                     }
                 }
             }
+            Outcome::Study(result) => {
+                let lesson = match (&mut self.screen, result) {
+                    (Screen::Study(view), Ok(lesson)) => {
+                        view.working = false;
+                        Some(lesson)
+                    }
+                    (Screen::Study(view), Err(error)) => {
+                        view.working = false;
+                        view.error = Some(error.to_string());
+                        None
+                    }
+                    _ => None,
+                };
+                if let Some((topic, terms)) = lesson {
+                    self.start_study(topic, terms);
+                }
+            }
             Outcome::Translation(result) => {
                 if let Screen::Translate(view) = &mut self.screen {
                     view.working = false;
@@ -1408,6 +1456,7 @@ impl PrepApp {
             Screen::Live(view) => view.error = Some(message),
             Screen::Review(view) => view.drill_error = Some(message),
             Screen::Translate(view) => view.error = Some(message),
+            Screen::Study(view) => view.error = Some(message),
             Screen::Prepare(view) => view.error = Some(message),
             Screen::Plan(view) => view.error = Some(message),
             _ => self.core.notice = Some(message),

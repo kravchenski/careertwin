@@ -270,6 +270,27 @@ pub async fn topic_terms(
     .await
 }
 
+/// A lesson made from what the person brought: its title and the terms to go through.
+pub async fn study_lesson(
+    llm: &dyn Llm,
+    model: &str,
+    material: &str,
+    native: Lang,
+) -> Result<(String, Vec<Term>), OpError> {
+    if material.trim().is_empty() {
+        return Err(OpError::Prompt("Bring something to study first: a text, some words or a topic.".into()));
+    }
+    ask_json(
+        llm,
+        model,
+        &research::study_system(native),
+        &research::study_prompt(material),
+        3500,
+        research::parse_study,
+    )
+    .await
+}
+
 /// The few lines worth keeping from a session.
 pub async fn digest(
     llm: &dyn Llm,
