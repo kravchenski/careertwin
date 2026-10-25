@@ -1288,3 +1288,213 @@ fn writing_instead_opens_a_quiet_chat_from_any_tab() {
     assert!(!harness.state().core.pomodoro.running(), "a chat in a lecture does not start the timer");
     wait_until(&mut harness, "the greeting", |h| h.query_by_label_contains("Type anything").is_some());
 }
+
+// ---- pictures ----
+
+const STORY: &str = r#"{"title": "How a queue works", "check": "Who leaves the queue first?",
+ "scenes": [
+  {"say": "Think of a queue at a shop till.",
+   "panels": [{"id": "line", "kind": "cells", "title": "People in a line", "items": ["Ann", "Bob", "Cy"], "highlight": [0], "note": "first in, first out"}]},
+  {"say": "The first person to arrive is served first.",
+   "panels": [
+     {"id": "line", "kind": "cells", "title": "People in a line", "items": ["Ann", "Bob", "Cy", "Di"], "highlight": [0]},
+     {"id": "path", "kind": "flow", "title": "Journey", "items": ["arrive", "wait", "served"], "active": 2},
+     {"id": "code", "kind": "code", "title": "Python", "lines": ["q = deque()", "q.append('Ann')", "q.popleft()"], "highlight": [2]}]},
+  {"say": "A stack is the opposite.",
+   "panels": [
+     {"kind": "compare", "title": "Queue vs stack", "left": {"title": "Queue", "lines": ["first in", "first out"]}, "right": {"title": "Stack", "lines": ["last in", "first out"]}},
+     {"kind": "analogy", "title": "Like", "lines": ["A plate pile", "A stack"]},
+     {"kind": "steps", "title": "Steps", "lines": ["push", "push", "pop"], "active": 2},
+     {"kind": "layers", "title": "Layers", "lines": ["top", "middle", "bottom"]}]}
+ ]}"#;
+
+fn picture_fixture() -> Fixture {
+    fixture_with("en", vec![careertwin_prep::testing::Reply::text(STORY)])
+}
+
+#[test]
+fn the_picture_page_asks_for_a_topic_then_draws_and_tells_it() {
+    let (mut harness, _d, _r) = harness(picture_fixture(), 1120.0, 860.0);
+    harness.run();
+    click_card(&mut harness, "Explain with pictures");
+    harness.run_steps(3);
+    harness.get_by_label("Explain it with pictures");
+    harness.get_by_label("Show me"); // not ready until a topic is typed
+    harness.get_all_by_role(egui::accesskit::Role::TextInput).next().unwrap().focus();
+    harness.run();
+    harness.get_all_by_role(egui::accesskit::Role::TextInput).next().unwrap().type_text("how a queue works");
+    harness.run();
+    harness.get_by_label("Show me").click();
+    harness.run_steps(2);
+    harness.get_by_label("Drawing it…");
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Show(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    harness.run_steps(2);
+    harness.get_by_label("How a queue works");
+    for control in
+        ["Pause", "Next scene", "Previous scene", "Play it again", "Explain more simply", "Close the picture"]
+    {
+        harness.get_by_label(control);
+    }
+    harness.get_by_label_contains("Think of a queue");
+    shot(&mut harness, "picture-1-en");
+    // the second scene grows the first picture instead of drawing it again
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        let player = view.stage.as_mut().unwrap().player_mut().unwrap();
+        for i in 0..3 {
+            player.set_voice(i, None);
+        }
+    }
+    harness.get_by_label("Next scene").click();
+    harness.run_steps(3);
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage.as_mut().unwrap().player_mut().unwrap().seek(0.8, std::time::Instant::now());
+    }
+    harness.run_steps(2);
+    shot(&mut harness, "picture-2-en");
+    harness.get_by_label("Next scene").click();
+    harness.run_steps(3);
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage.as_mut().unwrap().player_mut().unwrap().seek(0.9, std::time::Instant::now());
+    }
+    harness.run_steps(2);
+    shot(&mut harness, "picture-3-en");
+    // closing it goes back to the form
+    harness.get_by_label("Close the picture").click();
+    harness.run_steps(3);
+    harness.get_by_label("Show me");
+}
+
+#[test]
+fn a_story_can_be_paused_and_played_from_the_controls() {
+    let (mut harness, _d, _r) = harness(picture_fixture(), 1120.0, 860.0);
+    harness.state_mut().screen = Screen::Show(Box::default());
+    harness.run();
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage = None;
+    }
+    let stage = { harness.state_mut().core.begin_stage("queue", "", false) };
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage = Some(stage);
+    }
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Show(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    harness.run_steps(2);
+    harness.get_by_label("Pause").click();
+    harness.run_steps(2);
+    let Screen::Show(view) = &harness.state().screen else { panic!() };
+    assert_eq!(view.stage.as_ref().unwrap().player().unwrap().phase(), careertwin_prep::explain::Phase::Paused);
+    harness.get_by_label("Play").click();
+    // it begins as soon as its voice is there
+    wait_until(&mut harness, "the scene plays", |h| {
+        matches!(&h.state().screen, Screen::Show(v)
+            if v.stage.as_ref().and_then(|s| s.player()).is_some_and(|p| p.phase() == careertwin_prep::explain::Phase::Playing))
+    });
+}
+
+#[test]
+fn a_story_that_cannot_be_written_says_so_and_offers_another_try() {
+    use careertwin_prep::testing::Reply;
+    let (mut harness, _d, _r) =
+        harness(fixture_with("en", vec![Reply::text("no json"), Reply::text("still none")]), 1120.0, 860.0);
+    let stage = harness.state_mut().core.begin_stage("queue", "", false);
+    harness.state_mut().screen =
+        Screen::Show(Box::new(careertwin_prep::ui::show::ShowView { stage: Some(stage), ..Default::default() }));
+    wait_until(&mut harness, "the failure shows", |h| h.query_by_label("The picture could not be made").is_some());
+    harness.get_by_label("Try again, more simply");
+    shot(&mut harness, "picture-failed-en");
+}
+
+#[test]
+fn when_the_tutor_says_show_the_call_holds_draws_and_asks_the_question_after() {
+    let (mut harness, _d, _r) = harness(picture_fixture(), 1120.0, 900.0);
+    let mut wired = tutoring(&mut harness, Mode::Terms);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired.events.send(Event::Tag(careertwin_prep::tags::Tag::Show("how a queue works".into()))).unwrap();
+    harness.run_steps(2);
+    assert!(
+        matches!(wired.commands.try_recv(), Ok(Command::Hold(true))),
+        "the tutor does not nudge while a picture plays"
+    );
+    assert!(matches!(&harness.state().screen, Screen::Live(v) if v.stage.is_some()), "the picture is on its way");
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Live(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    harness.run_steps(2);
+    harness.get_by_label("How a queue works");
+    shot(&mut harness, "picture-in-call-en");
+    // you speak: the picture waits for the answer
+    wired
+        .events
+        .send(Event::Turn { who: Who::You, text: "wait, why first in?".into(), language: None, append: false })
+        .unwrap();
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    assert_eq!(view.stage.as_ref().unwrap().player().unwrap().phase(), careertwin_prep::explain::Phase::Paused);
+    // it is watched to the end: the tutor is released and asks its question
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        let player = view.stage.as_mut().unwrap().player_mut().unwrap();
+        for i in 0..3 {
+            player.set_voice(i, None);
+        }
+        let now = std::time::Instant::now();
+        player.resume(now);
+        player.go_to(2, now);
+        player.seek(0.99, now);
+    }
+    harness.run_steps(2);
+    wait_until(
+        &mut harness,
+        "the end of the story",
+        |h| matches!(&h.state().screen, Screen::Live(v) if v.stage.is_none()),
+    );
+    let mut commands = Vec::new();
+    while let Ok(command) = wired.commands.try_recv() {
+        commands.push(command);
+    }
+    assert!(commands.iter().any(|c| matches!(c, Command::Hold(false))), "{commands:?}");
+    assert!(
+        commands.iter().any(|c| matches!(c, Command::Context(t) if t.contains("watched all of it"))),
+        "{commands:?}"
+    );
+    assert!(
+        commands.iter().any(|c| matches!(c, Command::Speak(t) if t == "Who leaves the queue first?")),
+        "{commands:?}"
+    );
+}
+
+#[test]
+fn closing_a_picture_early_releases_the_tutor_and_says_so() {
+    let (mut harness, _d, _r) = harness(picture_fixture(), 1120.0, 900.0);
+    let mut wired = tutoring(&mut harness, Mode::Terms);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired.events.send(Event::Tag(careertwin_prep::tags::Tag::Show("queues".into()))).unwrap();
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Live(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    harness.run_steps(2);
+    harness.get_by_label("Close the picture").click();
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    assert!(view.stage.is_none());
+    let mut commands = Vec::new();
+    while let Ok(command) = wired.commands.try_recv() {
+        commands.push(command);
+    }
+    assert!(commands.iter().any(|c| matches!(c, Command::Hold(false))));
+    assert!(
+        commands.iter().any(|c| matches!(c, Command::Context(t) if t.contains("closed it before the end"))),
+        "{commands:?}"
+    );
+    assert!(!commands.iter().any(|c| matches!(c, Command::Speak(_))), "no question after a closed picture");
+}

@@ -230,3 +230,41 @@ async fn a_real_model_tutors_terms_in_your_language_then_in_english() {
     }
     let _ = commands.send(Command::Finish);
 }
+
+/// A visual explanation on a real model: it prints every scene, what is said and what is shown.
+///
+/// `LIVE_TOPIC="How a hash map works" cargo test --test live_llm picture -- --ignored --nocapture`
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a model gateway"]
+async fn a_real_model_draws_an_explanation_a_beginner_can_follow() {
+    let url = std::env::var("LIVE_URL").unwrap_or_else(|_| "http://127.0.0.1:3260".into());
+    let model = std::env::var("LIVE_MODEL").unwrap_or_else(|_| "auto".into());
+    let topic = std::env::var("LIVE_TOPIC").unwrap_or_else(|_| "How a hash map works".into());
+    let llm = HttpLlm::new(
+        &LlmSettings { url, key: Secret::default(), model: model.clone(), fast_model: String::new() },
+        vec![],
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
+    let board = careertwin_prep::ops::storyboard(&llm, &model, &topic, "", Lang::Ru, false).await.expect("a story");
+    println!("\n{} ({:.1}s) — check: {}", board.title, started.elapsed().as_secs_f32(), board.check);
+    for (number, scene) in board.scenes.iter().enumerate() {
+        println!("\n  scene {}: {}", number + 1, scene.say);
+        for panel in &scene.panels {
+            println!(
+                "    [{:?} {}] {} | lines={:?} items={:?} highlight={:?} active={:?} note={:?} left={:?} right={:?}",
+                panel.kind,
+                panel.id,
+                panel.title,
+                panel.lines,
+                panel.items,
+                panel.highlight,
+                panel.active,
+                panel.note,
+                panel.left.lines,
+                panel.right.lines
+            );
+        }
+    }
+    assert!(board.scenes.len() >= 4, "a story of at least four scenes");
+}

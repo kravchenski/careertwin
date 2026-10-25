@@ -9,8 +9,10 @@ use thiserror::Error;
 
 use crate::audio::vad::{self, Segmenter};
 use crate::brief::Brief;
+use crate::explain::Storyboard;
 use crate::llm::{ChatOptions, Llm, LlmError, Message};
 use crate::prompts::cards::{self, ConceptCard};
+use crate::prompts::explain as explaining;
 use crate::prompts::feedback::{self, Feedback};
 use crate::prompts::interviewer::InterviewerSpec;
 use crate::prompts::prepare::{self, Analysis, BankQuestion};
@@ -270,6 +272,25 @@ pub async fn digest(
     .await
 }
 
+/// A short animated explanation of `topic` for a complete beginner. `context` says what the person
+/// already knows or just asked; `simpler` is for when the first one was not understood.
+pub async fn storyboard(
+    llm: &dyn Llm,
+    model: &str,
+    topic: &str,
+    context: &str,
+    native: Lang,
+    simpler: bool,
+) -> Result<Storyboard, OpError> {
+    if topic.trim().is_empty() {
+        return Err(OpError::Prompt("Say what to explain.".into()));
+    }
+    ask_json(llm, model, &explaining::system(native, simpler), &explaining::prompt(topic, context), 4500, |reply| {
+        explaining::parse(reply, native)
+    })
+    .await
+}
+
 /// Listens for one thing you say and writes it down: for "say it yourself" drills and dictation.
 pub async fn hear(services: &Services, device: &str, hint: SttHint, wait: Duration) -> Result<Transcript, OpError> {
     let stt = services
@@ -489,6 +510,28 @@ mod tests {
         let empty = Session::new(Track::English, Kind::Live, "t");
         assert!(digest(llm.as_ref(), "m", &empty, "", Lang::En).await.is_err());
         assert_eq!(llm.calls(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_storyboard_is_asked_for_in_your_language_and_read() {
+        let llm = FakeLlm::new(vec![json(
+            r#"{"title": "Очередь", "check": "Кто выходит первым?", "scenes": [{"say": "Это как очередь в кассу.", "panels": [{"kind": "cells", "items": ["a", "b"]}]}]}"#,
+        )]);
+        let board = storyboard(llm.as_ref(), "m", "queue", "knows nothing", Lang::Ru, false).await.unwrap();
+        assert_eq!((board.title.as_str(), board.scenes.len(), board.native), ("Очередь", 1, Lang::Ru));
+        let request = llm.last_request();
+        assert!(request[0].content.contains("in Russian") && request[1].content.contains("TOPIC: queue"));
+        assert!(request[1].content.contains("knows nothing"));
+        assert!(storyboard(llm.as_ref(), "m", "  ", "", Lang::En, false).await.is_err());
+        assert_eq!(llm.calls(), 1, "an empty topic costs nothing");
+    }
+
+    #[tokio::test]
+    async fn a_simpler_storyboard_says_so() {
+        let llm =
+            FakeLlm::new(vec![json(r#"{"scenes": [{"say": "One.", "panels": [{"kind": "text", "lines": ["x"]}]}]}"#)]);
+        storyboard(llm.as_ref(), "m", "queue", "", Lang::En, true).await.unwrap();
+        assert!(llm.last_request()[0].content.contains("did not understand the first version"));
     }
 
     fn services_with(texts: &[&str], frames: tokio::sync::mpsc::Receiver<Vec<i16>>) -> Services {

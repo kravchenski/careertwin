@@ -10,6 +10,7 @@ use egui::text::{LayoutJob, TextFormat};
 use egui::{Align, Frame, Key, Margin, Rect, RichText, Sense, TextEdit, Ui, Vec2, vec2};
 
 use super::orb;
+use super::stage::{self, Outcome, Picture};
 use super::theme::{self, BERRY, BLUSH, FAINT, LINE, MUTED, SNOW, SURFACE};
 use super::widgets::{self, Icon, ghost_button, icon_button, level_bars};
 use super::{Core, Nav, column};
@@ -69,6 +70,8 @@ pub struct LiveView {
     pub voice_on: bool,
     /// What the call has asked the window to do, waiting for the next frame.
     pub effects: Vec<Effect>,
+    /// The picture being shown instead of the sphere, when the tutor drew something.
+    pub stage: Option<Picture>,
     started: Instant,
     orb_level: f32,
 }
@@ -103,6 +106,7 @@ impl LiveView {
             lesson: None,
             voice_on,
             effects: Vec::new(),
+            stage: None,
             started: Instant::now(),
             orb_level: 0.0,
         }
@@ -130,6 +134,12 @@ impl LiveView {
                 Event::Turn { who, text, language, append } => {
                     if who == Who::Interviewer {
                         self.captions.clear();
+                    }
+                    // you spoke over it: the picture waits for the answer
+                    if who == Who::You
+                        && let Some(stage) = self.stage.as_mut()
+                    {
+                        stage.pause_soon = true;
                     }
                     self.error = None;
                     if append && self.items.last().is_some_and(|i| i.who == who) {
@@ -215,6 +225,51 @@ impl LiveView {
     fn last_of(&self, who: Who) -> Option<&str> {
         self.items.iter().rev().find(|i| i.who == who).map(|i| i.text.as_str())
     }
+
+    /// What the model should know when it draws something: the lesson and what was just said.
+    fn show_context(&self) -> String {
+        let mut context = String::new();
+        if !self.spec.focus.is_empty() {
+            context.push_str(&format!("The lesson is about {}. ", self.spec.focus));
+        }
+        if let Some(lesson) = &self.lesson
+            && let Some(term) = self.spec.lesson.as_ref().and_then(|l| l.terms.iter().find(|t| t.name == lesson.name))
+        {
+            context.push_str(&format!("The term now: {}. In plain words: {} ", term.name, term.plain));
+        }
+        if let Some(said) = self.last_of(Who::You) {
+            context.push_str(&format!("They just said: \"{}\".", stage::shorten(said, 200)));
+        }
+        context
+    }
+
+    /// The tutor wants to show a picture: it is written in the background, and the tutor holds its
+    /// nudges until it has been seen.
+    fn begin_show(&mut self, core: &mut Core, topic: &str, simpler: bool) {
+        let context = self.show_context();
+        self.stage = Some(core.begin_stage(topic, &context, simpler));
+        self.send(Command::Hold(true));
+    }
+
+    /// The picture is over, or was closed: the tutor goes on, and asks what it asked for.
+    fn end_show(&mut self, core: &Core, stage: &Picture, outcome: Outcome) {
+        core.services.speaker.stop();
+        self.send(Command::Hold(false));
+        let title = stage.player().map_or_else(|| stage.topic.clone(), |p| p.board.title.clone());
+        match outcome {
+            Outcome::Finished => {
+                self.send(Command::Context(format!(
+                    "you have just shown an animated explanation called \"{title}\" and they watched all of it"
+                )));
+                if let Some(check) = stage.player().map(|p| p.board.check.clone()).filter(|c| !c.is_empty()) {
+                    self.send(Command::Speak(check));
+                }
+            }
+            _ => self.send(Command::Context(format!(
+                "you started showing an animated explanation called \"{title}\" and they closed it before the end"
+            ))),
+        }
+    }
 }
 
 fn clock(seconds: u32) -> String {
@@ -279,7 +334,10 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     ctx.request_repaint_after(Duration::from_millis(tick));
     view.poll(&core.store, now);
     for effect in std::mem::take(&mut view.effects) {
-        core.apply_effect(&view.spec, effect);
+        match effect {
+            Effect::Show(topic) => view.begin_show(core, &topic, false),
+            other => core.apply_effect(&view.spec, other),
+        }
     }
     if view.finished {
         return Some(Nav::CallEnded);
@@ -287,6 +345,18 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     // Space skips what the tutor is saying, unless a text box has the keyboard
     if view.state == State::Speaking && !ctx.egui_wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Space)) {
         view.send(Command::Interrupt);
+    }
+    if let Some(mut picture) = view.stage.take() {
+        let area = ui.available_rect_before_wrap().shrink2(vec2(24.0, 6.0));
+        match stage::paint(core, &mut picture, ui, area) {
+            Outcome::Nothing => view.stage = Some(picture),
+            Outcome::Simpler => {
+                view.end_show(core, &picture, Outcome::Closed);
+                view.begin_show(core, &picture.topic, true);
+            }
+            done => view.end_show(core, &picture, done),
+        }
+        return None;
     }
     let chat = view.is_chat();
     let orb_size = if chat {
