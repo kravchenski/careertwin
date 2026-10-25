@@ -44,7 +44,11 @@ For each term the tutor goes through two stages:
    instead of pointing at the mistake, then asks the follow-up an interviewer would ask.
 
 Each half is scored 0 to 3 by the tutor; what you know is kept, and the plan's coverage moves. The lesson is a focus
-block: starting it starts the timer.
+block: starting it starts the timer. The main button on the Technical tab always offers the next topic of the plan, and
+once every term is learned it becomes **live coding**.
+
+The language you practise (English by default) is a setting; German, Spanish, French, Italian or Polish work in the same
+way. The English tab stays English, and the offline voice speaks English only.
 
 ## Pictures
 

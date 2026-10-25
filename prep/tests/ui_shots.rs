@@ -1885,3 +1885,30 @@ fn another_practised_language_is_chosen_in_settings_and_shows_in_the_lesson() {
     harness.run_steps(2);
     harness.get_by_label("IN GERMAN");
 }
+
+#[test]
+fn when_every_term_is_learned_the_main_button_is_live_coding_and_a_plan_without_terms_says_so() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    let mut plan = plan_of_two();
+    for topic in &mut plan.topics {
+        topic.terms.clear();
+    }
+    harness.state_mut().core.syllabus = Some(plan);
+    harness.run();
+    harness.get_by_label_contains("The plan has no terms yet");
+    // now everything is learned
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    let now = careertwin_prep::session::now();
+    let plan = plan_of_two();
+    for topic in &plan.topics {
+        for term in &topic.terms {
+            harness.state_mut().core.progress.record(&topic.name, &term.name, Half::Native, 3, now);
+            harness.state_mut().core.progress.record(&topic.name, &term.name, Half::English, 3, now);
+        }
+    }
+    harness.run_steps(2);
+    harness.get_by_label_contains("Every term of the plan is learned");
+    harness.get_all_by_label("Live coding").next().unwrap().click();
+    harness.run_steps(3);
+    assert!(matches!(harness.state().screen, Screen::Code(_)));
+}

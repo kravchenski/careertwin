@@ -460,8 +460,12 @@ strings! {
         "Вставьте вакансию, и я выясню, о чём вас, скорее всего, спросят."
     ),
     HomeLineAllLearned => (
-        "Every term of the plan is learned. A mock interview is the next step.",
-        "Все термины плана выучены. Следующий шаг — пробное собеседование."
+        "Every term of the plan is learned. Time to write some code.",
+        "Все термины плана выучены. Пора писать код."
+    ),
+    HomeLineNoTerms => (
+        "The plan has no terms yet. Open it and have them written.",
+        "В плане пока нет терминов. Откройте его и попросите составить."
     ),
     HomeLineInterview => (
         "Let's make your introduction sound like you, in about a minute.",

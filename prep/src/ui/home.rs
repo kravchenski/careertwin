@@ -84,7 +84,10 @@ fn main_action(core: &Core, track: Track) -> (String, String, Nav) {
                         Nav::Tutor { mode: Mode::Terms, topic: Some(index) },
                     )
                 }
-                None => (tr.get(K::CardMock).to_owned(), tr.get(K::HomeLineAllLearned).to_owned(), Nav::SetupCall),
+                None if plan.topics.iter().all(|t| t.terms.is_empty()) => {
+                    (tr.get(K::CardPlan).to_owned(), tr.get(K::HomeLineNoTerms).to_owned(), Nav::Plan)
+                }
+                None => (tr.get(K::CardCode).to_owned(), tr.get(K::HomeLineAllLearned).to_owned(), Nav::Code),
             },
         },
     }
