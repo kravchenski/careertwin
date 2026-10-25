@@ -37,13 +37,15 @@ that has changed since the plan was made is noticed.
 
 ## The terms lesson
 
-The tutor goes through every term of a topic twice, in two stages:
+The tutor goes through every term of a topic twice, in two stages. It speaks your own language until you ask to
+practise English, never before: say "давай попрактикуемся на английском" (or "let's practise English", "now in
+English") at any point, or answer yes when, after the last term, it offers to go through them in English.
 
 1. **In your own language**, all the terms one after another. It asks what the term means. If you are right, it says so
    and moves on. If you are partly right, it fixes the rest in plain words with the comparison. If you say you do not
    know, it does not hand over the answer: it asks a small question that leads one step, or gives the comparison, and
    lets you say it.
-2. **In English**, the same terms again with new questions, the way an interviewer asks them. After each answer it
+2. **In English**, the same terms again from the first one, with new questions, the way an interviewer asks them. After each answer it
    fixes the grammar: it says the corrected sentence once, names the rule in your language and has you say it again,
    at most two mistakes a turn.
 
@@ -54,7 +56,8 @@ itself and the next begins; the cross ends everything. The review and the notes 
 background.
 
 The language you practise (English by default) is a setting; German, Spanish, French, Italian or Polish work in the same
-way. The English tab stays English, and the offline voice speaks English only.
+way. If you speak your own language to it while it is in English (you are lost, you did not understand), it answers
+in your language, briefly, and goes back. Its silence nudges follow the stage: Russian in the Russian part.
 
 ## Pictures
 
@@ -164,7 +167,7 @@ the **voice**.
 |---|---|---|---|
 | Language model | Groq, OpenAI, OpenRouter | Switchyard, Ollama, LM Studio, a llama.cpp server | runs in Ollama or LM Studio; this program talks to it |
 | Recognition | Groq (`whisper-large-v3-turbo`), OpenAI | any server with `/v1/audio/transcriptions` | **Whisper** through whisper.cpp |
-| Voice | OpenAI (`gpt-4o-mini-tts` takes a tone instruction), ElevenLabs | any server with `/v1/audio/speech`, such as Kokoro, Chatterbox or Qwen3-TTS wrapped in one | **Kokoro-82M** in pure Rust, English |
+| Voice | OpenAI (`gpt-4o-mini-tts` takes a tone instruction), ElevenLabs | any server with `/v1/audio/speech`, such as Kokoro, Chatterbox or Qwen3-TTS wrapped in one | **Kokoro-82M** in pure Rust for English and **Piper** (`ru_RU-irina-medium`) for Russian |
 
 Cloud engines receive what they speak or hear. Pointing an engine at `http://127.0.0.1:...` keeps it on this computer,
 and an address that would send a key in the clear to another machine is refused.
@@ -201,11 +204,18 @@ Measured on a 12-core laptop CPU, release build, GPU not used (`cargo test --rel
 
 The program makes Whisper read only as much audio as the clip needs, which made short answers about four times faster
 than reading a full 30-second window. On a CPU with fewer cores than that the voice can fall behind real time; then use
-a cloud or server voice and keep hearing offline. Both engines run on the CPU. A GPU build is not wired up yet: the dependencies have a `cuda` feature, but this
-program does not enable it.
+a cloud or server voice and keep hearing offline. Both engines run on the CPU by default.
 
-The offline voice speaks English. For Russian prompts and explanations use a voice server or a cloud voice, or turn
-the Russian voice off: the interviewer then writes those parts.
+Kokoro speaks English only, so the Russian half of a lesson is said by Piper, the speech engine of the Rhasspy project:
+its own Linux x86-64 release (26 MB) and one Russian voice (63 MB), fetched on first use and checked against the sizes
+and SHA-256 written in the program like every other model; the archive is unpacked once, and each sentence is made by
+running it (about a third of a second for a sentence, 0.04 times real time). Each sentence is voiced in the language it
+is written in, so a reply that switches in the middle is spoken by both voices. On another system, or if the voice is not
+downloaded, the Russian sentences are shown but not spoken; `careertwin-prep --doctor` says which. A cloud voice or a
+voice server speaks both languages.
+
+Pieces of speech are made one at a time, in the order asked for: made at once, they share the cores and the first one,
+the one you are waiting for, comes last.
 
 ## Privacy
 

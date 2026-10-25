@@ -67,8 +67,8 @@ pub struct LessonView {
     pub stage: Stage,
 }
 
-/// How a lesson is going: which term, which stage (first all the terms in your words, then all of
-/// them in English), how long on it.
+/// How a lesson is going: which term, which stage (all the terms in your words, and then, when you
+/// ask for it, all of them in English), how long on it.
 #[derive(Debug, Clone)]
 pub struct LessonState {
     pub index: usize,
@@ -76,6 +76,42 @@ pub struct LessonState {
     /// Your answers since this stage began.
     pub turns: u32,
     pub total: usize,
+}
+
+/// The Russian stem of a language's name, as people say it in a request ("английском", "немецкий").
+fn russian_stem(language: &str) -> &'static str {
+    match language.trim().to_lowercase().as_str() {
+        "english" | "" => "англ",
+        "german" => "немец",
+        "french" => "француз",
+        "spanish" => "испан",
+        "italian" => "итальян",
+        "portuguese" => "португал",
+        "polish" => "польск",
+        _ => "",
+    }
+}
+
+/// Whether what the person said is a request to practise the other language: "давай попрактикуемся
+/// на английском", "перейдём на английский", "let's practise English", "now in English". A sentence
+/// that only mentions the language ("по-английски это encapsulation, давай дальше") is not.
+pub fn asks_to_practise(said: &str, target: &str) -> bool {
+    let said = said.to_lowercase();
+    let name = regex::escape(&target.trim().to_lowercase());
+    let stem = russian_stem(target);
+    let mut patterns = Vec::new();
+    if !stem.is_empty() {
+        patterns.push(format!(
+            r"(практик|потрениру|тренир|перейд|переключ|поговор|говор)\S*\s+(\S+\s+){{0,2}}(на\s+|по-?\s*)?{stem}"
+        ));
+        patterns.push(format!(r"(давай(те)?|теперь|хочу|можно|начн\S+)\s+(\S+\s+){{0,2}}(на|по-?)\s*{stem}"));
+    }
+    if !name.is_empty() {
+        patterns.push(format!(
+            r"(let'?s|lets|switch|practi[sc]e|speak|talk|go|now|can we|please)\s+(\w+\s+){{0,2}}(in\s+|to\s+)?{name}"
+        ));
+    }
+    patterns.iter().any(|pattern| regex::Regex::new(pattern).is_ok_and(|re| re.is_match(&said)))
 }
 
 /// After this many answers in one stage the tutor is told to move on.
@@ -95,18 +131,32 @@ impl LessonState {
         self.turns += 1;
     }
 
-    /// The term was explained in your own words: on to the next one, and after the last one the
-    /// second stage begins, English, from the first term again. Returns whether anything changed.
+    /// The term was explained in your own words: on to the next one. After the last one the stage is
+    /// still your own language, with every term covered, until you ask for English. Returns whether
+    /// anything changed.
     pub fn native_done(&mut self) -> bool {
-        if self.done() || self.stage != Stage::Native {
+        if self.done() || self.stage != Stage::Native || self.index >= self.total {
             return false;
         }
         self.index += 1;
         self.turns = 0;
-        if self.index >= self.total {
-            self.stage = Stage::English;
-            self.index = 0;
+        true
+    }
+
+    /// Every term has been gone through in your own words and the lesson waits for you to ask for English.
+    pub fn native_complete(&self) -> bool {
+        self.stage == Stage::Native && self.index >= self.total
+    }
+
+    /// You asked to practise English: the second stage begins from the first term, wherever the first
+    /// one had got to. Returns whether anything changed.
+    pub fn practise_english(&mut self) -> bool {
+        if self.stage != Stage::Native {
+            return false;
         }
+        self.stage = Stage::English;
+        self.index = 0;
+        self.turns = 0;
         true
     }
 
@@ -199,7 +249,8 @@ fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
          say it in your own words, never read it out.\n{reference}\n\
          HOW THE LESSON GOES\n\
          There are two stages and each covers every term, one after the other. Do not mix them: first all the terms \
-         in {native}, then all of them again in {target}.\n\
+         in {native}, then all of them again in {target}. Stage one lasts until the person asks to practise \
+         {target}; you never begin stage two on your own.\n\
          Stage one, in {native}: the person works out what they do not know yet.\n\
          - Take the terms in order. For each, ask what it means, in their own words, in one short question. Listen \
          to the whole answer.\n\
@@ -209,9 +260,14 @@ fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
          - If they do not know, do not give the answer yet: ask a small leading question or give the comparison, \
          let them build the idea, then say it in two sentences and ask them to say it back.\n\
          - After at most three exchanges on a term move on, whatever the result: finish the term with the tag \
-         [[native: S]] in the message that starts the next term's question. After the last term, say in one \
-         sentence that now you will go through the same terms in {target}, as the interviewer would, with \
-         different questions, and put [[native: S]] on that message.\n\
+         [[native: S]] in the message that starts the next term's question. After the last term, put \
+         [[native: S]] on a message in which you say in one sentence that all the terms have been gone through and \
+         ask whether they want to go through the same terms in {target} now, as the interviewer would, with \
+         different questions. Then wait: if they would rather stay in {native} or go over something again, do that.\n\
+         The moment they ask to practise {target}, at the end of the terms or in the middle (\"let's practise \
+         English\", \"давай на английском\", \"now in English\"), or say yes to your offer, answer with one short \
+         line in {native} that you are switching, then in the same message ask the first question of stage two in \
+         {target}, and end the message with [[practice]]. Stage two starts from the first term.\n\
          Stage two, in {target}: the same terms again, in the same order, with new questions, the way an \
          interviewer asks them: a scenario, a \"why\", a \"what would you do\", one of the likely follow-ups. \
          Never repeat a question from stage one.\n\
@@ -233,6 +289,7 @@ fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
         reference = reference(lesson),
         tags = tag_rules(
             "[[native: S]] and [[english: S]] as above.\n\
+             [[practice]] on the message in which you switch to the language being practised, as above, and only then.\n\
              [[note: one thing to remember]] when something comes up that is worth keeping (a rule, a phrase, a \
              grammar slip written as wrong -> right with the rule in two or three words), under 25 words, in the \
              language you were speaking. Not in every message.\n"
@@ -306,17 +363,26 @@ fn chat_rules() -> String {
 /// Which language the tutor uses, and when it switches.
 fn language_rules(spec: &InterviewerSpec) -> String {
     let (native, target) = (spec.native.name(), spec.target_name());
+    let informal = if spec.native == Lang::Ru {
+        "In Russian, speak to them informally (на «ты»), as a colleague would.\n"
+    } else {
+        ""
+    };
+    if spec.mode == Mode::Terms {
+        return format!(
+            "\nLANGUAGE\nSpeak {native} with this person, and keep speaking {native} until they ask to practise \
+             {target}. Never switch on your own, and never because a word of {target} came up: terms and code stay \
+             in English inside your {native}. While you speak {target} (after they asked), if they speak {native} \
+             to you because they are lost, do not understand or want something explained, answer that in {native}, \
+             briefly, and then go back to {target}. If they ask to go back to {native}, do.\n{informal}"
+        );
+    }
     if spec.mode == Mode::Coding {
         return format!(
             "\nLANGUAGE\nSpeak {target} by default, because the real interview is in {target}. If they speak or write \
              in {native}, answer in {native}, briefly, and let them choose. Keep terms and code in English.\n"
         );
     }
-    let informal = if spec.native == Lang::Ru {
-        "In Russian, speak to them informally (на «ты»), as a colleague would.\n"
-    } else {
-        ""
-    };
     format!(
         "\nLANGUAGE\nThe person thinks in {native} and is practising {target}. Follow the stage you are in. If they \
          answer a question in the other language, accept the answer and go on in the language of your stage. But when \
@@ -376,10 +442,11 @@ pub fn opening(spec: &InterviewerSpec, brief: &Brief) -> Vec<Message> {
             let first = lesson.terms.first().map_or("the first term", |t| t.name.as_str());
             format!(
                 "Greet them by first name in one short sentence, say in one more what you will do today ({} terms \
-                 of \"{}\", about {} minutes) and start stage one of the first term, \"{first}\".",
+                 of \"{}\", about {} minutes), all of it in {}, and start stage one of the first term, \"{first}\".",
                 lesson.terms.len(),
                 lesson.topic,
-                spec.minutes
+                spec.minutes,
+                spec.native.name()
             )
         }
         (Mode::Intro, _) => "Greet them by first name in one short sentence and ask, as the interviewer would, \
@@ -424,6 +491,14 @@ pub fn state_note(
     if let (Some(state), Some(lesson)) = (lesson, &spec.lesson) {
         if state.done() {
             note.push_str("\n[LESSON: every term is finished. Wrap up in two sentences and add [[end]].]");
+        } else if state.native_complete() {
+            note.push_str(&format!(
+                "\n[LESSON: every term has been gone through in {native}. If you have not yet, say so in one sentence \
+                 and ask whether they want to go through them in {target} now; otherwise wait for their answer. Do not \
+                 begin {target} on your own. When they say yes, switch as described and add [[practice]].]",
+                native = spec.native.name(),
+                target = spec.target_name()
+            ));
         } else if let Some(term) = lesson.terms.get(state.index) {
             let stage = match state.stage {
                 Stage::Native => format!("stage one, in {}", spec.native.name()),
@@ -437,6 +512,13 @@ pub fn state_note(
                 state.turns,
                 if state.turns == 1 { "" } else { "s" }
             ));
+            if state.stage == Stage::Native {
+                note.push_str(&format!(
+                    " Keep speaking {} until they ask to practise {}.",
+                    spec.native.name(),
+                    spec.target_name()
+                ));
+            }
             if state.turns >= STAGE_LIMIT {
                 note.push_str(" That is enough here: finish this stage now with its tag and go on.");
             }
@@ -515,8 +597,10 @@ mod tests {
             "Stage two, in English",
             "[[native: S]]",
             "[[english: S]]",
+            "[[practice]]",
             "[[end]]",
-            "The person thinks in Russian and is practising English",
+            "Speak Russian with this person, and keep speaking Russian until they ask to practise English",
+            "you never begin stage two on your own",
             "read aloud",
         ] {
             assert!(text.contains(must), "missing: {must}");
@@ -533,14 +617,13 @@ mod tests {
             "Stage two, in German",
             "all of them again in German",
             "They know German well",
-            "The person thinks in Russian and is practising German",
+            "keep speaking Russian until they ask to practise German",
         ] {
             assert!(text.contains(must), "missing: {must}");
         }
-        assert!(!text.contains("practising English") && !text.contains("Stage two, in English"));
+        assert!(!text.contains("until they ask to practise English") && !text.contains("Stage two, in English"));
         let mut state = LessonState::new(2);
-        state.native_done();
-        state.native_done();
+        state.practise_english();
         assert!(state_note(&german, 60, 1, Clock::Normal, Some(&state)).contains("stage two, in German"));
         // and nothing changes when none is chosen
         assert!(system(&spec(Mode::Terms), &brief()).contains("Stage two, in English"));
@@ -603,20 +686,57 @@ mod tests {
     }
 
     #[test]
-    fn a_lesson_goes_through_every_term_in_your_words_and_then_through_every_term_in_english() {
+    fn a_lesson_goes_through_every_term_in_your_words_and_goes_to_english_only_when_you_ask() {
         let mut state = LessonState::new(2);
-        assert!(!state.english_done(), "English cannot come before your own words");
+        assert!(!state.english_done(), "English cannot come before you ask for it");
         assert!(state.native_done());
         assert_eq!((state.index, state.stage, state.turns), (1, Stage::Native, 0));
+        assert!(!state.native_complete());
         assert!(state.native_done());
-        assert_eq!((state.index, state.stage), (0, Stage::English), "the second stage begins again at the first term");
+        assert_eq!(
+            (state.index, state.stage),
+            (2, Stage::Native),
+            "every term is covered and it is still your language"
+        );
+        assert!(state.native_complete() && !state.done());
         assert!(!state.native_done(), "a tag repeated by the model changes nothing");
+        assert!(state.practise_english(), "you asked for English");
+        assert_eq!((state.index, state.stage), (0, Stage::English), "the second stage begins at the first term");
+        assert!(!state.practise_english(), "asking twice changes nothing");
         assert!(state.english_done());
         assert_eq!((state.index, state.stage), (1, Stage::English));
         assert!(!state.done());
         assert!(state.english_done());
         assert!(state.done());
         assert!(!state.native_done() && !state.english_done());
+    }
+
+    #[test]
+    fn a_request_for_english_is_told_from_a_sentence_that_only_mentions_it() {
+        for asked in [
+            "Давай попрактикуемся на английском.",
+            "давай уже на английском",
+            "Ну всё, перейдём на английский",
+            "Теперь по-английски, пожалуйста",
+            "Хорошо, давай теперь потренируемся на английском языке",
+            "Let's practise English",
+            "ok now in English please",
+            "Can we switch to English?",
+        ] {
+            assert!(asks_to_practise(asked, "English"), "should be a request: {asked}");
+        }
+        for said in [
+            "По-английски это называется encapsulation, давай дальше.",
+            "Это когда объект прячет данные и даёт доступ через методы.",
+            "I think English is hard for me.",
+            "Не знаю, что это такое.",
+            "Да, понятно, спасибо.",
+            "",
+        ] {
+            assert!(!asks_to_practise(said, "English"), "should not be a request: {said}");
+        }
+        assert!(asks_to_practise("давай на немецком", "German"));
+        assert!(!asks_to_practise("давай на английском", "German"));
     }
 
     #[test]
@@ -628,6 +748,8 @@ mod tests {
         state.native_done();
         assert_eq!(state.view(&lesson).unwrap().name, "Polymorphism");
         state.native_done();
+        assert_eq!(state.view(&lesson).unwrap().stage, Stage::Native, "all of them in your words, and it waits");
+        state.practise_english();
         let again = state.view(&lesson).unwrap();
         assert_eq!((again.name.as_str(), again.stage), ("Encapsulation", Stage::English));
         state.english_done();
@@ -645,8 +767,15 @@ mod tests {
         assert!(
             note.contains("[LESSON: term 1 of 2, \"Encapsulation\", stage one, in Russian; they have answered 0 times")
         );
+        assert!(note.contains("Keep speaking Russian until they ask to practise English"), "{note}");
         state.native_done();
         state.native_done();
+        let waiting = state_note(&spec, 300, 4, Clock::Normal, Some(&state));
+        assert!(
+            waiting.contains("every term has been gone through in Russian") && waiting.contains("Do not begin English"),
+            "{waiting}"
+        );
+        state.practise_english();
         state.turns = STAGE_LIMIT;
         let note = state_note(&spec, 300, 4, Clock::Normal, Some(&state));
         assert!(note.contains("stage two, in English") && note.contains("That is enough here"), "{note}");

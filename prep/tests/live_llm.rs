@@ -211,12 +211,15 @@ async fn a_real_model_tutors_terms_in_your_language_then_in_english() {
     });
     tokio::spawn(conversation::run(deps, config, command_rx, event_tx));
 
+    // the first four answers are in Russian: it must stay in Russian until the person asks for English
     let answers = [
         "Это когда мы прячем внутренности объекта и даём доступ только через методы.",
-        "Encapsulation is when an object hides its data and gives access only by methods. It helps to change the inside without breaking others.",
         "Хм, честно, не знаю, что это.",
         "Ну, наверное, когда у разных классов один метод, но они делают разное?",
-        "Polymorphism means one method name, different behaviour in different classes. For example, the speak method for a dog and a cat.",
+        "Да, понятно, спасибо.",
+        "Давай попрактикуемся на английском.",
+        "Encapsulation is when an object hides its data and gives access only by methods. It helps to change the inside without breaking others.",
+        "Я не понял, что ты сейчас сказал, объясни по-русски.",
     ];
     let started = std::time::Instant::now();
     let first = turn_text(&mut tap, Who::Interviewer).await;

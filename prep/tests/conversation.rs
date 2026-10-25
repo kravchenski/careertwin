@@ -747,31 +747,35 @@ impl Harness {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_terms_lesson_goes_through_every_term_in_your_words_and_then_through_every_term_in_english() {
+async fn a_terms_lesson_stays_in_your_words_until_you_ask_for_english() {
     let mut call = start(Setup {
         spec: Some(lesson_spec(Mode::Terms)),
         replies: vec![
             Reply::text("Привет, Алекс. Сегодня ООП. Что такое инкапсуляция, своими словами?"),
             Reply::text("Да, верно. А что такое полиморфизм? [[native: 3]]"),
-            Reply::text("Хорошо. Теперь пройдём то же по-английски. What does encapsulation protect? [[native: 2]]"),
+            Reply::text("Хорошо, всё по-русски разобрали. Пройдём то же по-английски? [[native: 2]]"),
+            Reply::text("Хорошо, тогда скажи, когда захочешь перейти на английский."),
+            Reply::text("Ладно, переходим. What does encapsulation protect? [[practice]]"),
             Reply::text("Say it like this: an object hides its state. Next, what is polymorphism? [[english: 3]]"),
         ],
         stt: vec![
             "Объект прячет внутри своё состояние.",
             "Один интерфейс, разные реализации.",
+            "Да, пока всё понятно.",
+            "Давай попрактикуемся на английском.",
             "It protect the state of an object.",
         ],
         ..Setup::default()
     });
     call.listening().await;
-    for _ in 0..3 {
+    for _ in 0..5 {
         call.say_aloud(1500).await;
         call.listening().await;
     }
     // the words that were said and shown are free of tags
     assert!(call.captions().iter().all(|c| !c.contains("[[")), "{:?}", call.captions());
     assert!(call.turns().iter().all(|t| !t.1.contains("[[")), "{:?}", call.turns());
-    // and the call understood them: the first stage covers both terms, then the second begins again
+    // both terms were gone through in Russian, and English began only after the person asked for it
     assert_eq!(
         call.progress(),
         vec![
@@ -781,14 +785,79 @@ async fn a_terms_lesson_goes_through_every_term_in_your_words_and_then_through_e
         ]
     );
     let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
-    assert_eq!(places, vec![(0, Stage::Native), (1, Stage::Native), (0, Stage::English), (1, Stage::English)]);
+    assert_eq!(
+        places,
+        vec![(0, Stage::Native), (1, Stage::Native), (2, Stage::Native), (0, Stage::English), (1, Stage::English)]
+    );
     // each request told the tutor where the lesson was
     let requests = call.llm.requests.lock().unwrap().clone();
     let note = |n: usize| requests[n].last().unwrap().content.clone();
     assert!(note(1).contains("term 1 of 2, \"Encapsulation\", stage one, in Russian"), "{}", note(1));
     assert!(note(2).contains("term 2 of 2, \"Polymorphism\", stage one, in Russian"), "{}", note(2));
-    assert!(note(3).contains("term 1 of 2, \"Encapsulation\", stage two, in English"), "{}", note(3));
+    assert!(note(3).contains("every term has been gone through in Russian"), "{}", note(3));
+    assert!(note(3).contains("Do not begin English on your own"), "{}", note(3));
+    assert!(
+        note(4).contains("term 1 of 2, \"Encapsulation\", stage two, in English"),
+        "your request switched it: {}",
+        note(4)
+    );
+    assert!(note(5).contains("stage two, in English"), "{}", note(5));
     assert!(requests[0][0].content.contains("1. Encapsulation") && requests[0][0].content.contains("2. Polymorphism"));
+    assert!(requests[0][0].content.contains("keep speaking Russian until they ask to practise English"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn when_you_go_quiet_in_the_russian_part_of_a_lesson_the_nudge_is_in_russian() {
+    let mut call = start(Setup {
+        spec: Some(lesson_spec(Mode::Terms)),
+        replies: vec![Reply::text("Привет, Алекс. Что такое инкапсуляция, своими словами?")],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.talker.silence(15_000).await;
+    call.drain();
+    assert!(call.captions().iter().any(|c| c == "Не торопись."), "{:?}", call.captions());
+    assert!(!call.captions().iter().any(|c| c == "Take your time."), "{:?}", call.captions());
+}
+
+#[tokio::test(start_paused = true)]
+async fn your_request_for_english_switches_the_lesson_even_when_the_tutor_forgets_its_tag() {
+    let mut call = start(Setup {
+        spec: Some(lesson_spec(Mode::Terms)),
+        replies: vec![
+            Reply::text("Привет, Алекс. Что такое инкапсуляция, своими словами?"),
+            Reply::text("Okay, English it is. What does encapsulation protect?"),
+        ],
+        stt: vec!["Давай попрактикуемся на английском."],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.say_aloud(1500).await;
+    call.listening().await;
+    let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
+    assert_eq!(places, vec![(0, Stage::Native), (0, Stage::English)], "the program switched, the tag was not needed");
+    let requests = call.llm.requests.lock().unwrap().clone();
+    let note = requests[1].last().unwrap().content.clone();
+    assert!(note.contains("term 1 of 2, \"Encapsulation\", stage two, in English"), "{note}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn asking_for_english_in_the_middle_switches_at_once_and_starts_from_the_first_term() {
+    let mut call = start(Setup {
+        spec: Some(lesson_spec(Mode::Terms)),
+        replies: vec![
+            Reply::text("Привет, Алекс. Что такое инкапсуляция, своими словами?"),
+            Reply::text("Хорошо, давай на английском. What is encapsulation? [[practice]]"),
+        ],
+        stt: vec!["Давай уже на английском."],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.say_aloud(1500).await;
+    call.listening().await;
+    assert!(call.progress().is_empty(), "no term was finished by switching");
+    let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
+    assert_eq!(places, vec![(0, Stage::Native), (0, Stage::English)]);
 }
 
 #[tokio::test(start_paused = true)]

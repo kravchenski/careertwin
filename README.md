@@ -155,7 +155,7 @@ voice, and the tutor's words written under it as they are spoken.
 <p align="center"><img src="docs/media/prep-call.png" alt="A terms lesson in CareerTwin Prep: the sphere, the tutor's sentence with the spoken words bright, the term and its stage" width="760"></p>
 
 It works with cloud engines, with your own servers, or **fully offline**: Whisper for hearing, Kokoro for the English
-voice and a small model in Ollama for the tutor. The program detects the memory and the cores and says which sizes fit.
+voice, Piper for the Russian one and a small model in Ollama for the tutor. The program detects the memory and the cores and says which sizes fit.
 See [docs/PREP.md](docs/PREP.md).
 
 ```bash

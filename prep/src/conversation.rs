@@ -21,7 +21,7 @@ use crate::brief::Brief;
 use crate::llm::{ChatOptions, Llm, LlmError, Message};
 use crate::prompts::Lang;
 use crate::prompts::interviewer::{self, Clock, InterviewerSpec};
-use crate::prompts::tutor::{self, LessonState, LessonView, Mode};
+use crate::prompts::tutor::{self, LessonState, LessonView, Mode, Stage};
 use crate::session::Speaker as Who;
 use crate::speech::{self, SpeechError, Stt, SttHint, Transcript, Tts, Voice};
 use crate::syllabus::Half;
@@ -254,6 +254,7 @@ struct Call {
     final_sent: bool,
     mic_level: f32,
     fillers: Arc<Mutex<Vec<crate::speech::Speech>>>,
+    fillers_started: bool,
     last_error: Option<(String, Instant)>,
     barged: bool,
     cancel_all: CancellationToken,
@@ -319,7 +320,7 @@ pub fn start(deps: Deps, config: Config) -> Handle {
 
 fn canned(language: Lang, which: usize) -> &'static str {
     const EN: [&str; 3] = ["Take your time.", "Would you like me to repeat the question?", "No rush, I'm here."];
-    const RU: [&str; 3] = ["Не торопитесь.", "Повторить вопрос?", "Всё в порядке, я слушаю."];
+    const RU: [&str; 3] = ["Не торопись.", "Повторить вопрос?", "Всё в порядке, я слушаю."];
     match language {
         Lang::En => EN[which % 3],
         Lang::Ru => RU[which % 3],
@@ -375,6 +376,7 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
         final_sent: false,
         mic_level: 0.0,
         fillers: Arc::new(Mutex::new(Vec::new())),
+        fillers_started: false,
         last_error: None,
         barged: false,
         cancel_all: CancellationToken::new(),
@@ -387,7 +389,6 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
     };
     call.emit(Event::State(State::Starting));
     call.start_lesson();
-    call.prepare_fillers();
     if call.config.spec.mode == Mode::Chat {
         // nobody waits for a model to say hello in a chat
         let greeting = tutor::greeting(call.config.spec.native).to_owned();
@@ -434,6 +435,11 @@ impl Call {
         if self.state != state {
             self.state = state;
             self.emit(Event::State(state));
+            // the short acknowledgements are made once the first words have been said, not beside them
+            if state == State::Listening && !self.fillers_started {
+                self.fillers_started = true;
+                self.prepare_fillers();
+            }
         }
     }
 
@@ -626,6 +632,14 @@ impl Call {
                         }
                     }
                 }
+                Tag::Practice => {
+                    if let (Some(state), Some(lesson)) = (self.lesson.as_mut(), lesson)
+                        && state.practise_english()
+                        && let Some(view) = state.view(&lesson)
+                    {
+                        self.emit(Event::Lesson(view));
+                    }
+                }
                 Tag::End => self.final_sent = true,
                 Tag::Note(_) | Tag::Show(_) => {}
             }
@@ -776,9 +790,26 @@ impl Call {
         if let Some(state) = self.lesson.as_mut() {
             state.answered();
         }
+        self.switch_if_asked(&self.history.last().map(|(_, text)| text.clone()).unwrap_or_default());
         let note = self.make_note(clock);
         let messages = interviewer::turn(&self.config.spec, &self.config.brief, &self.history, Some(note));
         self.begin_turn(messages, None);
+    }
+
+    /// In a lesson that is in your own language, a request to practise the other one switches it at
+    /// once, without waiting for the tutor to notice: its next message is told it is stage two.
+    fn switch_if_asked(&mut self, said: &str) {
+        let spec = &self.config.spec;
+        let Some(lesson) = spec.lesson.clone().filter(|_| spec.mode == Mode::Terms) else { return };
+        if !tutor::asks_to_practise(said, spec.target_name()) {
+            return;
+        }
+        if let Some(state) = self.lesson.as_mut()
+            && state.practise_english()
+            && let Some(view) = state.view(&lesson)
+        {
+            self.emit(Event::Lesson(view));
+        }
     }
 
     /// What the call tells the interviewer or tutor along with your words: the clock, the lesson
@@ -939,6 +970,15 @@ impl Call {
         false
     }
 
+    /// The language the tutor is speaking now: in a lesson, your own until you ask for the other one.
+    fn speaking_language(&self) -> Lang {
+        let spec = &self.config.spec;
+        match (&self.lesson, spec.mode) {
+            (Some(state), Mode::Terms) if state.stage == Stage::Native => spec.native,
+            _ => spec.language,
+        }
+    }
+
     fn check_silence(&mut self, now: Instant) {
         // a chat has no clock, and while code is being written a quiet person is a thinking one
         let quiet_mode = matches!(self.config.spec.mode, Mode::Chat | Mode::Coding);
@@ -958,7 +998,7 @@ impl Call {
         let Some(since) = self.silent_since else { return };
         let quiet = now.duration_since(since).as_secs();
         let knobs = self.config.knobs.clone();
-        let language = self.config.spec.language;
+        let language = self.speaking_language();
         // time is up: close the call even if nobody is talking
         let total = u64::from(self.config.spec.total_seconds());
         if !self.final_sent && u64::from(self.elapsed()) >= total + knobs.overtime_s {
