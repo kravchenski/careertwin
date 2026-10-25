@@ -679,6 +679,11 @@ impl Call {
 
     fn on_transcribed(&mut self, result: Result<Transcript, SpeechError>, speech_ms: u32) {
         self.stt_inflight = self.stt_inflight.saturating_sub(1);
+        // words that were still being recognised when the call was put on hold are not an answer
+        if self.holding {
+            self.back_to_listening_if_idle();
+            return;
+        }
         match result {
             Err(error) => {
                 self.report(error.to_string());
@@ -816,7 +821,11 @@ impl Call {
             }
             Command::Hold(on) => {
                 self.holding = on;
-                if !on {
+                if on {
+                    // a half-said thought waiting to be sent would be answered during the break
+                    self.pending = None;
+                    self.barged = false;
+                } else {
                     self.silent_since = Some(Instant::now());
                     self.nudges = 0;
                 }

@@ -247,6 +247,22 @@ async fn an_unfinished_thought_waits_and_the_rest_is_merged_into_one_turn() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_thought_waiting_to_be_sent_is_not_answered_during_a_break() {
+    let mut call = start(Setup {
+        replies: vec![greeting(), Reply::text("Go on, I am answering you during the break.")],
+        stt: vec!["So we decided to"],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.say_aloud(1200).await; // an unfinished thought: it waits a little before it is sent
+    call.send(Command::Interrupt);
+    call.send(Command::Mute(true));
+    call.send(Command::Hold(true));
+    assert!(!call.until(30_000, |log| log.iter().any(|e| matches!(e, Event::Turn { who: Who::You, .. }))).await);
+    assert_eq!(call.llm.calls(), 1, "only the greeting: nothing was answered while the call was on hold");
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_unfinished_thought_with_nothing_after_it_is_sent_after_the_wait() {
     let mut call = start(Setup {
         replies: vec![greeting(), Reply::text("Go on.")],
