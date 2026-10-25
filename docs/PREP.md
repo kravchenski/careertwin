@@ -5,13 +5,15 @@ like a person. It is not part of the interview overlay: the overlay helps during
 for it.
 
 Every part looks the same: a glowing sphere in the middle that moves with the voice, what the tutor says written under
-it word by word as it is spoken, and two buttons at the bottom: the microphone and a cross to end the call. Start typing and a text box appears. A pill of three tabs sits at the top, and the ways to practise under each tab are in the drawer at the top left.
+it word by word as it is spoken, and two buttons at the bottom: the microphone and a cross to end the call. Start typing and a text box appears. In a call there is nothing else on the screen: no timer, no panel at the bottom.
+A pill of three tabs sits at the top; each tab has one big button, because **the tutor leads** and opens whatever it
+needs. The menu at the top left lists only what you did last.
 
 | Tab | What it is for |
 |---|---|
-| **English** | A relaxed spoken conversation at your level (A2 to C1). The partner repeats your mistakes back correctly inside its own sentences, as a person would, and does not stop you to correct. *Say it in English*: say a thought in Russian, hear it in natural English in three registers, say it back and see which words went missing. Phrases from your reviews come back just before you forget them. |
-| **Technical** | **Your plan** for the vacancy, a **terms lesson** (first in your own language, then in English), **live coding**, a spoken **mock interview**, **concept checks** and **pictures**: any topic told as a short animated story. |
-| **Interview** | **Your introduction** coached until it is short, true and yours, a recruiter or hiring-manager **mock interview**, and *Prepare for a vacancy*: your CV against the vacancy, the gaps and how to answer them, and the questions it invites. |
+| **English** | **Study something together**: you bring a text, your notes, a list of new words or just a topic (paste it, or drop a text file on the window) and the tutor makes a lesson of it. It goes through everything first in your own language, then again in English with new questions, and fixes your grammar there. *Just talk* is a relaxed spoken conversation at your level, where the partner repeats your mistakes back correctly inside its own sentences. |
+| **Technical** | **The interview**, about an hour and a half, led by the tutor: it takes the topics of your plan one after another (what you know least first), for each the terms in your own language and then again in English, and after the topics a coding task that it watches. Pictures can be asked for at any moment: any topic told as a short animated story. |
+| **Interview** | **Your introduction** ("tell me about yourself") coached until it is short, true and yours. |
 
 Under every tab, **Write to the tutor** (in the menu at the top left) opens a quiet chat with the same tutor: nothing is spoken, so it works in a lecture. A
 good answer becomes a note.
@@ -35,17 +37,21 @@ that has changed since the plan was made is noticed.
 
 ## The terms lesson
 
-For each term the tutor goes through two stages:
+The tutor goes through every term of a topic twice, in two stages:
 
-1. **In your own language.** It asks what the term means. If you are right, it says so and moves on. If you are partly
-   right, it fixes the rest in plain words with the comparison. If you say you do not know, it does not hand over the
-   answer: it asks a small question that leads one step, or gives the comparison, and lets you say it.
-2. **In English**, as in the interview. It accepts imperfect English and repeats the correct form inside its own reply
-   instead of pointing at the mistake, then asks the follow-up an interviewer would ask.
+1. **In your own language**, all the terms one after another. It asks what the term means. If you are right, it says so
+   and moves on. If you are partly right, it fixes the rest in plain words with the comparison. If you say you do not
+   know, it does not hand over the answer: it asks a small question that leads one step, or gives the comparison, and
+   lets you say it.
+2. **In English**, the same terms again with new questions, the way an interviewer asks them. After each answer it
+   fixes the grammar: it says the corrected sentence once, names the rule in your language and has you say it again,
+   at most two mistakes a turn.
 
-Each half is scored 0 to 3 by the tutor; what you know is kept, and the plan's coverage moves. The lesson is a focus
-block: starting it starts the timer. The main button on the Technical tab always offers the next topic of the plan, and
-once every term is learned it becomes **live coding**.
+Each half is scored 0 to 3 by the tutor; what you know is kept, and the plan's coverage moves. A conversation is a focus
+block: starting one starts the timer (a quiet chat does not). The main button on the Technical tab starts the whole
+interview, topic after topic while there is time (about 65 minutes), then a coding task. The tutor ends each part by
+itself and the next begins; the cross ends everything. The review and the notes of every part are made in the
+background.
 
 The language you practise (English by default) is a setting; German, Spanish, French, Italian or Polish work in the same
 way. The English tab stays English, and the offline voice speaks English only.

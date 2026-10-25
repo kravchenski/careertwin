@@ -143,12 +143,14 @@ voice, and the tutor's words written under it as they are spoken.
 
 - **A plan for the vacancy by the 80/20 rule**: the few topics that hold most of the likely questions, every term in
   plain words in your language.
-- **A terms lesson**: each term first in your own language, then in English, as in the interview.
+- **A technical interview of about an hour and a half, led by the tutor**: the terms of each topic first in your own
+  language, then again in English with your grammar fixed, then a coding task.
 - **Pictures**: ask it to show something and it tells it as a short animated story with floating panels and a voice.
 - **Live coding**: it watches your code, stays quiet while you are on the right track, asks instead of telling when
   something is off, and notices a pasted block. It never gives the answer.
-- **Your introduction, mock interviews, an English conversation**, a quiet chat for lectures, notes with the 20% that
-  matters, a focus timer and a streak.
+- **Your introduction**, **study together** (bring a text, notes or new words and go through them in your language,
+  then in English), a quiet chat for lectures, notes that the tutor writes after a call, a focus timer and a calendar
+  of the days you practised.
 
 <p align="center"><img src="docs/media/prep-call.png" alt="A terms lesson in CareerTwin Prep: the sphere, the tutor's sentence with the spoken words bright, the term and its stage" width="760"></p>
 
