@@ -41,7 +41,7 @@ pub fn bar(core: &mut Core, ui: &mut Ui) {
             let headline = if headline.is_empty() { tr.get(K::AppName).to_owned() } else { headline };
             let subline = if name.is_empty() { String::new() } else { email };
             let letter = initial(core);
-            let head_font = theme::semibold(14.0);
+            let head_font = theme::display(15.0);
             let sub_font = theme::mono(11.0);
             // as wide as the words need, up to a limit
             let words = text_width(ui, &headline, &head_font).max(text_width(ui, &subline, &sub_font));
@@ -121,8 +121,8 @@ fn today(core: &mut Core, ui: &mut Ui, full: Rect) {
     let streak = core.stats.streak(now);
     let text = tr.fill(K::BarToday, &[("done", &(done / 60).to_string()), ("goal", &goal.to_string())]);
     let streak_text = (streak > 0).then(|| tr.fill(K::BarStreak, &[("n", &streak.to_string())]));
-    let text_font = theme::mono(12.0);
-    let streak_font = theme::mono(11.0);
+    let text_font = theme::display(13.0);
+    let streak_font = theme::display(12.0);
     let words =
         text_width(ui, &text, &text_font).max(streak_text.as_deref().map_or(0.0, |t| text_width(ui, t, &streak_font)));
     let ring_size = 30.0;

@@ -882,6 +882,10 @@ impl PrepApp {
 
     fn start_call(&mut self, spec: InterviewerSpec, headphones: bool) {
         let core = &mut self.core;
+        // a conversation is a focus block, so the timer goes with it; a quiet chat in a lecture does not count
+        if spec.mode != Mode::Chat && core.pomodoro.phase() == crate::pomodoro::Phase::Focus {
+            core.pomodoro.start(Instant::now());
+        }
         let effective = core.settings.effective();
         let brief = core.working_brief();
         let (mic, guard) = match (spec.mode.spoken(), (core.services.mic)(&effective.audio.input_device)) {
@@ -977,14 +981,6 @@ impl PrepApp {
             }
             Mode::Interview => {}
         }
-        // a lesson is a focus block: the timer starts with it unless it is already going
-        let now = Instant::now();
-        if mode != Mode::Chat
-            && !core.pomodoro.in_progress(now)
-            && core.pomodoro.phase() == crate::pomodoro::Phase::Focus
-        {
-            core.pomodoro.start(now);
-        }
         let headphones = core.settings.audio.headphones;
         self.start_call(spec, headphones);
     }
@@ -996,10 +992,6 @@ impl PrepApp {
         spec.target = core.practice_target();
         spec.focus = task.title.clone();
         spec.task = Some(task.clone());
-        let now = Instant::now();
-        if !core.pomodoro.in_progress(now) && core.pomodoro.phase() == crate::pomodoro::Phase::Focus {
-            core.pomodoro.start(now);
-        }
         let headphones = core.settings.audio.headphones;
         self.start_call(spec, headphones);
         if let Screen::Live(view) = &mut self.screen {

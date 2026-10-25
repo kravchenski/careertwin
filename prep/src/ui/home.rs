@@ -108,22 +108,9 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
             ui.set_max_width(600.0);
             ui.label(RichText::new(line).font(theme::serif_italic(19.0)).color(MUTED));
             ui.add_space(14.0);
-            // the two buttons, centred as one row
-            let write = tr.get(K::HomeWrite);
-            let measure = |text: &str, font: egui::FontId, extra: f32| {
-                ui.painter().layout_no_wrap(text.to_owned(), font, SNOW).size().x + extra
-            };
-            let width =
-                measure(&button, theme::semibold(15.5), 52.0) + 10.0 + measure(write, theme::semibold(14.5), 36.0);
-            ui.horizontal(|ui| {
-                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
-                if primary_button(ui, &button, true).clicked() {
-                    nav = Some(go.clone());
-                }
-                if widgets::ghost_button(ui, write).clicked() {
-                    nav = Some(Nav::Tutor { mode: Mode::Chat, topic: None });
-                }
-            });
+            if primary_button(ui, &button, true).clicked() {
+                nav = Some(go.clone());
+            }
         });
 
         for download in core.downloading() {

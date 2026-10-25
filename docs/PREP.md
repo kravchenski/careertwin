@@ -13,7 +13,7 @@ it word by word as it is spoken, and two buttons at the bottom: the microphone a
 | **Technical** | **Your plan** for the vacancy, a **terms lesson** (first in your own language, then in English), **live coding**, a spoken **mock interview**, **concept checks** and **pictures**: any topic told as a short animated story. |
 | **Interview** | **Your introduction** coached until it is short, true and yours, a recruiter or hiring-manager **mock interview**, and *Prepare for a vacancy*: your CV against the vacancy, the gaps and how to answer them, and the questions it invites. |
 
-Under every tab, **Write instead** opens a quiet chat with the same tutor: nothing is spoken, so it works in a lecture. A
+Under every tab, **Write to the tutor** (in the menu at the top left) opens a quiet chat with the same tutor: nothing is spoken, so it works in a lecture. A
 good answer becomes a note.
 
 Every call ends with a **review**: scores, what to work on, each answer with what went well and what to fix, a better
@@ -98,6 +98,11 @@ screen, and it does not try to. The review is told what it saw.
   the panel has Settings (`Ctrl+Shift+,`), Your activity, Language, Help and Quit.
 
 <p align="center"><img src="media/prep-menu.png" alt="The menu that opens from the panel at the bottom left: Settings, Your activity, Language, Help, Quit" width="520"></p>
+
+**A display font.** Titles, big numbers and the panel at the bottom can be set in a free display font. It is not shipped,
+because its licence does not say that the file may be passed on: put **Ralev001** (or **SOUTHGHETTO**) as a `.ttf` or
+`.otf` file into `~/.local/share/fonts/` or `~/.local/share/careertwin-prep/fonts/` and restart the program. Without it
+the program uses its serif and sans fonts.
 
 ## Run it
 

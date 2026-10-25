@@ -854,13 +854,13 @@ fn usage_and_help_open_from_the_menu_and_close_again() {
     harness.get_by_label("Account menu").click();
     harness.run_steps(2);
     harness.get_by_label("Your activity").click();
-    harness.run_steps(3);
+    harness.run();
     harness.get_by_label("Day streak");
     assert_eq!(harness.query_all_by_label("Practice calendar").count(), 1, "the calendar lives in the window only");
     assert!(harness.query_all_by_label("12 min").count() >= 1, "today and the total both show the twelve minutes");
     shot(&mut harness, "usage-en");
     harness.get_by_label("Close").click();
-    harness.run_steps(2);
+    harness.run_steps(3);
     assert!(harness.query_by_label("Day streak").is_none());
     harness.get_by_label("Account menu").click();
     harness.run_steps(2);
@@ -1265,18 +1265,23 @@ fn the_interview_tab_starts_the_introduction_coach_and_the_english_tab_a_convers
     harness.run_steps(3);
     harness.get_by_label("English").click();
     harness.run_steps(3);
+    assert!(harness.state().core.pomodoro.running(), "the first conversation started the timer");
+    harness.state_mut().core.pomodoro.pause(std::time::Instant::now());
+    assert!(!harness.state().core.pomodoro.running());
     harness.get_by_label("Start talking").click();
     harness.run_steps(3);
     let Screen::Live(view) = &harness.state().screen else { panic!("the conversation should have started") };
     assert_eq!(view.spec.mode, Mode::Interview);
     assert_eq!(view.spec.track, Track::English);
+    assert!(harness.state().core.pomodoro.running(), "the timer starts with the conversation");
 }
 
 #[test]
-fn writing_instead_opens_a_quiet_chat_from_any_tab() {
+fn writing_to_the_tutor_opens_a_quiet_chat_from_the_menu_of_any_tab() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
     harness.run();
-    harness.get_by_label("Write instead").click();
+    assert!(harness.query_by_label("Write instead").is_none(), "the home page has one button");
+    click_card(&mut harness, "Write to the tutor");
     harness.run_steps(3);
     let Screen::Live(view) = &harness.state().screen else { panic!("the chat should have opened") };
     assert_eq!(view.spec.mode, Mode::Chat);

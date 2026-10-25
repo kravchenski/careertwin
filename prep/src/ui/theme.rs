@@ -28,6 +28,10 @@ pub const GOOD: Color32 = rgb(0x8FBF9A);
 pub fn serif(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("serif".into()))
 }
+/// The display font for small text such as a name tag; the semibold sans when it is not installed.
+pub fn display(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name("display".into()))
+}
 /// Titles and big numbers: the display font when it is on this computer, the serif font otherwise.
 pub fn heading(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("heading".into()))
@@ -62,10 +66,13 @@ const FONTS: [(&str, &[u8]); 8] = [
     ("jetbrains_bold", include_bytes!("../../assets/fonts/JetBrainsMono-SemiBold.ttf")),
 ];
 
-/// Looks for a display font the person has put on this computer: SOUTHGHETTO, a free font with
-/// Cyrillic by S. Shebestova. It is never shipped with the program, because its licence does not
-/// say that it may be passed on; it is found in the font folders or in the program's own `fonts`
-/// folder, by the name of its file.
+/// The display fonts the program looks for, the one it likes best first: Ralev001 (RALEV.COM) and
+/// SOUTHGHETTO (S. Shebestova), both free with Cyrillic.
+const DISPLAY_FONTS: [&str; 2] = ["ralev", "southghetto"];
+
+/// Looks for a display font the person has put on this computer. It is never shipped with the
+/// program, because the licences do not say that the files may be passed on; it is found in the
+/// font folders or in the program's own `fonts` folder, by the name of its file.
 pub fn find_display_font() -> Option<Vec<u8>> {
     let mut folders: Vec<std::path::PathBuf> = Vec::new();
     if let Some(dirs) = directories::BaseDirs::new() {
@@ -77,11 +84,11 @@ pub fn find_display_font() -> Option<Vec<u8>> {
     }
     folders.push("/usr/local/share/fonts".into());
     folders.push("/usr/share/fonts".into());
-    folders.iter().find_map(|folder| find_font_in(folder, 0))
+    DISPLAY_FONTS.iter().find_map(|name| folders.iter().find_map(|folder| find_font_in(folder, name, 0)))
 }
 
-/// A real font file whose name says `southghetto`, in `folder` or below it.
-fn find_font_in(folder: &std::path::Path, depth: usize) -> Option<Vec<u8>> {
+/// A real font file whose name says `name`, in `folder` or below it.
+fn find_font_in(folder: &std::path::Path, name_part: &str, depth: usize) -> Option<Vec<u8>> {
     let entries = std::fs::read_dir(folder).ok()?;
     let mut subfolders = Vec::new();
     for entry in entries.flatten().take(2000) {
@@ -93,7 +100,7 @@ fn find_font_in(folder: &std::path::Path, depth: usize) -> Option<Vec<u8>> {
         let name = path.file_name()?.to_string_lossy().to_lowercase();
         let font_file = name.ends_with(".ttf") || name.ends_with(".otf");
         if font_file
-            && name.replace([' ', '-', '_'], "").contains("southghetto")
+            && name.replace([' ', '-', '_'], "").contains(name_part)
             && let Ok(bytes) = std::fs::read(&path)
             && looks_like_a_font(&bytes)
         {
@@ -103,7 +110,7 @@ fn find_font_in(folder: &std::path::Path, depth: usize) -> Option<Vec<u8>> {
     if depth >= 3 {
         return None;
     }
-    subfolders.iter().find_map(|sub| find_font_in(sub, depth + 1))
+    subfolders.iter().find_map(|sub| find_font_in(sub, name_part, depth + 1))
 }
 
 /// The first bytes of a TrueType or OpenType file: a renamed archive or a broken download is not one.
@@ -137,14 +144,21 @@ pub fn fonts_with(display: Option<Vec<u8>>) -> FontDefinitions {
     family("serif_italic", "ptserif_italic");
     family("mono", "jetbrains");
     family("mono_bold", "jetbrains_bold");
-    let mut heading = vec![];
+    // the display font leads two families, and any letter it lacks falls to ours: the serif for
+    // headings, the semibold sans for small labels set in it
+    let has_display = display.is_some();
     if let Some(bytes) = display {
         definitions.font_data.insert("display".to_owned(), Arc::new(FontData::from_owned(bytes)));
-        heading.push("display".to_owned());
     }
-    heading.push("ptserif".to_owned());
-    heading.extend(fallback.iter().cloned());
-    definitions.families.insert(FontFamily::Name("heading".into()), heading);
+    for (name, own) in [("heading", "ptserif"), ("display", "manrope_semibold")] {
+        let mut list = vec![];
+        if has_display {
+            list.push("display".to_owned());
+        }
+        list.push(own.to_owned());
+        list.extend(fallback.iter().cloned());
+        definitions.families.insert(FontFamily::Name(name.into()), list);
+    }
     definitions
 }
 
@@ -252,6 +266,9 @@ mod tests {
         let with = fonts_with(Some(include_bytes!("../../assets/fonts/PTSerif-Bold.ttf").to_vec()));
         let list = with.families.get(&FontFamily::Name("heading".into())).unwrap();
         assert_eq!(&list[..2], ["display", "ptserif"], "a letter the display font lacks falls to the serif");
+        let small = &with.families[&FontFamily::Name("display".into())];
+        assert_eq!(&small[..2], ["display", "manrope_semibold"]);
+        assert_eq!(without.families[&FontFamily::Name("display".into())][0], "manrope_semibold");
         assert!(with.font_data.contains_key("display") && !without.font_data.contains_key("display"));
         assert!(
             !with.families[&FontFamily::Name("serif".into())].contains(&"display".to_owned()),
@@ -267,13 +284,16 @@ mod tests {
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(nested.join("SOUTH GHETTO-Regular.ttf"), real).unwrap();
         std::fs::write(dir.path().join("Other.ttf"), real).unwrap();
-        assert_eq!(find_font_in(dir.path(), 0).as_deref(), Some(&real[..]));
+        assert_eq!(find_font_in(dir.path(), "southghetto", 0).as_deref(), Some(&real[..]));
+        assert!(find_font_in(dir.path(), "ralev", 0).is_none());
+        std::fs::write(dir.path().join("Ralev001.otf"), real).unwrap();
+        assert!(find_font_in(dir.path(), "ralev", 0).is_some());
         // a download that is not a font is passed over, and so is a file of another name
         let broken = tempfile::tempdir().unwrap();
         std::fs::write(broken.path().join("southghetto.ttf"), b"PK\x03\x04 not a font").unwrap();
         std::fs::write(broken.path().join("southghetto.zip"), real).unwrap();
-        assert!(find_font_in(broken.path(), 0).is_none());
-        assert!(find_font_in(&dir.path().join("missing"), 0).is_none());
+        assert!(find_font_in(broken.path(), "southghetto", 0).is_none());
+        assert!(find_font_in(&dir.path().join("missing"), "southghetto", 0).is_none());
         assert!(looks_like_a_font(real) && !looks_like_a_font(b"") && !looks_like_a_font(b"PK\x03\x04"));
     }
 

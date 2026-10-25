@@ -464,7 +464,6 @@ strings! {
     // the home of each tab
     HomeStart => ("Start talking", "Начать разговор"),
     HomeStartTopic => ("Start: {topic}", "Начать: {topic}"),
-    HomeWrite => ("Write instead", "Написать вместо этого"),
     HomeIntroStart => ("Practise my introduction", "Потренировать самопрезентацию"),
     HomeLineEnglish => (
         "Ten minutes of real conversation. Mistakes are fine: I answer like a person would.",
