@@ -130,6 +130,14 @@ impl Watcher {
         &self.code
     }
 
+    /// The person was away on purpose, at a break: the time since the last change and the last
+    /// look starts again from now, so coming back is not read as being stuck.
+    pub fn rest(&mut self, now: Instant) {
+        self.changed_at = self.changed_at.map(|_| now);
+        self.looked_at = Some(now);
+        self.away_since = None;
+    }
+
     /// Whether the tutor should look at the code now, and why. Never while a look is going on.
     pub fn due(&self, now: Instant) -> Option<Reason> {
         if self.looking {
@@ -332,6 +340,17 @@ mod tests {
         let text = watcher.signals(at(t0, 80));
         assert!(text.contains("out of focus for 60 seconds"), "{text}");
         assert!(!watcher.signals(at(t0, 81)).contains("out of focus"), "it is told once");
+    }
+
+    #[test]
+    fn coming_back_from_a_break_is_not_being_stuck() {
+        let t0 = Instant::now();
+        let mut watcher = Watcher::new("def f(): pass", t0);
+        watcher.edited("def f(): return 1", 0, 17, at(t0, 5));
+        // five minutes later, after a break
+        watcher.rest(at(t0, 305));
+        assert_eq!(watcher.due(at(t0, 306)), None, "nothing is due the moment you are back");
+        assert_eq!(watcher.due(at(t0, 330)), Some(Reason::Settled), "and the usual look comes after a while");
     }
 
     #[test]

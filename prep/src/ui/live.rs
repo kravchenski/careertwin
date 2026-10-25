@@ -13,7 +13,7 @@ use super::code::{self, CodeSession, Narrator};
 use super::orb;
 use super::stage::{self, Outcome, Picture};
 use super::theme::{self, BERRY, BLUSH, FAINT, LINE, MUTED, SNOW, SURFACE};
-use super::widgets::{self, Icon, ghost_button, icon_button, level_bars};
+use super::widgets::{self, Icon, ghost_button, icon_button};
 use super::{Core, Nav, column};
 use crate::conversation::{Command, Event, Handle, State};
 use crate::i18n::K;
@@ -69,6 +69,11 @@ pub struct LiveView {
     pub lesson: Option<LessonView>,
     /// Whether the tutor speaks; off, it only writes.
     pub voice_on: bool,
+    /// The text box is showing in a call: it comes when you start typing.
+    pub typing: bool,
+    focus_typing: bool,
+    /// Set during a break: the call is paused, and this is whether the microphone was off before.
+    pub on_break: Option<bool>,
     /// What the call has asked the window to do, waiting for the next frame.
     pub effects: Vec<Effect>,
     /// The picture being shown instead of the sphere, when the tutor drew something.
@@ -108,6 +113,9 @@ impl LiveView {
             has_microphone,
             lesson: None,
             voice_on,
+            typing: false,
+            focus_typing: false,
+            on_break: None,
             effects: Vec::new(),
             stage: None,
             coding: None,
@@ -145,7 +153,10 @@ impl LiveView {
                     {
                         stage.pause_soon = true;
                     }
-                    self.error = None;
+                    // an error stays on the screen until the tutor says something again
+                    if who == Who::Interviewer {
+                        self.error = None;
+                    }
                     if append && self.items.last().is_some_and(|i| i.who == who) {
                         if let Some(last) = self.items.last_mut() {
                             last.text.push(' ');
@@ -230,6 +241,41 @@ impl LiveView {
         self.items.iter().rev().find(|i| i.who == who).map(|i| i.text.as_str())
     }
 
+    /// The focus block is over: the call is put on hold, the microphone shut and the tutor says,
+    /// once, to stand up and drink some water. Calls that are written, not spoken, go on.
+    pub fn start_break(&mut self, core: &Core, minutes: u32) {
+        if !self.spec.mode.spoken() || self.on_break.is_some() {
+            return;
+        }
+        self.on_break = Some(self.muted);
+        self.muted = true;
+        if let Some(player) = self.stage.as_mut().and_then(Picture::player_mut) {
+            player.pause(Instant::now());
+        }
+        core.services.speaker.stop();
+        self.send(Command::Interrupt);
+        self.send(Command::Mute(true));
+        self.send(Command::Hold(true));
+        self.send(Command::Context(
+            "the focus block has ended and the person is on a break, away from the screen".into(),
+        ));
+        self.send(Command::Speak(core.tr.fill(K::BreakSpeech, &[("n", &minutes.to_string())])));
+    }
+
+    /// The break is over, or it was cut short: the call goes on where it was.
+    pub fn end_break(&mut self, core: &Core) {
+        let Some(was_muted) = self.on_break.take() else { return };
+        self.send(Command::Hold(false));
+        if !was_muted {
+            self.muted = false;
+            self.send(Command::Mute(false));
+        }
+        if let Some(coding) = self.coding.as_mut() {
+            coding.watcher.rest(Instant::now());
+        }
+        self.send(Command::Speak(core.tr.get(K::BreakBackSpeech).to_owned()));
+    }
+
     /// What the model should know when it draws something: the lesson and what was just said.
     fn show_context(&self) -> String {
         let mut context = String::new();
@@ -274,10 +320,6 @@ impl LiveView {
             ))),
         }
     }
-}
-
-fn clock(seconds: u32) -> String {
-    format!("{:02}:{:02}", seconds / 60, seconds % 60)
 }
 
 fn status_text(core: &Core, view: &LiveView) -> String {
@@ -350,6 +392,9 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     if view.state == State::Speaking && !ctx.egui_wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Space)) {
         view.send(Command::Interrupt);
     }
+    if view.on_break.is_some() {
+        return break_screen(core, view, ui);
+    }
     if let Some(mut picture) = view.stage.take() {
         let area = ui.available_rect_before_wrap().shrink2(vec2(24.0, 6.0));
         match stage::paint(core, &mut picture, ui, area) {
@@ -369,38 +414,17 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     let orb_size = if chat {
         (ui.available_height() * 0.26).clamp(120.0, 190.0)
     } else {
-        (ui.available_height() * 0.42).clamp(170.0, 340.0)
+        // the sphere itself fills 60% of its square, the rest is glow, so the square is big
+        let reserved = if view.error.is_some() { 150.0 } else { 0.0 };
+        ((ui.available_height() - reserved) * 0.95).clamp(220.0, 720.0)
     };
     let scroll_to_end = chat;
     egui::ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(scroll_to_end).show(ui, |ui| {
         column(ui, 780.0, |ui| {
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&view.session.title).font(theme::heading(26.0)).color(SNOW));
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    if chat {
-                        ui.label(RichText::new(clock(view.elapsed())).font(theme::mono(13.0)).color(MUTED));
-                    } else {
-                        let total = view.spec.total_seconds();
-                        ui.label(
-                            RichText::new(format!("{} / {}", clock(view.elapsed()), clock(total)))
-                                .font(theme::mono(13.0))
-                                .color(MUTED),
-                        );
-                        ui.label(
-                            RichText::new(format!("● {}", tr.get(K::Live))).font(theme::mono_bold(12.0)).color(BERRY),
-                        );
-                    }
-                });
+            ui.vertical_centered(|ui| {
+                ui.label(RichText::new(&view.session.title).font(theme::heading(24.0)).color(SNOW));
             });
-            if !chat {
-                let remaining = view.spec.total_seconds().saturating_sub(view.elapsed());
-                widgets::progress(
-                    ui,
-                    ui.available_width(),
-                    1.0 - remaining as f32 / view.spec.total_seconds().max(1) as f32,
-                );
-            }
             if let Some(lesson) = view.lesson.clone() {
                 ui.add_space(8.0);
                 lesson_row(core, &lesson, ui);
@@ -412,44 +436,7 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
                 ui.label(RichText::new(status_text(core, view)).font(theme::serif_italic(21.0)).color(MUTED));
             });
 
-            // the sphere moves with the voice: it swells a little and drifts
-            let target = match view.state {
-                State::Speaking => view.speaker_level,
-                State::Listening => view.mic_level,
-                State::Thinking => {
-                    0.14 + 0.08
-                        * (view.elapsed() as f32 * 3.0 + now.elapsed().subsec_millis() as f32 * 0.003).sin().abs()
-                }
-                _ => 0.0,
-            };
-            view.orb_level += (target - view.orb_level) * 0.22;
-            let spin = match view.state {
-                State::Thinking => 1.5,
-                State::Speaking => 1.0 + view.orb_level,
-                State::Listening => 0.75,
-                State::Muted | State::Starting => 0.4,
-                State::Finished => 0.2,
-            };
-            let seconds = core.started.elapsed().as_secs_f32();
-            let params = orb::Params { time: seconds, level: view.orb_level, spin };
-            let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), orb_size), Sense::hover());
-            let fps = match view.state {
-                State::Speaking => 24.0,
-                State::Listening => 20.0,
-                _ => 12.0,
-            };
-            let swell = 1.0 + 0.07 * view.orb_level;
-            let drift = (seconds * 1.1).sin() * 3.0 * (0.4 + view.orb_level);
-            let rect = Rect::from_center_size(area.center() + vec2(0.0, drift), Vec2::splat(orb_size * swell));
-            core.paint_orb(ui, rect, &params, fps);
-            ui.add_space(8.0);
-
-            if chat {
-                chat_log(core, view, now, ui);
-            } else {
-                spoken_answer(core, view, now, ui);
-            }
-
+            // a problem is the first thing to see, so it sits above the sphere, never below the fold
             if let Some(error) = view.error.clone() {
                 ui.add_space(12.0);
                 Frame::new()
@@ -471,41 +458,86 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
                     });
             }
 
-            if !chat {
-                ui.add_space(12.0);
-                ui.vertical_centered(|ui| {
-                    if ghost_button(ui, tr.get(K::Transcript)).clicked() {
-                        view.show_transcript = !view.show_transcript;
-                    }
-                });
-                if view.show_transcript {
-                    widgets::card_frame().show(ui, |ui| {
-                        egui::ScrollArea::vertical()
-                            .max_height(240.0)
-                            .stick_to_bottom(true)
-                            .auto_shrink([false, true])
-                            .show(ui, |ui| {
-                                for item in &view.items {
-                                    let who = if item.who == Who::You {
-                                        tr.get(K::You).to_owned()
-                                    } else {
-                                        view.spec.persona.first_name().to_uppercase()
-                                    };
-                                    widgets::caps(ui, &who);
-                                    ui.label(RichText::new(&item.text).color(if item.who == Who::You {
-                                        MUTED
-                                    } else {
-                                        SNOW
-                                    }));
-                                    ui.add_space(6.0);
-                                }
-                            });
-                    });
+            // the sphere moves with the voice: it swells a little and drifts
+            let target = match view.state {
+                State::Speaking => view.speaker_level,
+                State::Listening => view.mic_level,
+                State::Thinking => {
+                    0.14 + 0.08
+                        * (view.elapsed() as f32 * 3.0 + now.elapsed().subsec_millis() as f32 * 0.003).sin().abs()
                 }
+                _ => 0.0,
+            };
+            view.orb_level += (target - view.orb_level) * 0.22;
+            let spin = match view.state {
+                State::Thinking => 1.5,
+                State::Speaking => 1.0 + view.orb_level,
+                State::Listening => 0.75,
+                State::Muted | State::Starting => 0.4,
+                State::Finished => 0.2,
+            };
+            let seconds = core.started.elapsed().as_secs_f32();
+            let params = orb::Params { time: seconds, level: view.orb_level, spin };
+            // the glow around the sphere may reach over the lines above and below it
+            let room = if chat { orb_size } else { orb_size * 0.78 };
+            let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), room), Sense::hover());
+            let fps = match view.state {
+                State::Speaking => 24.0,
+                State::Listening => 20.0,
+                _ => 12.0,
+            };
+            let swell = 1.0 + 0.07 * view.orb_level;
+            let drift = (seconds * 1.1).sin() * 3.0 * (0.4 + view.orb_level);
+            let rect = Rect::from_center_size(area.center() + vec2(0.0, drift), Vec2::splat(orb_size * swell));
+            core.paint_orb(ui, rect, &params, fps);
+            ui.add_space(8.0);
+
+            if chat {
+                chat_log(core, view, now, ui);
+            } else {
+                spoken_answer(view, now, ui);
             }
+
             ui.add_space(30.0);
         });
     });
+    None
+}
+
+/// The call during a break: the sphere at rest, the time left and what to do with it.
+fn break_screen(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
+    let tr = core.tr;
+    let now = Instant::now();
+    let remaining = core.pomodoro.remaining(now);
+    ui.ctx().request_repaint_after(Duration::from_millis(250));
+    let seconds = core.started.elapsed().as_secs_f32();
+    let size = (ui.available_height() * 0.42).clamp(160.0, 360.0);
+    let mut back = false;
+    column(ui, 780.0, |ui| {
+        ui.add_space(24.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(tr.get(K::BreakTitle)).font(theme::heading(30.0)).color(SNOW));
+        });
+        let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), size), Sense::hover());
+        let params = orb::Params { time: seconds, level: 0.04, spin: 0.25 };
+        core.paint_orb(ui, Rect::from_center_size(area.center(), Vec2::splat(size)), &params, 8.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(crate::pomodoro::clock(remaining)).font(theme::mono_bold(54.0)).color(SNOW));
+            ui.add_space(6.0);
+            ui.label(RichText::new(tr.get(K::BreakHint)).font(theme::serif_italic(21.0)).color(MUTED));
+            ui.add_space(18.0);
+            if widgets::primary_button(ui, tr.get(K::BreakReturn), true).clicked() {
+                back = true;
+            }
+        });
+    });
+    if back {
+        // the rest of the break is dropped; a timer that is not on a break is left as it is
+        if core.pomodoro.phase() != crate::pomodoro::Phase::Focus {
+            core.pomodoro.skip(now);
+        }
+        view.end_break(core);
+    }
     None
 }
 
@@ -584,9 +616,8 @@ fn coding_ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
     None
 }
 
-/// The tutor's words as they are spoken, and under them what you said.
-fn spoken_answer(core: &Core, view: &LiveView, now: Instant, ui: &mut Ui) {
-    let tr = core.tr;
+/// The tutor's words as they are spoken.
+fn spoken_answer(view: &LiveView, now: Instant, ui: &mut Ui) {
     let width = ui.available_width().min(680.0);
     ui.vertical_centered(|ui| {
         ui.set_max_width(width);
@@ -596,10 +627,6 @@ fn spoken_answer(core: &Core, view: &LiveView, now: Instant, ui: &mut Ui) {
             }
         } else {
             ui.label(view.caption_job(now, width, 25.0));
-        }
-        if let Some(text) = view.last_of(Who::You) {
-            ui.add_space(10.0);
-            ui.label(RichText::new(format!("{}: {text}", tr.get(K::You))).font(theme::sans(15.0)).color(FAINT));
         }
     });
 }
@@ -636,80 +663,106 @@ pub fn composer(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav
     let tr = core.tr;
     let mut nav = None;
     let chat = view.is_chat();
+    // A call has two buttons and nothing else: the microphone and the way out. A text box appears
+    // by itself when you start typing, and stays when there is no microphone or in a chat.
+    if !chat && !view.typing && !ui.ctx().egui_wants_keyboard_input() {
+        let typed: String = ui.input(|input| {
+            input
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    egui::Event::Text(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect()
+        });
+        if !typed.trim().is_empty() {
+            view.typing = true;
+            view.typed.push_str(&typed);
+            view.focus_typing = true;
+        }
+    }
+    if view.typing && view.typed.is_empty() && ui.input(|input| input.key_pressed(Key::Escape)) {
+        view.typing = false;
+    }
+    let typing = chat || view.typing || !view.has_microphone;
     egui::Panel::bottom("composer").frame(Frame::new().fill(theme::BG).inner_margin(Margin::symmetric(20, 14))).show(
         ui,
         |ui| {
             column(ui, 780.0, |ui| {
-                Frame::new()
-                    .fill(SURFACE)
-                    .stroke(egui::Stroke::new(1.0, LINE))
-                    .corner_radius(30)
-                    .inner_margin(Margin::symmetric(12, 8))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            if !chat {
-                                let (icon, label) =
-                                    if view.muted { (Icon::MicOff, K::Unmute) } else { (Icon::Mic, K::Mute) };
-                                let tint = (!view.muted && view.has_microphone && view.state == State::Listening)
-                                    .then_some(theme::CRANBERRY);
-                                if icon_button(ui, icon, tr.get(label), 44.0, tint).clicked() {
-                                    view.muted = !view.muted;
-                                    view.send(Command::Mute(view.muted));
-                                }
-                            }
-                            let send_width = 44.0;
-                            let reserved = send_width + if chat { 150.0 } else { 140.0 + 120.0 + 130.0 };
-                            let edit = ui.add(
-                                TextEdit::singleline(&mut view.typed)
-                                    .hint_text(if chat { tr.get(K::WriteToTutor) } else { tr.get(K::TypeAnswer) })
-                                    .frame(Frame::NONE)
-                                    .desired_width((ui.available_width() - reserved).max(120.0))
-                                    .margin(vec2(8.0, 12.0)),
-                            );
-                            let submit = edit.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
-                            let has_text = !view.typed.trim().is_empty();
-                            if has_text
-                                && (icon_button(ui, Icon::Send, tr.get(K::Send), 38.0, Some(BERRY)).clicked() || submit)
-                            {
-                                let text = std::mem::take(&mut view.typed);
-                                view.send(Command::Say(text));
-                                edit.request_focus();
-                            }
-                            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                let end_label = if chat { K::CloseChat } else { K::EndCall };
-                                if widgets::primary_button(ui, tr.get(end_label), true).clicked() {
-                                    view.send(Command::Finish);
-                                    nav = Some(Nav::CallEnded);
-                                }
-                                if view.spec.mode.spoken() {
-                                    let (icon, label) = if view.voice_on {
-                                        (Icon::Speaker, K::VoiceOff)
-                                    } else {
-                                        (Icon::Speaker, K::VoiceOn)
-                                    };
-                                    let tint = (!view.voice_on).then_some(theme::COCOA);
-                                    if icon_button(ui, icon, tr.get(label), 38.0, tint).clicked() {
-                                        view.voice_on = !view.voice_on;
-                                        view.send(Command::Voice(view.voice_on));
-                                    }
-                                }
-                                if !chat {
-                                    if view.state == State::Speaking && ghost_button(ui, tr.get(K::Interrupt)).clicked()
-                                    {
-                                        view.send(Command::Interrupt);
-                                    }
-                                    level_bars(
-                                        ui,
-                                        vec2(110.0, 28.0),
-                                        &view.levels,
-                                        if view.state == State::Speaking { BLUSH } else { BERRY },
-                                    );
-                                }
-                            });
-                        });
+                let end_label = if chat { K::CloseChat } else { K::EndCall };
+                if typing {
+                    typed_bar(core, view, ui, end_label, &mut nav);
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.add_space(((ui.available_width() - (64.0 + 18.0 + 46.0)) / 2.0).max(0.0));
+                        microphone(core, view, ui, 64.0);
+                        ui.add_space(18.0);
+                        if icon_button(ui, Icon::Close, tr.get(end_label), 46.0, None).clicked() {
+                            view.send(Command::Finish);
+                            nav = Some(Nav::CallEnded);
+                        }
                     });
+                }
             });
         },
     );
     nav
+}
+
+/// The microphone button: lit while it listens, crossed out when it is off.
+fn microphone(core: &Core, view: &mut LiveView, ui: &mut Ui, size: f32) {
+    let tr = core.tr;
+    let (icon, label) = if view.muted { (Icon::MicOff, K::Unmute) } else { (Icon::Mic, K::Mute) };
+    let tint = (!view.muted && view.has_microphone && view.state == State::Listening).then_some(theme::CRANBERRY);
+    if icon_button(ui, icon, tr.get(label), size, tint).clicked() {
+        view.muted = !view.muted;
+        view.send(Command::Mute(view.muted));
+    }
+}
+
+/// The bar with a text box: a chat, a call without a microphone, or typing in a call.
+fn typed_bar(core: &Core, view: &mut LiveView, ui: &mut Ui, end_label: K, nav: &mut Option<Nav>) {
+    let tr = core.tr;
+    let chat = view.is_chat();
+    let id = egui::Id::unique("typed-answer");
+    Frame::new()
+        .fill(SURFACE)
+        .stroke(egui::Stroke::new(1.0, LINE))
+        .corner_radius(30)
+        .inner_margin(Margin::symmetric(12, 8))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if !chat && view.has_microphone {
+                    microphone(core, view, ui, 44.0);
+                }
+                let reserved = 44.0 + 46.0 + 40.0;
+                let edit = ui.add(
+                    TextEdit::singleline(&mut view.typed)
+                        .id(id)
+                        .hint_text(if chat { tr.get(K::WriteToTutor) } else { tr.get(K::TypeAnswer) })
+                        .frame(Frame::NONE)
+                        .desired_width((ui.available_width() - reserved).max(120.0))
+                        .min_size(vec2(0.0, 46.0))
+                        .align(egui::Align2::LEFT_CENTER)
+                        .margin(vec2(8.0, 0.0)),
+                );
+                if std::mem::take(&mut view.focus_typing) {
+                    edit.request_focus();
+                }
+                let submit = edit.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
+                let has_text = !view.typed.trim().is_empty();
+                if has_text && (icon_button(ui, Icon::Send, tr.get(K::Send), 38.0, Some(BERRY)).clicked() || submit) {
+                    let text = std::mem::take(&mut view.typed);
+                    view.send(Command::Say(text));
+                    edit.request_focus();
+                }
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if icon_button(ui, Icon::Close, tr.get(end_label), 46.0, None).clicked() {
+                        view.send(Command::Finish);
+                        *nav = Some(Nav::CallEnded);
+                    }
+                });
+            });
+        });
 }

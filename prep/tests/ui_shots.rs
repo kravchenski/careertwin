@@ -85,10 +85,19 @@ pub fn open_settings(harness: &mut Harness<'_, PrepApp>) {
     harness.run_steps(2);
 }
 
-/// The cards under the sphere may be below the fold of a short window.
+/// The ways to practise are in the drawer that the first button at the top left opens.
+pub fn open_ways(harness: &mut Harness<'_, PrepApp>) {
+    if !harness.state().core.history_open {
+        let label = harness.state().core.tr.get(careertwin_prep::i18n::K::Sessions);
+        harness.get_by_label(label).click();
+        harness.run_steps(3);
+    }
+}
+
+/// Starts one of the ways to practise from the drawer.
 pub fn click_card(harness: &mut Harness<'_, PrepApp>, label: &str) {
+    open_ways(harness);
     harness.get_by_label(label).scroll_to_me();
-    // the scroll glides for a few frames; a click before it stops would miss
     harness.run_steps(12);
     harness.get_by_label(label).click();
 }
@@ -108,8 +117,14 @@ fn the_three_tabs_are_there_and_the_technical_one_is_the_start() {
     harness.get_by_label("English");
     harness.get_by_label("Technical");
     harness.get_by_label("Interview");
-    harness.get_by_label("Mock interview");
     shot(&mut harness, "home-technical-en");
+    open_ways(&mut harness);
+    harness.get_by_label("Mock interview");
+    harness.get_by_label("Live coding");
+    harness.get_by_label("Your plan");
+    harness.get_by_label("Explain with pictures");
+    harness.get_by_label("Write to the tutor");
+    shot(&mut harness, "ways-en");
 }
 
 use careertwin_prep::conversation::{Command, Event, Handle, State};
@@ -139,6 +154,9 @@ fn live(harness: &mut Harness<'_, PrepApp>) -> Wired {
 fn a_call_shows_what_is_said_and_who_is_speaking() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
     let wired = live(&mut harness);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.has_microphone = true;
+    }
     wired.events.send(Event::State(State::Speaking)).unwrap();
     wired
         .events
@@ -149,6 +167,11 @@ fn a_call_shows_what_is_said_and_who_is_speaking() {
     harness.get_by_label("Daniel is speaking");
     harness.get_by_label("End call");
     harness.get_by_label("Mute");
+    // nothing else is on the screen: no clock, no LIVE, no transcript, no level bars, no second line
+    for junk in ["Transcript", "Skip", "Mute the tutor", "Unmute the tutor"] {
+        assert!(harness.query_by_label(junk).is_none(), "{junk} should not be on a call");
+    }
+    assert!(harness.query_by_label_contains("LIVE").is_none() && harness.query_by_label_contains("YOU:").is_none());
     shot(&mut harness, "live-speaking-en");
 
     wired
@@ -203,35 +226,6 @@ fn an_error_is_shown_with_a_way_to_try_again() {
     harness.run();
     assert!(matches!(wired.commands.try_recv(), Ok(Command::Retry)));
     assert!(harness.query_by_label_contains("No AI gateway answers").is_none(), "the banner goes away");
-}
-
-#[test]
-fn the_transcript_opens_and_lists_both_sides() {
-    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
-    let wired = live(&mut harness);
-    wired.events.send(Event::State(State::Listening)).unwrap();
-    wired
-        .events
-        .send(Event::Turn { who: Who::Interviewer, text: "What do you work on?".into(), language: None, append: false })
-        .unwrap();
-    wired
-        .events
-        .send(Event::Turn {
-            who: Who::You,
-            text: "An order API in FastAPI.".into(),
-            language: Some("en".into()),
-            append: false,
-        })
-        .unwrap();
-    wired
-        .events
-        .send(Event::Turn { who: Who::You, text: "On PostgreSQL.".into(), language: None, append: true })
-        .unwrap();
-    harness.run();
-    harness.get_by_label("Transcript").click();
-    harness.run();
-    harness.get_by_label("An order API in FastAPI. On PostgreSQL.");
-    shot(&mut harness, "live-transcript-en");
 }
 
 #[test]
@@ -462,7 +456,7 @@ fn a_thought_in_russian_comes_back_in_three_english_versions() {
     harness.run();
     harness.get_by_label("Английский").click();
     harness.run_steps(2);
-    harness.get_by_label("Скажи по-английски").click();
+    click_card(&mut harness, "Скажи по-английски");
     harness.run_steps(2);
     type_into(&mut harness, "После релиза задержка выросла вдвое, и я добавил индекс.");
     harness.get_by_label("Сказать по-английски").click();
@@ -568,8 +562,7 @@ fn the_history_lists_sessions_filters_opens_and_deletes_them() {
         store.save(&Session::new(Track::English, Kind::Live, "Conversation · Olivia")).unwrap();
     }
     harness.run();
-    harness.get_by_label("SESSIONS").click();
-    harness.run_steps(3);
+    open_ways(&mut harness);
     // the list is made of buttons; the start page also names the technical session under "Recent"
     harness.get_by_role_and_label(egui::accesskit::Role::Button, "Mock interview · Daniel · Tech lead");
     harness.get_by_role_and_label(egui::accesskit::Role::Button, "Conversation · Olivia");
@@ -584,6 +577,8 @@ fn the_history_lists_sessions_filters_opens_and_deletes_them() {
     );
     harness.get_by_role_and_label(egui::accesskit::Role::Button, "Conversation · Olivia");
     // delete it
+    harness.get_by_label("Delete Conversation · Olivia").scroll_to_me();
+    harness.run_steps(12);
     harness.get_by_label("Delete Conversation · Olivia").click();
     harness.run_steps(3);
     assert_eq!(harness.state().core.store.list().len(), 1);
@@ -594,7 +589,10 @@ fn the_history_lists_sessions_filters_opens_and_deletes_them() {
         harness.state_mut().history.query.clear();
     }
     harness.run_steps(3);
-    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Mock interview · Daniel · Tech lead").click();
+    let session = "Mock interview · Daniel · Tech lead";
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, session).scroll_to_me();
+    harness.run_steps(12);
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, session).click();
     harness.run_steps(3);
     assert!(matches!(harness.state().screen, Screen::Review(_)));
     assert!(!harness.state().core.history_open);
@@ -633,6 +631,7 @@ fn settings_are_checked_saved_and_applied() {
     assert_eq!(saved.llm.key.expose(), "sk-test-1234567890");
     assert_eq!(saved.ui_language, careertwin_prep::config::UiLanguage::Ru);
     harness.run_steps(2);
+    open_ways(&mut harness);
     harness.get_by_label("Пробное собеседование");
 }
 
@@ -647,6 +646,9 @@ fn the_other_tabs_have_their_own_cards() {
     harness.get_by_label("English").click();
     harness.run_steps(2);
     harness.get_by_label("English practice");
+    // the ways to practise are not on the page: they are in the drawer at the left
+    assert!(harness.query_by_label("Conversation").is_none(), "no grid of cards on the page");
+    open_ways(&mut harness);
     harness.get_by_label("Conversation");
     harness.get_by_label("Say it in English");
     harness.get_by_label("Phrases to review");
@@ -670,9 +672,11 @@ fn the_whole_interface_speaks_russian() {
     harness.get_by_label("Техническое");
     harness.get_by_label("Собеседование");
     harness.get_by_label("Техническое собеседование");
+    shot(&mut harness, "home-technical-ru");
+    open_ways(&mut harness);
     harness.get_by_label("Пробное собеседование");
     harness.get_by_label("Проверка понимания");
-    shot(&mut harness, "home-technical-ru");
+    shot(&mut harness, "ways-ru");
     click_card(&mut harness, "Пробное собеседование");
     harness.run_steps(2);
     harness.get_by_label("Начать звонок");
@@ -804,7 +808,7 @@ fn the_panel_at_the_bottom_opens_a_menu_without_plans_or_downloads() {
     for item in ["Settings", "Usage", "Language", "Help", "Quit"] {
         harness.get_by_label(item);
     }
-    for gone in ["Upgrade", "Download", "More"] {
+    for gone in ["Upgrade", "Download", "More options", "Learn more"] {
         assert!(harness.query_by_label_contains(gone).is_none(), "{gone} does not belong in a free program");
     }
     shot(&mut harness, "account-menu-en");
@@ -839,12 +843,13 @@ fn usage_and_help_open_from_the_menu_and_close_again() {
     harness.run_steps(2);
     harness.get_by_label("Usage").click();
     harness.run_steps(3);
-    assert_eq!(harness.query_all_by_label("DAY STREAK").count(), 2, "on the home page and in the window");
+    harness.get_by_label("Day streak");
+    assert_eq!(harness.query_all_by_label("Practice calendar").count(), 2, "on the home page and in the window");
     assert!(harness.query_all_by_label("12 min").count() >= 1, "today and the total both show the twelve minutes");
     shot(&mut harness, "usage-en");
     harness.get_by_label("Close").click();
     harness.run_steps(2);
-    assert_eq!(harness.query_all_by_label("DAY STREAK").count(), 1, "only the home page's");
+    assert!(harness.query_by_label("Day streak").is_none());
     harness.get_by_label("Account menu").click();
     harness.run_steps(2);
     harness.get_by_label("Help").click();
@@ -1234,20 +1239,6 @@ fn the_chat_is_quiet_has_no_microphone_and_keeps_what_you_write() {
     harness.run();
     assert_eq!(harness.state().core.notebook.notes[0].kind, careertwin_prep::notes::NoteKind::Lecture);
     shot(&mut harness, "chat-en");
-}
-
-#[test]
-fn the_voice_can_be_switched_off_during_a_call() {
-    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
-    let mut wired = tutoring(&mut harness, Mode::Terms);
-    wired.events.send(Event::State(State::Listening)).unwrap();
-    harness.run();
-    harness.get_by_label("Mute the tutor").click();
-    harness.run();
-    assert!(matches!(wired.commands.try_recv(), Ok(Command::Voice(false))));
-    harness.get_by_label("Unmute the tutor").click();
-    harness.run();
-    assert!(matches!(wired.commands.try_recv(), Ok(Command::Voice(true))));
 }
 
 #[test]
@@ -1939,4 +1930,153 @@ fn the_timer_starts_by_itself_when_the_program_opens_unless_it_is_turned_off() {
     assert!(make(true).core.pomodoro.running(), "it is on by default and starts with the program");
     assert!(!make(false).core.pomodoro.running());
     assert!(Settings::default().pomodoro.auto_start);
+}
+
+#[test]
+fn a_call_with_a_microphone_has_two_buttons_and_a_text_box_comes_when_you_type() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 860.0);
+    let mut wired = live(&mut harness);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.has_microphone = true;
+    }
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(3);
+    harness.get_by_label("Mute");
+    harness.get_by_label("End call");
+    assert!(harness.query_by_role(egui::accesskit::Role::TextInput).is_none(), "no text box until you type");
+    shot(&mut harness, "call-en");
+    // starting to type brings the box, with what was typed in it
+    harness.event(egui::Event::Text("I build the order API.".into()));
+    harness.run_steps(4);
+    harness.get_by_role(egui::accesskit::Role::TextInput);
+    harness.get_by_label("Send").click();
+    harness.run_steps(3);
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Say(text)) if text == "I build the order API."));
+    // the microphone button turns the microphone off and on
+    harness.get_by_label("Mute").click();
+    harness.run_steps(2);
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Mute(true))));
+    harness.get_by_label("Talk").click();
+    harness.run_steps(2);
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Mute(false))));
+    // and the cross ends the call
+    harness.get_by_label("End call").click();
+    harness.run_steps(3);
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Finish)));
+}
+
+#[test]
+fn an_error_in_a_call_stays_until_the_tutor_speaks_again() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 860.0);
+    let wired = live(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired
+        .events
+        .send(Event::Error("No AI gateway answers at http://127.0.0.1:3260 (connection refused).".into()))
+        .unwrap();
+    // your words arrive, and the error must not vanish with them
+    wired.events.send(Event::Turn { who: Who::You, text: "Hello.".into(), language: None, append: false }).unwrap();
+    harness.run_steps(3);
+    harness.get_by_label_contains("No AI gateway answers");
+    wired
+        .events
+        .send(Event::Turn { who: Who::Interviewer, text: "Hi, I'm Daniel.".into(), language: None, append: false })
+        .unwrap();
+    harness.run_steps(3);
+    assert!(harness.query_by_label_contains("No AI gateway answers").is_none(), "gone once the tutor answers");
+}
+
+// ---- breaks ----
+
+fn drain(wired: &mut Wired) -> Vec<Command> {
+    let mut commands = Vec::new();
+    while let Ok(command) = wired.commands.try_recv() {
+        commands.push(command);
+    }
+    commands
+}
+
+#[test]
+fn when_the_focus_block_ends_the_call_pauses_and_the_tutor_says_to_take_a_break() {
+    use careertwin_prep::pomodoro::{Phase, Signal};
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 860.0);
+    let mut wired = live(&mut harness);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.has_microphone = true;
+    }
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(2);
+    drain(&mut wired);
+    harness.state_mut().on_timer_signal(Signal::FocusDone { next: Phase::ShortBreak });
+    harness.run_steps(3);
+    let commands = drain(&mut wired);
+    assert!(commands.iter().any(|c| matches!(c, Command::Mute(true))), "the microphone is shut: {commands:?}");
+    assert!(commands.iter().any(|c| matches!(c, Command::Hold(true))), "no nudges while away: {commands:?}");
+    let said = commands.iter().find_map(|c| if let Command::Speak(t) = c { Some(t.clone()) } else { None });
+    assert_eq!(
+        said.as_deref(),
+        Some("Time for a break. Stand up, walk around, drink some water. I'll be here in 5 minutes.")
+    );
+    harness.get_by_label("Break");
+    harness.get_by_label_contains("The call is paused");
+    harness.get_by_label("Back to the call");
+    shot(&mut harness, "break-en");
+    // a second finished block does not stack a second pause
+    harness.state_mut().on_timer_signal(Signal::FocusDone { next: Phase::ShortBreak });
+    harness.run_steps(2);
+    assert!(drain(&mut wired).iter().all(|c| !matches!(c, Command::Speak(_))));
+    // when the break is over the call goes on by itself
+    harness.state_mut().on_timer_signal(Signal::BreakDone);
+    harness.run_steps(3);
+    let commands = drain(&mut wired);
+    assert!(commands.iter().any(|c| matches!(c, Command::Hold(false))), "{commands:?}");
+    assert!(commands.iter().any(|c| matches!(c, Command::Mute(false))), "{commands:?}");
+    assert!(commands.iter().any(|c| matches!(c, Command::Speak(t) if t.starts_with("Welcome back"))), "{commands:?}");
+    assert!(harness.query_by_label("Back to the call").is_none());
+    // and a break can be cut short; the timer really is on a break then
+    harness.state_mut().core.pomodoro.skip(std::time::Instant::now());
+    assert_eq!(harness.state().core.pomodoro.phase(), Phase::ShortBreak);
+    harness.state_mut().on_timer_signal(Signal::FocusDone { next: Phase::ShortBreak });
+    harness.run_steps(3);
+    drain(&mut wired);
+    harness.get_by_label("Back to the call").click();
+    harness.run_steps(3);
+    let commands = drain(&mut wired);
+    assert!(commands.iter().any(|c| matches!(c, Command::Hold(false))), "{commands:?}");
+    assert_eq!(harness.state().core.pomodoro.phase(), Phase::Focus, "back to work");
+}
+
+#[test]
+fn a_microphone_that_was_off_stays_off_after_the_break_and_a_chat_is_not_paused() {
+    use careertwin_prep::pomodoro::{Phase, Signal};
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 860.0);
+    let mut wired = live(&mut harness);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.has_microphone = true;
+        view.muted = true;
+    }
+    wired.events.send(Event::State(State::Muted)).unwrap();
+    harness.run_steps(2);
+    drain(&mut wired);
+    harness.state_mut().on_timer_signal(Signal::FocusDone { next: Phase::LongBreak });
+    harness.run_steps(2);
+    let said =
+        drain(&mut wired).into_iter().find_map(|c| if let Command::Speak(t) = c { Some(t) } else { None }).unwrap();
+    assert!(said.contains("15 minutes"), "a long break names its length: {said}");
+    harness.state_mut().on_timer_signal(Signal::BreakDone);
+    harness.run_steps(2);
+    assert!(drain(&mut wired).iter().all(|c| !matches!(c, Command::Mute(false))), "it was off before and stays off");
+    // a chat in a lecture is left alone
+    let (mut harness, _d, _r) = harness_chat();
+    let mut wired = tutoring(&mut harness, Mode::Chat);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(2);
+    harness.state_mut().on_timer_signal(Signal::FocusDone { next: Phase::ShortBreak });
+    harness.run_steps(2);
+    assert!(drain(&mut wired).is_empty(), "nothing is said in a chat");
+    assert!(harness.query_by_label("Back to the call").is_none());
+}
+
+fn harness_chat() -> (Harness<'static, PrepApp>, tempfile::TempDir, tokio::runtime::Runtime) {
+    harness(fixture("en"), 1120.0, 860.0)
 }

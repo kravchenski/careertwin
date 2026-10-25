@@ -154,12 +154,13 @@ impl Pomodoro {
         self.banked = Duration::ZERO;
     }
 
-    /// Moves to the next phase without counting the one that was cut short. A skipped break
-    /// leads to a stopped focus block; a skipped focus block leads to a running break.
+    /// Moves to the next phase without counting the one that was cut short. A skipped focus
+    /// block leads to a running break; a skipped break leads to the next focus block, which starts
+    /// at once when the timer starts by itself.
     pub fn skip(&mut self, now: Instant) {
         match self.phase {
             Phase::Focus => self.enter(self.break_after(), true, now),
-            Phase::ShortBreak | Phase::LongBreak => self.enter(Phase::Focus, false, now),
+            Phase::ShortBreak | Phase::LongBreak => self.enter(Phase::Focus, self.settings.auto_start, now),
         }
     }
 
@@ -326,7 +327,20 @@ mod tests {
         timer.skip(at(t0, 10));
         assert_eq!((timer.phase(), timer.running(), timer.blocks), (Phase::ShortBreak, true, 0));
         timer.skip(at(t0, 12));
-        assert_eq!((timer.phase(), timer.running()), (Phase::Focus, false));
+        assert_eq!(
+            (timer.phase(), timer.running()),
+            (Phase::Focus, false),
+            "it waits when it does not start by itself"
+        );
+        let mut automatic = Pomodoro::new(PomodoroSettings { auto_start: true, ..quick_settings() });
+        automatic.start(t0);
+        automatic.skip(at(t0, 10));
+        automatic.skip(at(t0, 12));
+        assert_eq!(
+            (automatic.phase(), automatic.running()),
+            (Phase::Focus, true),
+            "a skipped break goes straight back to work"
+        );
     }
 
     #[test]

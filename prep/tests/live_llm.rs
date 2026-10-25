@@ -501,3 +501,60 @@ async fn a_real_model_researches_a_vacancy_and_ranks_what_will_be_asked() {
     assert!(plan.topics.len() >= 6);
     assert!(plan.topics.iter().filter(|t| !t.terms.is_empty()).count() >= 3);
 }
+
+/// The introduction coach on a real model: it asks for the introduction, coaches one answer and
+/// offers the shape, in English, using only facts from the demo profile.
+///
+/// `cargo test --test live_llm introduction -- --ignored --nocapture`
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a model gateway"]
+async fn a_real_model_coaches_an_introduction() {
+    use careertwin_prep::prompts::tutor::Mode;
+    let url = std::env::var("LIVE_URL").unwrap_or_else(|_| "http://127.0.0.1:3260".into());
+    let model = std::env::var("LIVE_MODEL").unwrap_or_else(|_| "auto".into());
+    let llm = HttpLlm::new(
+        &LlmSettings { url, key: Secret::default(), model: model.clone(), fast_model: String::new() },
+        vec![],
+    )
+    .unwrap();
+    let mut spec = InterviewerSpec::tutoring(Track::Interview, Mode::Intro, Lang::Ru, 15);
+    spec.language = Lang::En;
+    let mut brief = Brief { candidate: DEMO.to_owned(), ..Brief::default() };
+    brief.set_vacancy("Backend Engineer", "Acme", "Python and PostgreSQL.");
+    let config = Config {
+        spec,
+        brief,
+        knobs: Knobs::default(),
+        model,
+        headphones: false,
+        voice: Voice { name: "alloy".into(), speed: 1.0, instructions: String::new(), language: Lang::En },
+        voice_alt: None,
+        stt_hint: SttHint::default(),
+    };
+    let deps = Deps {
+        llm: Arc::new(llm),
+        stt: FakeStt::new(&[]),
+        tts: Some(FakeTts::new()),
+        speaker: FakeSpeaker::new(),
+        mic: None,
+        wake: Arc::new(|| {}),
+    };
+    let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (event_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(conversation::run(deps, config, command_rx, event_tx));
+    let started = std::time::Instant::now();
+    let first = turn_text(&mut events, Who::Interviewer).await;
+    println!("\n[{:>4.1}s] COACH: {first}", started.elapsed().as_secs_f32());
+    for said in [
+        "Hi, I am Alex. I work as a backend developer. I did many things, Python, some databases, also Docker. I like to learn new things and I work in a team.",
+        "I work at Northwind on the order API in FastAPI, I added an index that fixed a slow query, and I want this job because you use PostgreSQL.",
+    ] {
+        listening(&mut events).await;
+        println!("[{:>4.1}s] YOU:   {said}", started.elapsed().as_secs_f32());
+        let _ = commands.send(Command::Say(said.into()));
+        let reply = turn_text(&mut events, Who::Interviewer).await;
+        println!("[{:>4.1}s] COACH: {reply}", started.elapsed().as_secs_f32());
+        assert!(!reply.contains("[["), "a tag leaked: {reply}");
+    }
+    let _ = commands.send(Command::Finish);
+}

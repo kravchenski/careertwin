@@ -52,17 +52,25 @@ pub fn ui(core: &mut Core, state: &mut HistoryState, ctx: &egui::Context) -> Opt
                 .show(ui, |ui| {
                     ui.set_width(330.0);
                     ui.set_max_height(height);
-                    widgets::caps(ui, tr.get(K::Sessions));
-                    ui.add_space(4.0);
-                    ui.add(
-                        TextEdit::singleline(&mut state.query)
-                            .hint_text(tr.get(K::Search))
-                            .desired_width(f32::INFINITY)
-                            .margin(vec2(10.0, 8.0)),
-                    );
-                    ui.add_space(8.0);
-                    let sessions = core.store.search(&state.query);
-                    ScrollArea::vertical().auto_shrink([false, true]).max_height(height - 150.0).show(ui, |ui| {
+                    ScrollArea::vertical().auto_shrink([false, true]).max_height(height - 60.0).show(ui, |ui| {
+                        for way in super::home::ways(core.track) {
+                            if way_row(ui, tr.get(way.title), tr.get(way.text)).clicked() {
+                                nav = Some(way.go.clone());
+                            }
+                        }
+                        ui.add_space(14.0);
+                        super::rule(ui);
+                        ui.add_space(10.0);
+                        widgets::caps(ui, tr.get(K::Sessions));
+                        ui.add_space(4.0);
+                        ui.add(
+                            TextEdit::singleline(&mut state.query)
+                                .hint_text(tr.get(K::Search))
+                                .desired_width(f32::INFINITY)
+                                .margin(vec2(10.0, 8.0)),
+                        );
+                        ui.add_space(8.0);
+                        let sessions = core.store.search(&state.query);
                         if sessions.is_empty() {
                             widgets::muted(ui, tr.get(K::NoSessions));
                         }
@@ -96,6 +104,25 @@ pub fn ui(core: &mut Core, state: &mut HistoryState, ctx: &egui::Context) -> Opt
         core.history_open = false;
     }
     nav
+}
+
+/// A way to practise: its name and a line about it. Clicking it starts it.
+fn way_row(ui: &mut Ui, title: &str, text: &str) -> egui::Response {
+    let width = ui.available_width();
+    let heading = ui.painter().layout(title.to_owned(), theme::semibold(15.0), SNOW, width - 24.0);
+    let body = ui.painter().layout(text.to_owned(), theme::sans(13.0), MUTED, width - 24.0);
+    let height = 12.0 + heading.size().y + 3.0 + body.size().y + 12.0;
+    let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
+    let response = widgets::pointer(response);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, title));
+    if response.hovered() {
+        ui.painter().rect(rect, CornerRadius::same(12), RAISED, Stroke::new(1.0, BERRY), StrokeKind::Inside);
+    }
+    let top = rect.top() + 12.0;
+    let below = top + heading.size().y + 3.0;
+    ui.painter().galley(egui::pos2(rect.left() + 12.0, top), heading, SNOW);
+    ui.painter().galley(egui::pos2(rect.left() + 12.0, below), body, MUTED);
+    response
 }
 
 fn row(core: &Core, ui: &mut Ui, session: &Session, now: u64, nav: &mut Option<Nav>, delete: &mut Option<String>) {

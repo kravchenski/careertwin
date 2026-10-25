@@ -5,6 +5,7 @@ pub mod account;
 pub mod code;
 pub mod concepts;
 pub mod focus;
+pub mod heat;
 pub mod help;
 pub mod history;
 pub mod holo;
@@ -763,13 +764,7 @@ impl PrepApp {
             self.apply(outcome);
         }
         if let Some(signal) = self.core.pomodoro.update(Instant::now()) {
-            self.core.on_timer(signal);
-            if let (Screen::Live(view), crate::pomodoro::Signal::FocusDone { .. }) = (&self.screen, signal) {
-                let minutes = self.core.settings.pomodoro.focus_minutes;
-                view.send(crate::conversation::Command::Context(format!(
-                    "the {minutes}-minute focus block has just ended; at the next natural pause, suggest a short break"
-                )));
-            }
+            self.on_timer_signal(signal);
         }
         self.shortcuts(ui);
         account::bar(&mut self.core, ui);
@@ -814,6 +809,26 @@ impl PrepApp {
         if let Some(nav) = next {
             self.go(nav);
             ui.ctx().request_repaint();
+        }
+    }
+
+    /// The timer says a phase is over: a message and a chime, and in a spoken call a pause: the
+    /// tutor tells you to stand up and drink some water, and the call waits until the break is done.
+    pub fn on_timer_signal(&mut self, signal: crate::pomodoro::Signal) {
+        use crate::pomodoro::{Phase, Signal};
+        self.core.on_timer(signal);
+        let Screen::Live(view) = &mut self.screen else { return };
+        match signal {
+            Signal::FocusDone { next } => {
+                let settings = self.core.settings.pomodoro;
+                let minutes = if next == Phase::LongBreak { settings.long_minutes } else { settings.short_minutes };
+                view.start_break(&self.core, minutes);
+                if view.on_break.is_some() {
+                    // the break screen says it; a message on top of it would hide its title
+                    self.core.notice = None;
+                }
+            }
+            Signal::BreakDone => view.end_break(&self.core),
         }
     }
 
@@ -1327,13 +1342,10 @@ impl PrepApp {
                     self.core.track = Track::ALL[index];
                     nav = Some(Nav::Home);
                 }
-                let left = Rect::from_min_size(pos2(bar.left(), bar.center().y - 20.0), vec2(150.0, 40.0));
+                let left = Rect::from_min_size(pos2(bar.left(), bar.center().y - 20.0), vec2(100.0, 40.0));
                 ui.scope_builder(UiBuilder::new().max_rect(left).layout(Layout::left_to_right(Align::Center)), |ui| {
                     if icon_button(ui, Icon::List, tr.get(K::Sessions), 38.0, None).clicked() {
                         self.core.history_open = !self.core.history_open;
-                    }
-                    if icon_button(ui, Icon::Plus, tr.get(K::NewSession), 38.0, None).clicked() {
-                        nav = Some(Nav::Home);
                     }
                     if icon_button(ui, Icon::Notebook, tr.get(K::NotesTitle), 38.0, None).clicked() {
                         nav = Some(Nav::Notes);

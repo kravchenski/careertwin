@@ -5,52 +5,42 @@ use egui::{RichText, Ui, vec2};
 
 use super::orb;
 use super::theme::{self, BERRY, FAINT, MUTED, SNOW};
-use super::widgets::{self, option_card, primary_button};
+use super::widgets::{self, primary_button};
 use super::{Core, Nav, scrolling_column};
 use crate::i18n::K;
 use crate::prompts::tutor::Mode;
 use crate::session::{Track, ago};
 
-struct Card {
-    tag: &'static str,
-    title: K,
-    text: K,
-    go: Nav,
+pub(super) struct Card {
+    pub title: K,
+    pub text: K,
+    pub go: Nav,
 }
 
-fn cards(track: Track) -> Vec<Card> {
-    let chat = Card {
-        tag: "write",
-        title: K::CardChat,
-        text: K::CardChatText,
-        go: Nav::Tutor { mode: Mode::Chat, topic: None },
-    };
-    let show = Card {
-        tag: "show",
-        title: K::CardShow,
-        text: K::CardShowText,
-        go: Nav::Show { topic: None, hint: String::new() },
-    };
+/// The ways to practise under a tab, for the list in the drawer.
+pub(super) fn ways(track: Track) -> Vec<Card> {
+    let chat = Card { title: K::CardChat, text: K::CardChatText, go: Nav::Tutor { mode: Mode::Chat, topic: None } };
+    let show = Card { title: K::CardShow, text: K::CardShowText, go: Nav::Show { topic: None, hint: String::new() } };
     match track {
         Track::English => vec![
-            Card { tag: "live", title: K::CardConversation, text: K::CardConversationText, go: Nav::SetupCall },
-            Card { tag: "translate", title: K::CardTranslate, text: K::CardTranslateText, go: Nav::Translate },
-            Card { tag: "review", title: K::CardPhrases, text: K::CardPhrasesText, go: Nav::Phrases },
+            Card { title: K::CardConversation, text: K::CardConversationText, go: Nav::SetupCall },
+            Card { title: K::CardTranslate, text: K::CardTranslateText, go: Nav::Translate },
+            Card { title: K::CardPhrases, text: K::CardPhrasesText, go: Nav::Phrases },
             chat,
         ],
         Track::Technical => vec![
-            Card { tag: "live", title: K::CardMock, text: K::CardMockTechnicalText, go: Nav::SetupCall },
-            Card { tag: "cards", title: K::CardConcepts, text: K::CardConceptsText, go: Nav::Concepts },
-            Card { tag: "code", title: K::CardCode, text: K::CardCodeText, go: Nav::Code },
-            Card { tag: "plan", title: K::CardPlan, text: K::CardPlanText, go: Nav::Plan },
-            Card { tag: "prepare", title: K::CardPrepare, text: K::CardPrepareText, go: Nav::Prepare },
+            Card { title: K::CardMock, text: K::CardMockTechnicalText, go: Nav::SetupCall },
+            Card { title: K::CardConcepts, text: K::CardConceptsText, go: Nav::Concepts },
+            Card { title: K::CardCode, text: K::CardCodeText, go: Nav::Code },
+            Card { title: K::CardPlan, text: K::CardPlanText, go: Nav::Plan },
+            Card { title: K::CardPrepare, text: K::CardPrepareText, go: Nav::Prepare },
             show,
             chat,
         ],
         Track::Interview => vec![
-            Card { tag: "live", title: K::CardMock, text: K::CardMockInterviewText, go: Nav::SetupCall },
-            Card { tag: "prepare", title: K::CardPrepare, text: K::CardPrepareText, go: Nav::Prepare },
-            Card { tag: "translate", title: K::CardTranslate, text: K::CardTranslateText, go: Nav::Translate },
+            Card { title: K::CardMock, text: K::CardMockInterviewText, go: Nav::SetupCall },
+            Card { title: K::CardPrepare, text: K::CardPrepareText, go: Nav::Prepare },
+            Card { title: K::CardTranslate, text: K::CardTranslateText, go: Nav::Translate },
             chat,
         ],
     }
@@ -161,23 +151,6 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
         ui.add_space(22.0);
         today(core, ui);
 
-        ui.add_space(22.0);
-        widgets::caps(ui, tr.get(K::HomeMore));
-        ui.add_space(6.0);
-        let width = ui.available_width();
-        let gap = 14.0;
-        let each = (width - gap) / 2.0;
-        for pair in cards(track).chunks(2) {
-            ui.horizontal_top(|ui| {
-                ui.spacing_mut().item_spacing.x = gap;
-                for card in pair {
-                    if option_card(ui, each, card.tag, tr.get(card.title), tr.get(card.text)).clicked() {
-                        nav = Some(card.go.clone());
-                    }
-                }
-            });
-            ui.add_space(4.0);
-        }
         let due = core.deck.due(core.now()).len();
         if due > 0 {
             ui.add_space(10.0);
@@ -213,18 +186,12 @@ fn today(core: &Core, ui: &mut Ui) {
     let now = core.now();
     let done = core.stats.today(now).seconds / 60;
     let goal = core.settings.daily_goal_minutes.max(1);
-    let streak = core.stats.streak(now);
     let covered = core.syllabus.as_ref().map(|plan| (plan.coverage(&core.progress) * 100.0).round() as u32);
-    let tiles: Vec<(&str, String, f32)> = {
-        let mut tiles = vec![
-            (tr.get(K::UsageToday), format!("{done} / {goal} min"), done as f32 / goal as f32),
-            (tr.get(K::UsageStreak), streak.to_string(), (streak as f32 / 7.0).min(1.0)),
-        ];
-        if let Some(percent) = covered {
-            tiles.push((tr.get(K::TodayCoverage), format!("{percent}%"), percent as f32 / 100.0));
-        }
-        tiles
-    };
+    let mut tiles: Vec<(&str, String, f32)> =
+        vec![(tr.get(K::UsageToday), format!("{done} / {goal} min"), done as f32 / goal as f32)];
+    if let Some(percent) = covered {
+        tiles.push((tr.get(K::TodayCoverage), format!("{percent}%"), percent as f32 / 100.0));
+    }
     let gap = 12.0;
     let each = (ui.available_width() - gap * (tiles.len() as f32 - 1.0)) / tiles.len() as f32;
     ui.horizontal_top(|ui| {
@@ -239,5 +206,11 @@ fn today(core: &Core, ui: &mut Ui) {
                 });
             });
         }
+    });
+    // the days you came in, as squares: more lit means more done
+    ui.add_space(12.0);
+    widgets::card_frame().inner_margin(egui::Margin::symmetric(16, 14)).show(ui, |ui| {
+        let width = ui.available_width();
+        super::heat::calendar(core, ui, width);
     });
 }

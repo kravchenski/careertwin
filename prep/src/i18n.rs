@@ -350,6 +350,25 @@ strings! {
     LongMinutes => ("Long break, min", "Долгий перерыв, мин"),
     LongEvery => ("Long break after", "Долгий после"),
     GoalMinutes => ("Goal per day, min", "Цель на день, мин"),
+    HeatLabel => ("Practice calendar", "Календарь занятий"),
+    HeatCaption => (
+        "{days} days of practice in the last {weeks} weeks",
+        "Дней с практикой за последние {weeks} нед.: {days}"
+    ),
+    HeatLess => ("Less", "Меньше"),
+    HeatMore => ("More", "Больше"),
+    HeatNone => ("{date}: no practice", "{date}: занятий не было"),
+    BreakTitle => ("Break", "Перерыв"),
+    BreakHint => (
+        "Stand up, walk around, drink some water. The call is paused.",
+        "Встаньте, пройдитесь, попейте воды. Звонок на паузе."
+    ),
+    BreakSpeech => (
+        "Time for a break. Stand up, walk around, drink some water. I'll be here in {n} minutes.",
+        "Пора сделать перерыв. Встань, пройдись, попей воды. Я подожду {n} мин."
+    ),
+    BreakBackSpeech => ("Welcome back. Ready to go on?", "С возвращением. Продолжим?"),
+    BreakReturn => ("Back to the call", "Вернуться к звонку"),
     TimerAutoStart => (
         "Start the timer when the program opens, and again after each break",
         "Запускать таймер при входе в программу и снова после каждого перерыва"
