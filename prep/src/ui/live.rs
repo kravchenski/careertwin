@@ -13,7 +13,7 @@ use super::code::{self, CodeSession, Narrator};
 use super::orb;
 use super::stage::{self, Outcome, Picture};
 use super::theme::{self, BERRY, BLUSH, FAINT, LINE, MUTED, SNOW, SURFACE};
-use super::widgets::{self, Icon, ghost_button, icon_button};
+use super::widgets::{self, Icon, ghost_button, icon_button, quiet_icon};
 use super::{Core, Nav, column};
 use crate::conversation::{Command, Event, Handle, State};
 use crate::i18n::K;
@@ -689,7 +689,7 @@ pub fn composer(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav
     egui::Panel::bottom("composer").frame(Frame::new().fill(theme::BG).inner_margin(Margin::symmetric(20, 14))).show(
         ui,
         |ui| {
-            column(ui, 780.0, |ui| {
+            column(ui, if typing { 640.0 } else { 780.0 }, |ui| {
                 let end_label = if chat { K::CloseChat } else { K::EndCall };
                 if typing {
                     typed_bar(core, view, ui, end_label, &mut nav);
@@ -729,40 +729,40 @@ fn typed_bar(core: &Core, view: &mut LiveView, ui: &mut Ui, end_label: K, nav: &
     Frame::new()
         .fill(SURFACE)
         .stroke(egui::Stroke::new(1.0, LINE))
-        .corner_radius(30)
-        .inner_margin(Margin::symmetric(12, 8))
+        .corner_radius(28)
+        .inner_margin(Margin { left: 20, right: 8, top: 7, bottom: 7 })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
                 if !chat && view.has_microphone {
-                    microphone(core, view, ui, 44.0);
+                    microphone(core, view, ui, 40.0);
                 }
-                let reserved = 44.0 + 46.0 + 40.0;
+                let has_text = !view.typed.trim().is_empty();
+                // what stands to the right of the words: the way out and, once there is something to send, the arrow
+                let right = 40.0 + 8.0 + if has_text { 36.0 + 8.0 } else { 0.0 };
                 let edit = ui.add(
                     TextEdit::singleline(&mut view.typed)
                         .id(id)
                         .hint_text(if chat { tr.get(K::WriteToTutor) } else { tr.get(K::TypeAnswer) })
                         .frame(Frame::NONE)
-                        .desired_width((ui.available_width() - reserved).max(120.0))
-                        .min_size(vec2(0.0, 46.0))
+                        .desired_width((ui.available_width() - right).max(120.0))
+                        .min_size(vec2(0.0, 44.0))
                         .align(egui::Align2::LEFT_CENTER)
-                        .margin(vec2(8.0, 0.0)),
+                        .margin(Vec2::ZERO),
                 );
                 if std::mem::take(&mut view.focus_typing) {
                     edit.request_focus();
                 }
                 let submit = edit.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
-                let has_text = !view.typed.trim().is_empty();
-                if has_text && (icon_button(ui, Icon::Send, tr.get(K::Send), 38.0, Some(BERRY)).clicked() || submit) {
+                if has_text && (icon_button(ui, Icon::Send, tr.get(K::Send), 36.0, Some(BERRY)).clicked() || submit) {
                     let text = std::mem::take(&mut view.typed);
                     view.send(Command::Say(text));
                     edit.request_focus();
                 }
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    if icon_button(ui, Icon::Close, tr.get(end_label), 46.0, None).clicked() {
-                        view.send(Command::Finish);
-                        *nav = Some(Nav::CallEnded);
-                    }
-                });
+                if quiet_icon(ui, Icon::Close, tr.get(end_label), 40.0).clicked() {
+                    view.send(Command::Finish);
+                    *nav = Some(Nav::CallEnded);
+                }
             });
         });
 }

@@ -1347,9 +1347,6 @@ impl PrepApp {
                     if icon_button(ui, Icon::List, tr.get(K::Sessions), 38.0, None).clicked() {
                         self.core.history_open = !self.core.history_open;
                     }
-                    if icon_button(ui, Icon::Notebook, tr.get(K::NotesTitle), 38.0, None).clicked() {
-                        nav = Some(Nav::Notes);
-                    }
                 });
                 // the timer keeps its full form while there is room beside the tabs, and shrinks when not
                 let compact = pill.right() + 14.0 + focus::PILL_WIDTH > bar.right();

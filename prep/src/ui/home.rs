@@ -1,5 +1,5 @@
 //! The first page of each tab. It looks like the call itself: the sphere, a line from the tutor and
-//! the one thing to do now; the other ways to practise and how today is going sit below it.
+//! the one thing to do now, and what you did last below it. The numbers live in Your activity.
 
 use egui::{RichText, Ui, vec2};
 
@@ -148,9 +148,6 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
             });
         }
 
-        ui.add_space(22.0);
-        today(core, ui);
-
         let due = core.deck.due(core.now()).len();
         if due > 0 {
             ui.add_space(10.0);
@@ -177,40 +174,4 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
         ui.add_space(40.0);
     });
     nav
-}
-
-/// Today in three numbers: the minutes against the goal, the streak, and how much of the plan
-/// you cover. They are the reason to come back tomorrow.
-fn today(core: &Core, ui: &mut Ui) {
-    let tr = core.tr;
-    let now = core.now();
-    let done = core.stats.today(now).seconds / 60;
-    let goal = core.settings.daily_goal_minutes.max(1);
-    let covered = core.syllabus.as_ref().map(|plan| (plan.coverage(&core.progress) * 100.0).round() as u32);
-    let mut tiles: Vec<(&str, String, f32)> =
-        vec![(tr.get(K::UsageToday), format!("{done} / {goal} min"), done as f32 / goal as f32)];
-    if let Some(percent) = covered {
-        tiles.push((tr.get(K::TodayCoverage), format!("{percent}%"), percent as f32 / 100.0));
-    }
-    let gap = 12.0;
-    let each = (ui.available_width() - gap * (tiles.len() as f32 - 1.0)) / tiles.len() as f32;
-    ui.horizontal_top(|ui| {
-        ui.spacing_mut().item_spacing.x = gap;
-        for (caption, value, fraction) in tiles {
-            widgets::card_frame().inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
-                ui.set_width(each - 32.0);
-                ui.vertical(|ui| {
-                    widgets::caps(ui, caption);
-                    ui.label(RichText::new(value).font(theme::heading(24.0)).color(SNOW));
-                    widgets::progress(ui, ui.available_width(), fraction);
-                });
-            });
-        }
-    });
-    // the days you came in, as squares: more lit means more done
-    ui.add_space(12.0);
-    widgets::card_frame().inner_margin(egui::Margin::symmetric(16, 14)).show(ui, |ui| {
-        let width = ui.available_width();
-        super::heat::calendar(core, ui, width);
-    });
 }

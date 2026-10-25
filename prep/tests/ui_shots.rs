@@ -800,12 +800,12 @@ fn a_call_redraws_the_sphere_a_few_times_a_second_not_every_frame() {
 fn the_panel_at_the_bottom_opens_a_menu_without_plans_or_downloads() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
     harness.run();
-    assert!(harness.query_by_label("Usage").is_none(), "the menu is closed at first");
+    assert!(harness.query_by_label("Your activity").is_none(), "the menu is closed at first");
     harness.get_by_label("Account menu").click();
     harness.run_steps(2);
     // the address comes from the ABOUT.md of the demo profile
     harness.get_by_label("alex@example.com");
-    for item in ["Settings", "Usage", "Language", "Help", "Quit"] {
+    for item in ["Settings", "Your activity", "Language", "Help", "Quit"] {
         harness.get_by_label(item);
     }
     for gone in ["Upgrade", "Download", "More options", "Learn more"] {
@@ -823,7 +823,7 @@ fn the_menu_speaks_russian_and_changes_the_language() {
     harness.run();
     harness.get_by_label("Меню профиля").click();
     harness.run_steps(2);
-    for item in ["Настройки", "Использование", "Язык", "Помощь", "Выйти"] {
+    for item in ["Настройки", "Ваша активность", "Язык", "Помощь", "Выйти"] {
         harness.get_by_label(item);
     }
     harness.get_by_label("Язык").click();
@@ -835,16 +835,28 @@ fn the_menu_speaks_russian_and_changes_the_language() {
 }
 
 #[test]
+fn the_progress_in_the_bar_opens_your_activity_and_the_home_page_has_no_numbers() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.run();
+    assert!(harness.query_by_label("Practice calendar").is_none(), "the calendar is not on the home page");
+    assert!(harness.query_by_label("Day streak").is_none());
+    harness.get_by_label("0 of 25 min today").click();
+    harness.run_steps(3);
+    harness.get_by_label("Day streak");
+    harness.get_by_label("Practice calendar");
+}
+
+#[test]
 fn usage_and_help_open_from_the_menu_and_close_again() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
     harness.state_mut().core.stats.add_practice(careertwin_prep::session::now(), 12 * 60, 140);
     harness.run();
     harness.get_by_label("Account menu").click();
     harness.run_steps(2);
-    harness.get_by_label("Usage").click();
+    harness.get_by_label("Your activity").click();
     harness.run_steps(3);
     harness.get_by_label("Day streak");
-    assert_eq!(harness.query_all_by_label("Practice calendar").count(), 2, "on the home page and in the window");
+    assert_eq!(harness.query_all_by_label("Practice calendar").count(), 1, "the calendar lives in the window only");
     assert!(harness.query_all_by_label("12 min").count() >= 1, "today and the total both show the twelve minutes");
     shot(&mut harness, "usage-en");
     harness.get_by_label("Close").click();
@@ -1011,36 +1023,25 @@ fn research_without_a_vacancy_is_refused_politely() {
 }
 
 #[test]
-fn notes_are_written_starred_filtered_and_deleted() {
+fn notes_are_the_tutors_to_write_and_yours_to_star_and_delete() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
     harness.run();
-    harness.get_by_label("Notes").click();
-    harness.run_steps(2);
-    harness.get_by_label("No notes yet. The first lesson fills this page.");
-    harness.get_all_by_role(egui::accesskit::Role::TextInput).next().unwrap().focus();
-    harness.run();
-    harness
-        .get_all_by_role(egui::accesskit::Role::TextInput)
-        .next()
-        .unwrap()
-        .type_text("Ask about the project defence.");
-    harness.run();
-    harness.get_by_label("Add").click();
-    harness.run_steps(2);
+    // there is no notebook button and no box to write a note in: the tutor takes the notes after a call
+    assert!(harness.query_by_label("Notes").is_none(), "no notebook button in the top bar");
+    harness.state_mut().screen = Screen::Notes(Box::default());
+    harness.run_steps(3);
+    harness.get_by_label("No notes yet. The tutor writes them after a call.");
+    assert_eq!(harness.query_all_by_role(egui::accesskit::Role::TextInput).count(), 0, "nothing to type into");
+    assert!(harness.query_by_label("Add").is_none());
+    harness.state_mut().core.add_note(careertwin_prep::notes::NoteKind::Vital, "OOP", "Ask about the project defence.");
+    harness.run_steps(3);
     harness.get_by_label("Ask about the project defence.");
-    assert_eq!(harness.state().core.notebook.notes.len(), 1);
     assert!(harness.state().core.paths.notes_file().exists());
     harness.get_by_label("Star this note").click();
     harness.run_steps(2);
     harness.get_by_label("Remove the star");
     assert!(harness.state().core.notebook.notes[0].starred);
     shot(&mut harness, "notes-en");
-    // a filter that matches nothing hides it, and the empty state comes back
-    harness.get_by_label("Slip").click();
-    harness.run_steps(2);
-    assert!(harness.query_by_label("Ask about the project defence.").is_none());
-    harness.get_by_label("All").click();
-    harness.run_steps(2);
     harness.get_by_label("Delete this note").click();
     harness.run_steps(2);
     assert!(harness.state().core.notebook.notes.is_empty());
@@ -1802,14 +1803,14 @@ fn the_smallest_window_still_fits_the_bar_in_both_languages() {
         let (mut harness, _d, _r) = harness(fixture(language), 760.0, 560.0);
         harness.run();
         shot(&mut harness, &format!("smallest-{language}"));
-        // the tabs, the notebook button and the timer all fit without sitting on each other
+        // the sessions button, the tabs and the timer all fit without sitting on each other
         let tabs: Vec<_> = harness.get_all_by_role(egui::accesskit::Role::Tab).map(|node| node.rect()).collect();
         assert_eq!(tabs.len(), 3);
         let tabs_left = tabs.iter().map(|r| r.left()).fold(f32::MAX, f32::min);
         let tabs_right = tabs.iter().map(|r| r.right()).fold(0.0, f32::max);
         let timer = harness.get_by_label(if language == "en" { "Start the timer" } else { "Запустить таймер" }).rect();
-        let notes = harness.get_by_label(if language == "en" { "Notes" } else { "Заметки" }).rect();
-        assert!(notes.right() < tabs_left, "{language}: the notebook button {notes:?} meets the tabs at {tabs_left}");
+        let list = harness.get_by_label(if language == "en" { "SESSIONS" } else { "СЕССИИ" }).rect();
+        assert!(list.right() < tabs_left, "{language}: the sessions button {list:?} meets the tabs at {tabs_left}");
         assert!(
             tabs_right < timer.left(),
             "{language}: the tabs end at {tabs_right}, the timer starts at {}",

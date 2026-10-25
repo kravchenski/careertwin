@@ -1,10 +1,10 @@
 //! The strip along the bottom: a panel with your name and address at the left, how today is going
-//! at the right, and a menu that opens upwards from the panel with Settings, Usage, Language,
-//! Help and Quit.
+//! at the right (it opens Your activity), and a menu that opens upwards from the panel with
+//! Settings, Your activity, Language, Help and Quit.
 
 use egui::{
-    Align2, Color32, CornerRadius, Frame, Id, Margin, Order, Rect, RichText, Role, Sense, Stroke, StrokeKind, Ui,
-    WidgetInfo, pos2, vec2,
+    Align2, Color32, CornerRadius, Frame, Id, Margin, Order, Pos2, Rect, RichText, Role, Sense, Shape, Stroke,
+    StrokeKind, Ui, WidgetInfo, pos2, vec2,
 };
 
 use super::theme::{self, BERRY, CRANBERRY, FAINT, LINE, MUTED, RAISED, SNOW, SURFACE};
@@ -15,7 +15,8 @@ use crate::i18n::K;
 
 const MENU_WIDTH: f32 = 300.0;
 const CHIP_HEIGHT: f32 = 46.0;
-const CHIP_WIDTH: f32 = 236.0;
+const CHIP_MIN_WIDTH: f32 = 150.0;
+const CHIP_MAX_WIDTH: f32 = 380.0;
 /// The height of the strip along the bottom that holds the panel.
 pub const BAR_HEIGHT: f32 = 64.0;
 
@@ -34,45 +35,45 @@ pub fn bar(core: &mut Core, ui: &mut Ui) {
         .frame(Frame::new().fill(theme::BG).inner_margin(Margin::symmetric(16, 9)))
         .show(ui, |ui| {
             let full = ui.max_rect();
-            let name = core.display_name();
+            let name = short_name(&core.display_name());
             let email = core.display_email();
             let headline = if name.is_empty() { email.clone() } else { name.clone() };
             let headline = if headline.is_empty() { tr.get(K::AppName).to_owned() } else { headline };
             let subline = if name.is_empty() { String::new() } else { email };
             let letter = initial(core);
-            let rect = Rect::from_min_size(
-                pos2(full.left(), full.center().y - CHIP_HEIGHT / 2.0),
-                vec2(CHIP_WIDTH, CHIP_HEIGHT),
-            );
+            let head_font = theme::semibold(14.0);
+            let sub_font = theme::mono(11.0);
+            // as wide as the words need, up to a limit
+            let words = text_width(ui, &headline, &head_font).max(text_width(ui, &subline, &sub_font));
+            let width = (CHIP_HEIGHT + 2.0 + words + 18.0).clamp(CHIP_MIN_WIDTH, CHIP_MAX_WIDTH);
+            let rect =
+                Rect::from_min_size(pos2(full.left(), full.center().y - CHIP_HEIGHT / 2.0), vec2(width, CHIP_HEIGHT));
             let response = pointer(ui.interact(rect, ui.scope_id().with("account-chip"), Sense::click()));
             response.widget_info(|| WidgetInfo::labeled(Role::Button, true, tr.get(K::AccountMenu)));
             core.account_chip = rect;
             let hovered = response.hovered() || core.account_open;
             let painter = ui.painter();
-            painter.rect(
-                rect,
-                CornerRadius::same(23),
-                if hovered { RAISED } else { SURFACE },
-                Stroke::new(1.0, if hovered { theme::mix(LINE, BERRY, 0.4) } else { LINE }),
-                StrokeKind::Inside,
-            );
+            // at rest there is only the letter and the words; the outline appears when it is a button you can press
+            if hovered {
+                painter.rect(
+                    rect,
+                    CornerRadius::same(23),
+                    RAISED,
+                    Stroke::new(1.0, theme::mix(LINE, BERRY, 0.4)),
+                    StrokeKind::Inside,
+                );
+            }
             let center = pos2(rect.left() + CHIP_HEIGHT / 2.0, rect.center().y);
             painter.circle_filled(center, 16.0, CRANBERRY);
             painter.text(center, Align2::CENTER_CENTER, &letter, theme::bold(15.0), SNOW);
             let x = rect.left() + CHIP_HEIGHT + 2.0;
             let room = rect.right() - x - 12.0;
             let top = if subline.is_empty() { rect.center().y } else { rect.center().y - 8.0 };
-            let headline = elide(ui, &headline, theme::semibold(14.0), room);
-            ui.painter().text(pos2(x, top), Align2::LEFT_CENTER, headline, theme::semibold(14.0), SNOW);
+            let headline = elide(ui, &headline, head_font.clone(), room);
+            ui.painter().text(pos2(x, top), Align2::LEFT_CENTER, headline, head_font, SNOW);
             if !subline.is_empty() {
-                let subline = elide(ui, &subline, theme::mono(11.0), room);
-                ui.painter().text(
-                    pos2(x, rect.center().y + 9.0),
-                    Align2::LEFT_CENTER,
-                    subline,
-                    theme::mono(11.0),
-                    FAINT,
-                );
+                let subline = elide(ui, &subline, sub_font.clone(), room);
+                ui.painter().text(pos2(x, rect.center().y + 9.0), Align2::LEFT_CENTER, subline, sub_font, FAINT);
             }
             if response.clicked() {
                 core.account_open = !core.account_open;
@@ -82,27 +83,81 @@ pub fn bar(core: &mut Core, ui: &mut Ui) {
         });
 }
 
-/// How much of today's goal is done, and the streak, at the right of the strip.
-fn today(core: &Core, ui: &mut Ui, full: Rect) {
+/// "Maksim Krauchyk" from "Maksim Krauchyk (Polish citizen)": what stands in brackets is for a
+/// profile page, not for a name tag.
+fn short_name(name: &str) -> String {
+    name.split(" (").next().unwrap_or(name).trim().to_owned()
+}
+
+fn text_width(ui: &Ui, text: &str, font: &egui::FontId) -> f32 {
+    ui.painter().layout_no_wrap(text.to_owned(), font.clone(), SNOW).size().x
+}
+
+/// A ring that fills as the day's goal is met.
+fn ring(painter: &egui::Painter, center: Pos2, radius: f32, fraction: f32) {
+    let width = 3.0;
+    painter.circle_stroke(center, radius, Stroke::new(width, LINE));
+    let fraction = fraction.clamp(0.0, 1.0);
+    if fraction <= 0.0 {
+        return;
+    }
+    let steps = ((fraction * 48.0).ceil() as usize).max(2);
+    let points: Vec<Pos2> = (0..=steps)
+        .map(|step| {
+            let angle = -std::f32::consts::FRAC_PI_2 + fraction * std::f32::consts::TAU * step as f32 / steps as f32;
+            center + radius * vec2(angle.cos(), angle.sin())
+        })
+        .collect();
+    painter.add(Shape::line(points, Stroke::new(width, BERRY)));
+}
+
+/// How much of today's goal is done, at the right of the strip. It is also the way into Your
+/// activity: the calendar and the numbers behind this one.
+fn today(core: &mut Core, ui: &mut Ui, full: Rect) {
     let tr = core.tr;
     let now = core.now();
     let done = core.stats.today(now).seconds;
     let goal = core.settings.daily_goal_minutes.max(1);
     let streak = core.stats.streak(now);
     let text = tr.fill(K::BarToday, &[("done", &(done / 60).to_string()), ("goal", &goal.to_string())]);
-    let right = full.right();
+    let streak_text = (streak > 0).then(|| tr.fill(K::BarStreak, &[("n", &streak.to_string())]));
+    let text_font = theme::mono(12.0);
+    let streak_font = theme::mono(11.0);
+    let words =
+        text_width(ui, &text, &text_font).max(streak_text.as_deref().map_or(0.0, |t| text_width(ui, t, &streak_font)));
+    let ring_size = 30.0;
+    let width = 12.0 + ring_size + 10.0 + words + 14.0;
+    let rect =
+        Rect::from_min_size(pos2(full.right() - width, full.center().y - CHIP_HEIGHT / 2.0), vec2(width, CHIP_HEIGHT));
+    let response = pointer(ui.interact(rect, ui.scope_id().with("activity-chip"), Sense::click()));
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, &text));
+    let hovered = response.hovered();
     let painter = ui.painter();
-    let galley = painter.layout_no_wrap(text, theme::mono(12.0), MUTED);
-    let width = galley.size().x;
-    let y = full.center().y;
-    painter.galley(pos2(right - width, y - 10.0 - galley.size().y / 2.0 + 4.0), galley, MUTED);
-    let bar = Rect::from_min_size(pos2(right - width, y + 6.0), vec2(width, 4.0));
-    painter.rect_filled(bar, CornerRadius::same(2), LINE);
-    let filled = (done as f32 / (goal * 60) as f32).clamp(0.0, 1.0);
-    painter.rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * filled, 4.0)), CornerRadius::same(2), BERRY);
-    if streak > 0 {
-        let streak_text = tr.fill(K::BarStreak, &[("n", &streak.to_string())]);
-        painter.text(pos2(right - width - 18.0, y), Align2::RIGHT_CENTER, streak_text, theme::mono(12.0), BERRY);
+    if hovered {
+        painter.rect(
+            rect,
+            CornerRadius::same(23),
+            RAISED,
+            Stroke::new(1.0, theme::mix(LINE, BERRY, 0.4)),
+            StrokeKind::Inside,
+        );
+    }
+    let fraction = done as f32 / (goal * 60) as f32;
+    ring(painter, pos2(rect.left() + 12.0 + ring_size / 2.0, rect.center().y), ring_size / 2.0 - 2.0, fraction);
+    let x = rect.left() + 12.0 + ring_size + 10.0;
+    match streak_text {
+        Some(streak_text) => {
+            painter.text(pos2(x, rect.center().y - 8.0), Align2::LEFT_CENTER, text, text_font, MUTED);
+            painter.text(pos2(x, rect.center().y + 9.0), Align2::LEFT_CENTER, streak_text, streak_font, BERRY);
+        }
+        None => {
+            painter.text(pos2(x, rect.center().y), Align2::LEFT_CENTER, text, text_font, MUTED);
+        }
+    }
+    if response.clicked() {
+        core.usage_open = true;
+        core.account_open = false;
+        core.language_open = false;
     }
 }
 

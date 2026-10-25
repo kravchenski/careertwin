@@ -1,5 +1,5 @@
-//! Usage: how long you have practised today and over the months, and the streak that keeps you
-//! coming back. It is a window over the current screen, like Settings.
+//! Your activity: how long you have practised today and over the months, the calendar, and the
+//! streak that keeps you coming back. It is a window over the current screen, like Settings.
 
 use egui::{Align, Align2, Frame, Layout, Margin, RichText, Stroke, Ui, vec2};
 
@@ -39,6 +39,8 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
     let total = core.stats.totals();
     let streak = core.stats.streak(now);
     let goal = core.settings.daily_goal_minutes.max(1) * 60;
+    let covered =
+        core.syllabus.as_ref().map(|plan| format!("{}%", (plan.coverage(&core.progress) * 100.0).round() as u32));
     let mut close = false;
     egui::Window::new(tr.get(K::UsageTitle))
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 10.0))
@@ -83,6 +85,9 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
                 line(&mut columns[1], tr.get(K::UsagePractised), &length(tr, total.seconds));
                 line(&mut columns[1], tr.get(K::UsageWeek), &week);
                 line(&mut columns[1], tr.get(K::UsageWords), &total.words.to_string());
+                if let Some(percent) = &covered {
+                    line(&mut columns[1], tr.get(K::TodayCoverage), percent);
+                }
             });
         });
     if close {

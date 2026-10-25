@@ -286,15 +286,15 @@ strings! {
     // the panel at the bottom of the window
     AccountMenu => ("Account menu", "Меню профиля"),
     AppName => ("CareerTwin Prep", "CareerTwin Prep"),
-    MenuUsage => ("Usage", "Использование"),
+    MenuUsage => ("Your activity", "Ваша активность"),
     MenuLanguage => ("Language", "Язык"),
     MenuHelp => ("Help", "Помощь"),
     MenuQuit => ("Quit", "Выйти"),
-    BarToday => ("Today {done} of {goal} min", "Сегодня {done} из {goal} мин"),
+    BarToday => ("{done} of {goal} min today", "{done} из {goal} мин сегодня"),
     BarStreak => ("{n}-day streak", "Серия: {n} дн."),
 
     // usage
-    UsageTitle => ("Usage", "Использование"),
+    UsageTitle => ("Your activity", "Ваша активность"),
     UsageToday => ("Today", "Сегодня"),
     UsageWeek => ("Last 7 days", "Последние 7 дней"),
     UsageTotal => ("In total", "Всего"),
@@ -431,12 +431,10 @@ strings! {
     // notes
     NotesTitle => ("Notes", "Заметки"),
     NotesIntro => (
-        "Short, one idea each. After a lesson the tutor keeps the 20% worth remembering; you can add your own.",
-        "Коротко, по одной мысли. После занятия репетитор сохраняет те самые 20%, которые стоит помнить; свои можно добавить."
+        "The tutor writes these after each call: the 20% worth remembering, one idea each.",
+        "Эти заметки репетитор пишет после каждого звонка: те самые 20%, которые стоит помнить, по одной мысли."
     ),
-    NotesWrite => ("Write a note…", "Напишите заметку…"),
-    NotesAdd => ("Add", "Добавить"),
-    NotesEmpty => ("No notes yet. The first lesson fills this page.", "Заметок пока нет. Первое же занятие наполнит эту страницу."),
+    NotesEmpty => ("No notes yet. The tutor writes them after a call.", "Заметок пока нет. Репетитор пишет их после звонка."),
     NotesCopy => ("Copy as Markdown", "Скопировать как Markdown"),
     NotesCopied => ("Copied", "Скопировано"),
     NoteStar => ("Star this note", "Отметить заметку"),
@@ -446,7 +444,6 @@ strings! {
     KindLecture => ("Lecture", "Лекция"),
     KindMistake => ("Slip", "Ошибка"),
     KindIdea => ("Idea", "Идея"),
-    FilterAll => ("All", "Все"),
 
     // after a lesson
     DigestTitle => ("The 20% to keep", "Те самые 20%"),

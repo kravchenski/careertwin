@@ -1,10 +1,10 @@
-//! Notes: the few lines kept after each lesson, and whatever you write yourself. A star keeps one
-//! at the top.
+//! Notes: the few lines the tutor keeps after each call. You read them here; a star keeps one at
+//! the top, and you can delete one you do not want.
 
-use egui::{Align, CornerRadius, Layout, RichText, TextEdit, Ui, vec2};
+use egui::{Align, CornerRadius, Layout, RichText, Ui};
 
 use super::theme::{self, BERRY, FAINT, MUTED, SNOW};
-use super::widgets::{self, Icon, card_frame, chip, ghost_button, icon_button, primary_button};
+use super::widgets::{self, Icon, card_frame, ghost_button, icon_button};
 use super::{Core, Nav, scrolling_column};
 use crate::i18n::{K, Tr};
 use crate::notes::{Note, NoteKind};
@@ -12,9 +12,6 @@ use crate::session::ago;
 
 #[derive(Default)]
 pub struct NotebookView {
-    pub query: String,
-    pub draft: String,
-    pub filter: Option<NoteKind>,
     pub copied: bool,
 }
 
@@ -37,7 +34,6 @@ pub fn ui(core: &mut Core, view: &mut NotebookView, ui: &mut Ui) -> Option<Nav> 
     let now = core.now();
     let mut nav = None;
     let mut action: Option<Action> = None;
-    let mut add = false;
     let mut copy = false;
     scrolling_column(ui, 760.0, |ui| {
         ui.add_space(20.0);
@@ -56,44 +52,7 @@ pub fn ui(core: &mut Core, view: &mut NotebookView, ui: &mut Ui) -> Option<Nav> 
         widgets::title(ui, tr.get(K::NotesTitle));
         ui.label(RichText::new(tr.get(K::NotesIntro)).font(theme::sans(16.0)).color(MUTED));
         ui.add_space(14.0);
-        ui.horizontal(|ui| {
-            let edit = ui.add(
-                TextEdit::singleline(&mut view.draft)
-                    .hint_text(tr.get(K::NotesWrite))
-                    .desired_width(ui.available_width() - 110.0)
-                    .margin(vec2(12.0, 10.0)),
-            );
-            let submit = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let ready = !view.draft.trim().is_empty();
-            if (primary_button(ui, tr.get(K::NotesAdd), ready).clicked() || submit) && ready {
-                add = true;
-            }
-        });
-        ui.add_space(8.0);
-        ui.horizontal_wrapped(|ui| {
-            if chip(ui, tr.get(K::FilterAll), view.filter.is_none()).clicked() {
-                view.filter = None;
-            }
-            for kind in [NoteKind::Vital, NoteKind::Lecture, NoteKind::Mistake, NoteKind::Idea] {
-                if chip(ui, kind_label(tr, kind), view.filter == Some(kind)).clicked() {
-                    view.filter = if view.filter == Some(kind) { None } else { Some(kind) };
-                }
-            }
-        });
-        ui.add_space(4.0);
-        ui.add(
-            TextEdit::singleline(&mut view.query)
-                .hint_text(tr.get(K::Search))
-                .desired_width(f32::INFINITY)
-                .margin(vec2(12.0, 8.0)),
-        );
-        ui.add_space(10.0);
-        let notes: Vec<&Note> = core
-            .notebook
-            .listing(&view.query)
-            .into_iter()
-            .filter(|n| view.filter.is_none_or(|k| n.kind == k))
-            .collect();
+        let notes: Vec<&Note> = core.notebook.listing("");
         if notes.is_empty() {
             widgets::muted(ui, tr.get(K::NotesEmpty));
         }
@@ -135,11 +94,6 @@ pub fn ui(core: &mut Core, view: &mut NotebookView, ui: &mut Ui) -> Option<Nav> 
         }
         ui.add_space(40.0);
     });
-    if add {
-        let kind = NoteKind::Lecture;
-        let text = std::mem::take(&mut view.draft);
-        core.add_note(kind, "", &text);
-    }
     match action {
         Some(Action::Star(id)) => {
             core.notebook.toggle_star(&id);

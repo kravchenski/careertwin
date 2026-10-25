@@ -20,7 +20,7 @@ Every call ends with a **review**: scores, what to work on, each answer with wha
 answer you can listen to and say yourself, language notes and phrases to keep, and **the 20% to keep**: the few lines
 that matter, saved to your notes.
 
-<p align="center"><img src="media/prep-home.png" alt="The Technical tab: the sphere, today's topic and the button to start it, three numbers for today, and the other ways to practise" width="760"></p>
+<p align="center"><img src="media/prep-home.png" alt="The Technical tab: the sphere, today's topic and the button to start it, and what you did last" width="760"></p>
 
 ## The plan: 80/20 for your vacancy
 
@@ -84,18 +84,20 @@ screen, and it does not try to. The review is told what it saw.
 
 ## Notes, the focus timer and your numbers
 
-- **Notes** (the notebook at the top left): short, one idea each. After every call the tutor keeps the few lines worth
-  remembering and the slips to avoid; in a chat, an answer worth keeping is saved on its own; you can add your own, star
-  the ones that matter, and copy everything as Markdown.
+- **Notes** are written by the tutor, not by you: after every call it keeps the few lines worth remembering and the
+  slips to avoid, one idea each, and in a chat an answer worth keeping is saved on its own. You find them under the
+  review of the call (**Open notes**); there you can star the ones that matter, delete one, and copy everything as
+  Markdown.
 - **Focus timer** (top right): a Pomodoro of 25 minutes of work and 5 of rest, a long rest after four blocks, with a soft
   chime. It starts by itself when the program opens and again after each break; a click pauses it, and Settings can turn
   the automatic start off. The lengths are in Settings. When a block ends during a call, the tutor is told and suggests a break at the next
   natural pause. `Ctrl+Shift+T` starts or pauses it.
-- **The panel at the bottom** shows your name and address, and how today is going against your goal; its menu has
-  Settings (`Ctrl+Shift+,`), Usage, Language, Help and Quit. **Usage** shows today, the week and the total, and the
-  streak.
+- **The panel at the bottom** shows your name and address, and a ring that fills as today's goal is met. The ring
+  opens **Your activity**: today against the goal, a calendar of the days you practised (the lighter the square, the
+  more you did, as on GitHub), the streak, the week, the total and how much of the plan you have covered. The menu of
+  the panel has Settings (`Ctrl+Shift+,`), Your activity, Language, Help and Quit.
 
-<p align="center"><img src="media/prep-menu.png" alt="The menu that opens from the panel at the bottom left: Settings, Usage, Language, Help, Quit" width="520"></p>
+<p align="center"><img src="media/prep-menu.png" alt="The menu that opens from the panel at the bottom left: Settings, Your activity, Language, Help, Quit" width="520"></p>
 
 ## Run it
 
