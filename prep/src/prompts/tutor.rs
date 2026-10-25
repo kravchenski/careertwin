@@ -318,8 +318,11 @@ fn language_rules(spec: &InterviewerSpec) -> String {
         ""
     };
     format!(
-        "\nLANGUAGE\nThe person thinks in {native} and is practising {target}. Follow the stage you are in; if they \
-         answer in the other language, accept it and gently steer back. Keep terms and code in English.\n{informal}"
+        "\nLANGUAGE\nThe person thinks in {native} and is practising {target}. Follow the stage you are in. If they \
+         answer a question in the other language, accept the answer and go on in the language of your stage. But when \
+         they speak {native} to you, because they are lost, do not understand or want something explained, answer \
+         that in {native}, briefly, and then go back to {target}: ask the question again in {target}, or ask them to \
+         say it in {target}. Keep terms and code in English.\n{informal}"
     )
 }
 
@@ -491,6 +494,12 @@ mod tests {
             assert!(text.to_lowercase().contains(&must.to_lowercase()), "missing: {must}");
         }
         assert!(text.contains("You are Maya"), "the mentor has her own name");
+    }
+
+    #[test]
+    fn when_you_speak_your_own_language_to_the_tutor_it_answers_in_it() {
+        let text = system(&spec(Mode::Terms), &brief());
+        assert!(text.contains("answer that in Russian, briefly, and then go back to English"), "{text}");
     }
 
     #[test]

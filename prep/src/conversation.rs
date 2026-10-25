@@ -34,6 +34,9 @@ pub struct Knobs {
     pub end_silence_ms: u32,
     /// How long to wait for the rest of a thought that sounds unfinished.
     pub extend_ms: u64,
+    /// The most it waits after a pause once you have been talking for a while: someone telling a story
+    /// stops to think, and gets more room the longer it has gone on. A short answer gets none.
+    pub patience_ms: u64,
     /// If the interviewer has not started speaking after this long, it acknowledges you first.
     pub filler_after_ms: u64,
     /// The microphone stays shut this long after the speakers stop, so it does not hear the tail.
@@ -53,6 +56,7 @@ impl Default for Knobs {
         Self {
             end_silence_ms: 700,
             extend_ms: 1400,
+            patience_ms: 2400,
             filler_after_ms: 1200,
             speaker_tail_ms: 350,
             barge_in_ms: 300,
@@ -216,6 +220,15 @@ struct Pending {
     text: String,
     language: Option<String>,
     deadline: Instant,
+    /// How much of this turn has been said so far, across the pieces that were merged.
+    spoken_ms: u32,
+}
+
+/// How long to wait after a pause before taking it that you are done: nothing for the first few
+/// seconds, then a sixth of what has been said, up to `most`. Ten seconds earn about a second, and
+/// a story of a quarter of a minute or more the most.
+fn patience(spoken_ms: u32, most: u64) -> u64 {
+    (spoken_ms.saturating_sub(3_000) as u64 / 6).min(most)
 }
 
 struct Call {
@@ -702,15 +715,23 @@ impl Call {
                 self.back_to_listening_if_idle();
             }
             Ok(transcript) => {
-                let text = match self.pending.take() {
-                    Some(previous) => format!("{} {}", previous.text, transcript.text.trim()),
+                let (previous_text, previous_ms) = match self.pending.take() {
+                    Some(previous) => (Some(previous.text), previous.spoken_ms),
+                    None => (None, 0),
+                };
+                let text = match previous_text {
+                    Some(previous) => format!("{previous} {}", transcript.text.trim()),
                     None => transcript.text.trim().to_owned(),
                 };
-                let wait = if speech::looks_unfinished(&text) { self.config.knobs.extend_ms } else { 0 };
+                let spoken_ms = previous_ms + speech_ms;
+                let patient = patience(spoken_ms, self.config.knobs.patience_ms);
+                let wait =
+                    if speech::looks_unfinished(&text) { self.config.knobs.extend_ms.max(patient) } else { patient };
                 self.pending = Some(Pending {
                     text,
                     language: transcript.language,
                     deadline: Instant::now() + Duration::from_millis(wait),
+                    spoken_ms,
                 });
             }
         }

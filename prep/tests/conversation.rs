@@ -247,6 +247,48 @@ async fn an_unfinished_thought_waits_and_the_rest_is_merged_into_one_turn() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_long_answer_with_pauses_to_think_is_one_turn() {
+    let mut call = start(Setup {
+        replies: vec![greeting(), Reply::text("Good, that is a clear story.")],
+        stt: vec![
+            "First I looked at the slow queries in the dashboard.",
+            "Then I found the missing index.",
+            "And I fixed it.",
+        ],
+        ..Setup::default()
+    });
+    call.listening().await;
+    // three pieces of twelve seconds with two seconds of thinking between them: about a minute and a half
+    call.talker.speak(12_000).await;
+    call.talker.silence(2_000).await;
+    call.talker.speak(12_000).await;
+    call.talker.silence(2_000).await;
+    call.talker.speak(12_000).await;
+    call.talker.silence(900).await;
+    call.listening().await;
+    let you: Vec<_> = call.turns().into_iter().filter(|t| t.0 == Who::You).collect();
+    assert_eq!(you.len(), 1, "{you:?}");
+    assert_eq!(
+        you[0].1,
+        "First I looked at the slow queries in the dashboard. Then I found the missing index. And I fixed it."
+    );
+    assert_eq!(call.llm.calls(), 2, "the model answered once, after the whole story");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_short_answer_is_still_answered_straight_away() {
+    let mut call = start(Setup {
+        replies: vec![greeting(), Reply::text("Right.")],
+        stt: vec!["Yes, a queue."],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.say_aloud(1_500).await;
+    // the pause that ends the turn is 0.7 s, so a reply well inside two seconds proves there was no extra wait
+    assert!(call.until(1_500, |log| log.iter().any(|e| matches!(e, Event::Turn { who: Who::You, .. }))).await);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_thought_waiting_to_be_sent_is_not_answered_during_a_break() {
     let mut call = start(Setup {
         replies: vec![greeting(), Reply::text("Go on, I am answering you during the break.")],
