@@ -911,3 +911,143 @@ fn a_call_ending_is_counted_in_the_practice_log() {
     let today = harness.state().core.stats.today(careertwin_prep::session::now());
     assert_eq!((today.sessions, today.words), (1, 7));
 }
+
+const MAP: &str = r#"{"role": "Backend Engineer", "summary": "A talk about the web and data.", "topics": [
+  {"name": "OOP", "kind": "concept", "why": "Every back end is object oriented.", "likelihood": 9, "effort": 2},
+  {"name": "REST", "kind": "concept", "why": "The vacancy builds APIs.", "likelihood": 8, "effort": 3},
+  {"name": "SQL", "kind": "concept", "why": "PostgreSQL is named.", "likelihood": 7, "effort": 4},
+  {"name": "Kubernetes", "kind": "framework", "why": "Mentioned once.", "likelihood": 2, "effort": 9}]}"#;
+const TERMS: &str = r#"{"terms": [{"name": "Encapsulation", "plain": "The object keeps its insides to itself.",
+  "analogy": "A coffee machine: you press a button, you do not touch the boiler.",
+  "english": "Encapsulation means an object hides its state and exposes only what is needed.",
+  "follow_ups": ["Why is it useful?"], "visual": "A box with a hidden core."}]}"#;
+
+fn wait_until(harness: &mut Harness<'_, PrepApp>, what: &str, done: impl Fn(&Harness<'_, PrepApp>) -> bool) {
+    for _ in 0..200 {
+        harness.run();
+        if done(harness) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    panic!("never happened: {what}");
+}
+
+#[test]
+fn the_plan_is_researched_from_the_vacancy_and_the_few_that_matter_come_first() {
+    use careertwin_prep::testing::Reply;
+    let replies = vec![Reply::text(MAP), Reply::text(TERMS), Reply::text(TERMS), Reply::text(TERMS)];
+    let (mut harness, _d, _r) = harness(fixture_with("en", replies), 1120.0, 1000.0);
+    harness.state_mut().core.vacancy.description = "Python, FastAPI and PostgreSQL for an order API.".into();
+    harness.run();
+    harness.get_by_label("Your plan").click();
+    harness.run_steps(2);
+    harness.get_by_label_contains("There is no plan yet");
+    harness.get_by_label("Research the vacancy").click();
+    wait_until(&mut harness, "the plan appears", |h| h.state().core.syllabus.is_some());
+    harness.run_steps(2);
+    harness.get_by_label("0% of the likely questions covered");
+    harness.get_by_label("THE 20% THAT MATTERS");
+    harness.get_by_label("LATER");
+    assert!(harness.query_all_by_label("OOP").count() >= 1);
+    harness.get_by_label("Kubernetes");
+    harness.get_by_label_contains("3 of 4 topics hold 80% of the questions");
+    shot(&mut harness, "plan-en");
+    // the name appears in "start here" and on its card; the card is the one to open
+    harness.get_all_by_label("OOP").last().unwrap().click();
+    harness.run_steps(2);
+    harness.get_by_label("Encapsulation");
+    harness.get_by_label_contains("coffee machine");
+    shot(&mut harness, "plan-open-en");
+    // the plan is kept for the next run
+    assert!(harness.state().core.paths.syllabus_file().exists());
+}
+
+#[test]
+fn a_plan_made_for_another_vacancy_says_so() {
+    use careertwin_prep::testing::Reply;
+    let replies = vec![Reply::text(MAP), Reply::text(TERMS), Reply::text(TERMS), Reply::text(TERMS)];
+    let (mut harness, _d, _r) = harness(fixture_with("en", replies), 1120.0, 1000.0);
+    harness.state_mut().core.vacancy.description = "Python and PostgreSQL.".into();
+    harness.state_mut().core.start_research();
+    wait_until(&mut harness, "the plan appears", |h| h.state().core.syllabus.is_some());
+    harness.state_mut().screen = Screen::Plan(Box::default());
+    harness.run_steps(2);
+    assert!(harness.query_by_label("The vacancy has changed since this plan was made.").is_none());
+    harness.state_mut().core.vacancy.description = "Go and Kafka instead.".into();
+    harness.run_steps(2);
+    harness.get_by_label("The vacancy has changed since this plan was made.");
+    harness.get_by_label("Research again");
+}
+
+#[test]
+fn research_without_a_vacancy_is_refused_politely() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.state_mut().screen = Screen::Plan(Box::default());
+    harness.run_steps(2);
+    harness.get_by_label("Research the vacancy").click();
+    harness.run_steps(2);
+    assert!(harness.state().core.research.is_none(), "nothing starts without a vacancy text");
+}
+
+#[test]
+fn notes_are_written_starred_filtered_and_deleted() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.run();
+    harness.get_by_label("Notes").click();
+    harness.run_steps(2);
+    harness.get_by_label("No notes yet. The first lesson fills this page.");
+    harness.get_all_by_role(egui::accesskit::Role::TextInput).next().unwrap().focus();
+    harness.run();
+    harness
+        .get_all_by_role(egui::accesskit::Role::TextInput)
+        .next()
+        .unwrap()
+        .type_text("Ask about the project defence.");
+    harness.run();
+    harness.get_by_label("Add").click();
+    harness.run_steps(2);
+    harness.get_by_label("Ask about the project defence.");
+    assert_eq!(harness.state().core.notebook.notes.len(), 1);
+    assert!(harness.state().core.paths.notes_file().exists());
+    harness.get_by_label("Star this note").click();
+    harness.run_steps(2);
+    harness.get_by_label("Remove the star");
+    assert!(harness.state().core.notebook.notes[0].starred);
+    shot(&mut harness, "notes-en");
+    // a filter that matches nothing hides it, and the empty state comes back
+    harness.get_by_label("Slip").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Ask about the project defence.").is_none());
+    harness.get_by_label("All").click();
+    harness.run_steps(2);
+    harness.get_by_label("Delete this note").click();
+    harness.run_steps(2);
+    assert!(harness.state().core.notebook.notes.is_empty());
+}
+
+#[test]
+fn after_a_call_the_review_is_made_and_then_the_notes_that_matter() {
+    use careertwin_prep::testing::Reply;
+    const DIGEST: &str = r#"{"vital": ["Add the index on the column you filter by.", "Give one number for every story."],
+      "mistakes": ["Say 'I added an index', not 'I have added a index'."], "next": "Practise the second answer out loud.",
+      "hook": "Two of the five answers are ready."}"#;
+    let (mut harness, _d, _r) =
+        harness(fixture_with("en", vec![Reply::text(REVIEW), Reply::text(DIGEST)]), 1120.0, 1000.0);
+    let wired = live(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    for text in ["I added an index.", "p95 went back to normal."] {
+        wired.events.send(Event::Turn { who: Who::You, text: text.into(), language: None, append: false }).unwrap();
+    }
+    harness.run();
+    harness.get_by_label("End call").click();
+    wait_until(&mut harness, "the notes appear", |h| h.state().core.notebook.notes.len() == 3);
+    harness.run_steps(2);
+    harness.get_by_label("THE 20% TO KEEP");
+    harness.get_by_label("Add the index on the column you filter by.");
+    harness.get_by_label_contains("Practise the second answer out loud.");
+    shot(&mut harness, "review-notes-en");
+    harness.get_by_label("Open notes").click();
+    harness.run_steps(2);
+    harness.get_by_label("Give one number for every story.");
+}

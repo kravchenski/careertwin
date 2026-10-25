@@ -65,6 +65,18 @@ impl Paths {
     pub fn stats_file(&self) -> PathBuf {
         self.data.join("stats.json")
     }
+
+    pub fn syllabus_file(&self) -> PathBuf {
+        self.data.join("syllabus.json")
+    }
+
+    pub fn progress_file(&self) -> PathBuf {
+        self.data.join("progress.json")
+    }
+
+    pub fn notes_file(&self) -> PathBuf {
+        self.data.join("notes.json")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -15,6 +15,7 @@ pub mod i18n;
 pub mod jobs;
 pub mod llm;
 pub mod models;
+pub mod notes;
 pub mod ops;
 pub mod pomodoro;
 pub mod prompts;
@@ -25,6 +26,7 @@ pub mod session;
 pub mod speech;
 pub mod srs;
 pub mod stats;
+pub mod syllabus;
 pub mod testing;
 pub mod textdiff;
 #[cfg(feature = "gui")]
