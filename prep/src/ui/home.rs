@@ -62,22 +62,23 @@ fn main_action(core: &Core, track: Track) -> (String, String, Nav) {
                 Some(index) => {
                     let topic = &plan.topics[index];
                     (
-                        tr.fill(K::HomeStartTopic, &[("topic", &topic.name)]),
+                        tr.get(K::HomeStartRun).to_owned(),
                         tr.fill(
-                            K::HomeLineTechnical,
+                            K::HomeLineRun,
                             &[
                                 ("topic", &topic.name),
-                                ("n", &topic.terms.len().to_string()),
                                 ("lang", &crate::i18n::language_phrase(tr, core.settings.practice_name())),
                             ],
                         ),
-                        Nav::Tutor { mode: Mode::Terms, topic: Some(index) },
+                        Nav::FullInterview,
                     )
                 }
                 None if plan.topics.iter().all(|t| t.terms.is_empty()) => {
                     (tr.get(K::CardPlan).to_owned(), tr.get(K::HomeLineNoTerms).to_owned(), Nav::Plan)
                 }
-                None => (tr.get(K::CardCode).to_owned(), tr.get(K::HomeLineAllLearned).to_owned(), Nav::Code),
+                None => {
+                    (tr.get(K::HomeStartRun).to_owned(), tr.get(K::HomeLineAllLearned).to_owned(), Nav::FullInterview)
+                }
             },
         },
     }

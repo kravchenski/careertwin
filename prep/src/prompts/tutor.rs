@@ -67,7 +67,8 @@ pub struct LessonView {
     pub stage: Stage,
 }
 
-/// How a lesson is going: which term, which stage, how long on it.
+/// How a lesson is going: which term, which stage (first all the terms in your words, then all of
+/// them in English), how long on it.
 #[derive(Debug, Clone)]
 pub struct LessonState {
     pub index: usize,
@@ -85,21 +86,27 @@ impl LessonState {
         Self { index: 0, stage: Stage::Native, turns: 0, total }
     }
 
+    /// Every term has been gone through in your words and then again in English.
     pub fn done(&self) -> bool {
-        self.index >= self.total
+        self.stage == Stage::English && self.index >= self.total
     }
 
     pub fn answered(&mut self) {
         self.turns += 1;
     }
 
-    /// The term was explained in your own words: on to English. Returns whether anything changed.
+    /// The term was explained in your own words: on to the next one, and after the last one the
+    /// second stage begins, English, from the first term again. Returns whether anything changed.
     pub fn native_done(&mut self) -> bool {
         if self.done() || self.stage != Stage::Native {
             return false;
         }
-        self.stage = Stage::English;
+        self.index += 1;
         self.turns = 0;
+        if self.index >= self.total {
+            self.stage = Stage::English;
+            self.index = 0;
+        }
         true
     }
 
@@ -109,7 +116,6 @@ impl LessonState {
             return false;
         }
         self.index += 1;
-        self.stage = Stage::Native;
         self.turns = 0;
         true
     }
@@ -189,36 +195,47 @@ fn terms_rules(spec: &InterviewerSpec, lesson: &Lesson) -> String {
     let target = spec.target_name();
     format!(
         "THE LESSON\n\
-         Today's topic is \"{topic}\". You go through its terms one by one, in this order. This is your reference: \
+         Today's topic is \"{topic}\". Its terms are below, in the order you take them. This is your reference: \
          say it in your own words, never read it out.\n{reference}\n\
-         HOW EACH TERM GOES\n\
-         Stage one, in {native}: ask what the term means, in their own words, in one short question. Listen to the \
-         whole answer.\n\
-         - If it is right, say so in a few words, finish the stage with the tag [[native: S]] and, in the same \
-         message, start stage two by asking them to say it in {target}, the way they would if the interviewer asked.\n\
+         HOW THE LESSON GOES\n\
+         There are two stages and each covers every term, one after the other. Do not mix them: first all the terms \
+         in {native}, then all of them again in {target}.\n\
+         Stage one, in {native}: the person works out what they do not know yet.\n\
+         - Take the terms in order. For each, ask what it means, in their own words, in one short question. Listen \
+         to the whole answer.\n\
+         - If it is right, say so in a few words and go on to the next term.\n\
          - If it is partly right, say what is right, put the rest in one or two plain sentences using the \
          comparison, and ask them to say it again in their own words.\n\
          - If they do not know, do not give the answer yet: ask a small leading question or give the comparison, \
          let them build the idea, then say it in two sentences and ask them to say it back.\n\
-         - After at most three exchanges finish the stage in the same way, whatever the result.\n\
-         Stage two, in {target}:\n\
-         - Accept imperfect {target}. Repeat the correct form naturally inside your reply instead of pointing at \
-         the error, and mention at most one slip a turn, the one that would hurt most in an interview.\n\
-         - When the answer is solid, ask the follow-up the interviewer would ask next, in {target}, and wait for \
-         the reply.\n\
-         - After their reply to the follow-up (or after at most three exchanges) finish the stage with the tag \
-         [[english: S]] and, in the same message, start the next term with its stage-one question, in {native}.\n\
+         - After at most three exchanges on a term move on, whatever the result: finish the term with the tag \
+         [[native: S]] in the message that starts the next term's question. After the last term, say in one \
+         sentence that now you will go through the same terms in {target}, as the interviewer would, with \
+         different questions, and put [[native: S]] on that message.\n\
+         Stage two, in {target}: the same terms again, in the same order, with new questions, the way an \
+         interviewer asks them: a scenario, a \"why\", a \"what would you do\", one of the likely follow-ups. \
+         Never repeat a question from stage one.\n\
+         - Listen to the whole answer and react to what they said in a few words.\n\
+         - Then fix the grammar. They know {target} well, and their grammar is what lets them down, so this matters \
+         more than anything else in this stage. Say the corrected sentence once, whole (\"Say it like this: ...\"), \
+         name the rule in {native} in one short phrase, and ask them to say that sentence once more. Fix the two \
+         most important mistakes of the turn, never more. If the answer was clean, say so in a few words.\n\
+         - If the idea itself is wrong, put the idea right first, briefly, in {native} if they need it, then the \
+         grammar.\n\
+         - When the answer is solid and clean, or after at most three exchanges, finish the term with the tag \
+         [[english: S]] in the message that asks the next question.\n\
          A tag belongs only in the message in which you move on, together with the first words of what comes next. \
-         Never put a tag in a message that still asks them something about the current stage.\n\
+         Never put a tag in a message that still asks them something about the current term.\n\
          S is a whole number from 0 to 3, and you must be honest, because it decides what comes back: 0 they could \
          not do it, 1 they needed a lot of help, 2 good with a small slip, 3 solid on their own.\n\
-         When the last term is finished, wrap up in two sentences and add [[end]].\n\n{tags}",
+         When the last term of stage two is finished, wrap up in two sentences and add [[end]].\n\n{tags}",
         topic = lesson.topic,
         reference = reference(lesson),
         tags = tag_rules(
             "[[native: S]] and [[english: S]] as above.\n\
-             [[note: one thing to remember]] when something comes up that is worth keeping (a rule, a phrase, a slip \
-             to avoid), under 25 words, in the language you were speaking. Not in every message.\n"
+             [[note: one thing to remember]] when something comes up that is worth keeping (a rule, a phrase, a \
+             grammar slip written as wrong -> right with the rule in two or three words), under 25 words, in the \
+             language you were speaking. Not in every message.\n"
         ),
     )
 }
@@ -505,14 +522,15 @@ mod tests {
         let text = system(&german, &brief());
         for must in [
             "Stage two, in German",
-            "say it in German",
-            "Accept imperfect German",
+            "all of them again in German",
+            "They know German well",
             "The person thinks in Russian and is practising German",
         ] {
             assert!(text.contains(must), "missing: {must}");
         }
         assert!(!text.contains("practising English") && !text.contains("Stage two, in English"));
         let mut state = LessonState::new(2);
+        state.native_done();
         state.native_done();
         assert!(state_note(&german, 60, 1, Clock::Normal, Some(&state)).contains("stage two, in German"));
         // and nothing changes when none is chosen
@@ -576,16 +594,18 @@ mod tests {
     }
 
     #[test]
-    fn a_lesson_moves_from_your_words_to_english_and_on_to_the_next_term() {
+    fn a_lesson_goes_through_every_term_in_your_words_and_then_through_every_term_in_english() {
         let mut state = LessonState::new(2);
         assert!(!state.english_done(), "English cannot come before your own words");
         assert!(state.native_done());
-        assert!(!state.native_done(), "a tag repeated by the model changes nothing");
-        assert_eq!((state.index, state.stage), (0, Stage::English));
-        assert!(state.english_done());
         assert_eq!((state.index, state.stage, state.turns), (1, Stage::Native, 0));
-        state.native_done();
-        state.english_done();
+        assert!(state.native_done());
+        assert_eq!((state.index, state.stage), (0, Stage::English), "the second stage begins again at the first term");
+        assert!(!state.native_done(), "a tag repeated by the model changes nothing");
+        assert!(state.english_done());
+        assert_eq!((state.index, state.stage), (1, Stage::English));
+        assert!(!state.done());
+        assert!(state.english_done());
         assert!(state.done());
         assert!(!state.native_done() && !state.english_done());
     }
@@ -597,9 +617,11 @@ mod tests {
         let view = state.view(&lesson).unwrap();
         assert_eq!((view.index, view.total, view.name.as_str(), view.stage), (0, 2, "Encapsulation", Stage::Native));
         state.native_done();
-        state.english_done();
         assert_eq!(state.view(&lesson).unwrap().name, "Polymorphism");
         state.native_done();
+        let again = state.view(&lesson).unwrap();
+        assert_eq!((again.name.as_str(), again.stage), ("Encapsulation", Stage::English));
+        state.english_done();
         state.english_done();
         let done = state.view(&lesson).unwrap();
         assert_eq!((done.index, done.total), (2, 2), "all done");
@@ -615,11 +637,11 @@ mod tests {
             note.contains("[LESSON: term 1 of 2, \"Encapsulation\", stage one, in Russian; they have answered 0 times")
         );
         state.native_done();
+        state.native_done();
         state.turns = STAGE_LIMIT;
         let note = state_note(&spec, 300, 4, Clock::Normal, Some(&state));
         assert!(note.contains("stage two, in English") && note.contains("That is enough here"), "{note}");
         state.english_done();
-        state.native_done();
         state.english_done();
         assert!(state_note(&spec, 400, 6, Clock::Normal, Some(&state)).contains("every term is finished"));
     }

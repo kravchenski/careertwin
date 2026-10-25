@@ -76,6 +76,19 @@ pub enum Screen {
     Code(Box<code::SetupView>),
 }
 
+/// How long the full technical interview is meant to last, and how long it keeps taking topics
+/// before the coding task, which needs the rest.
+pub const RUN_MINUTES: u64 = 90;
+pub const RUN_TOPICS_MINUTES: u64 = 65;
+
+/// The full technical interview in progress: which topics it has taken, and whether it got to code.
+#[derive(Debug, Clone)]
+pub struct Run {
+    pub started: Instant,
+    pub done: Vec<usize>,
+    pub coded: bool,
+}
+
 /// What a screen asks the window to do next.
 #[derive(Debug, Clone)]
 pub enum Nav {
@@ -96,6 +109,11 @@ pub enum Nav {
     },
     /// A call with the defaults of the tab, with no setup page.
     QuickCall,
+    /// The whole technical interview: the topics of the plan one after another, then code. The
+    /// tutor leads it from start to end.
+    FullInterview,
+    /// The tutor ended the call by itself: the interview goes on with its next part, if there is one.
+    CallFinished,
     /// A lesson with the tutor; `topic` is an index into the plan, for a terms lesson.
     Tutor {
         mode: Mode,
@@ -185,6 +203,8 @@ pub struct Core {
     pub settings_open: bool,
     pub usage_open: bool,
     pub help_open: bool,
+    /// The full technical interview that is going on, if any.
+    pub run: Option<Run>,
     /// Whether the window has been drawn once already: the click that opened it is not one that closes it.
     pub usage_seen: bool,
     pub help_seen: bool,
@@ -731,6 +751,7 @@ impl PrepApp {
                 settings_open: false,
                 usage_open: false,
                 help_open: false,
+                run: None,
                 usage_seen: false,
                 help_seen: false,
                 account_open: false,
@@ -866,7 +887,13 @@ impl PrepApp {
             Nav::Home => self.screen = Screen::Home,
             Nav::SetupCall => self.screen = Screen::Setup(Box::new(setup::SetupView::new(&self.core))),
             Nav::StartCall { spec, headphones } => self.start_call(*spec, headphones),
-            Nav::CallEnded => self.end_call(),
+            Nav::CallEnded => {
+                // the person ended it: that is the end of the interview too
+                self.core.run = None;
+                self.end_call();
+            }
+            Nav::CallFinished => self.finish_part(),
+            Nav::FullInterview => self.start_run(),
             Nav::Concepts => self.screen = Screen::Concepts(Box::new(concepts::ConceptsView::new(&self.core))),
             Nav::Phrases => self.screen = Screen::Phrases(Box::default()),
             Nav::Translate => self.screen = Screen::Translate(Box::default()),
@@ -948,6 +975,61 @@ impl PrepApp {
         };
         let handle = crate::conversation::start(deps, config);
         self.screen = Screen::Live(Box::new(live::LiveView::new(session, spec, handle, guard)));
+    }
+
+    /// Starts the full technical interview.
+    fn start_run(&mut self) {
+        if self.core.syllabus.is_none() {
+            self.screen = Screen::Plan(Box::default());
+            return;
+        }
+        self.core.run = Some(Run { started: Instant::now(), done: Vec::new(), coded: false });
+        self.next_part();
+    }
+
+    /// The tutor ended a part by itself. The notes and the review of it are made in the background,
+    /// and the interview goes straight on with its next part.
+    fn finish_part(&mut self) {
+        let part = match &self.screen {
+            Screen::Live(view) => Some((view.spec.mode, view.session.candidate_turns())),
+            _ => None,
+        };
+        self.end_call();
+        match part {
+            Some((Mode::Terms, turns)) if turns > 0 && self.core.run.is_some() => self.next_part(),
+            _ => self.core.run = None,
+        }
+    }
+
+    /// The next part of the interview: the next topic of the plan while there is time for it, then
+    /// a coding task, then the end.
+    fn next_part(&mut self) {
+        let core = &mut self.core;
+        let Some(run) = core.run.as_mut() else { return };
+        let elapsed = run.started.elapsed();
+        let plan = core.syllabus.as_ref();
+        let next = plan.and_then(|plan| {
+            let mut order = plan.study_order();
+            // what is not known comes first, and what is known is asked after it
+            order.sort_by_key(|i| {
+                plan.topics[*i].terms.is_empty() || core.progress.topic_mastery(&plan.topics[*i]) >= 0.99
+            });
+            order.into_iter().find(|i| !run.done.contains(i) && !plan.topics[*i].terms.is_empty())
+        });
+        match next {
+            Some(index) if elapsed < std::time::Duration::from_secs(RUN_TOPICS_MINUTES * 60) => {
+                run.done.push(index);
+                self.start_tutor(Mode::Terms, Some(index));
+            }
+            _ if !run.coded => {
+                run.coded = true;
+                self.start_tutor(Mode::Coding, None);
+            }
+            _ => {
+                core.run = None;
+                self.screen = Screen::Home;
+            }
+        }
     }
 
     /// Starts a lesson with the tutor: the terms of a topic, the introduction, or a quiet chat.

@@ -695,37 +695,47 @@ impl Harness {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_terms_lesson_goes_from_your_words_to_english_and_on_to_the_next_term() {
+async fn a_terms_lesson_goes_through_every_term_in_your_words_and_then_through_every_term_in_english() {
     let mut call = start(Setup {
         spec: Some(lesson_spec(Mode::Terms)),
         replies: vec![
             Reply::text("Привет, Алекс. Сегодня ООП. Что такое инкапсуляция, своими словами?"),
-            Reply::text("Да, верно. Теперь скажи то же по-английски, как на собеседовании. [[native: 3]]"),
-            Reply::text("Good. Now, what is polymorphism, in your own words? [[english: 2]]"),
+            Reply::text("Да, верно. А что такое полиморфизм? [[native: 3]]"),
+            Reply::text("Хорошо. Теперь пройдём то же по-английски. What does encapsulation protect? [[native: 2]]"),
+            Reply::text("Say it like this: an object hides its state. Next, what is polymorphism? [[english: 3]]"),
         ],
-        stt: vec!["Объект прячет внутри своё состояние.", "Encapsulation means an object hides its state."],
+        stt: vec![
+            "Объект прячет внутри своё состояние.",
+            "Один интерфейс, разные реализации.",
+            "It protect the state of an object.",
+        ],
         ..Setup::default()
     });
     call.listening().await;
-    call.say_aloud(1500).await;
-    call.listening().await;
-    call.say_aloud(1500).await;
-    call.listening().await;
+    for _ in 0..3 {
+        call.say_aloud(1500).await;
+        call.listening().await;
+    }
     // the words that were said and shown are free of tags
     assert!(call.captions().iter().all(|c| !c.contains("[[")), "{:?}", call.captions());
     assert!(call.turns().iter().all(|t| !t.1.contains("[[")), "{:?}", call.turns());
-    // and the call understood them
+    // and the call understood them: the first stage covers both terms, then the second begins again
     assert_eq!(
         call.progress(),
-        vec![("Encapsulation".to_owned(), Half::Native, 3), ("Encapsulation".to_owned(), Half::English, 2)]
+        vec![
+            ("Encapsulation".to_owned(), Half::Native, 3),
+            ("Polymorphism".to_owned(), Half::Native, 2),
+            ("Encapsulation".to_owned(), Half::English, 3),
+        ]
     );
     let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
-    assert_eq!(places, vec![(0, Stage::Native), (0, Stage::English), (1, Stage::Native)]);
+    assert_eq!(places, vec![(0, Stage::Native), (1, Stage::Native), (0, Stage::English), (1, Stage::English)]);
     // each request told the tutor where the lesson was
     let requests = call.llm.requests.lock().unwrap().clone();
     let note = |n: usize| requests[n].last().unwrap().content.clone();
     assert!(note(1).contains("term 1 of 2, \"Encapsulation\", stage one, in Russian"), "{}", note(1));
-    assert!(note(2).contains("term 1 of 2, \"Encapsulation\", stage two, in English"), "{}", note(2));
+    assert!(note(2).contains("term 2 of 2, \"Polymorphism\", stage one, in Russian"), "{}", note(2));
+    assert!(note(3).contains("term 1 of 2, \"Encapsulation\", stage two, in English"), "{}", note(3));
     assert!(requests[0][0].content.contains("1. Encapsulation") && requests[0][0].content.contains("2. Polymorphism"));
 }
 

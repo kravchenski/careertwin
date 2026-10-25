@@ -464,6 +464,11 @@ strings! {
     // the home of each tab
     HomeStart => ("Start talking", "Начать разговор"),
     HomeStartTopic => ("Start: {topic}", "Начать: {topic}"),
+    HomeStartRun => ("Start the interview", "Начать собеседование"),
+    HomeLineRun => (
+        "About an hour and a half: the terms first in your words, then again {lang} with your grammar, then code. We begin with {topic}.",
+        "Около полутора часов: сначала термины своими словами, потом ещё раз {lang}, с разбором грамматики, потом код. Начнём с темы «{topic}»."
+    ),
     HomeIntroStart => ("Practise my introduction", "Потренировать самопрезентацию"),
     HomeLineEnglish => (
         "Ten minutes of real conversation. Mistakes are fine: I answer like a person would.",
@@ -483,8 +488,8 @@ strings! {
         "Вставьте вакансию, и я выясню, о чём вас, скорее всего, спросят."
     ),
     HomeLineAllLearned => (
-        "Every term of the plan is learned. Time to write some code.",
-        "Все термины плана выучены. Пора писать код."
+        "Every term of the plan is learned. I will ask them again, in a different order, and then give you code.",
+        "Все термины плана выучены. Я спрошу их ещё раз, по-другому, а потом дам задачу на код."
     ),
     HomeLineNoTerms => (
         "The plan has no terms yet. Open it and have them written.",

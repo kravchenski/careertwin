@@ -1154,6 +1154,56 @@ fn plan_of_two() -> Syllabus {
     }
 }
 
+/// The tutor ends the part that is on: you have answered, and it says goodbye.
+fn the_tutor_ends_this_part(harness: &mut Harness<'_, PrepApp>) {
+    let Screen::Live(view) = &mut harness.state_mut().screen else { panic!("a part should be on") };
+    view.session.add_turn(Who::You, "an answer", None);
+    view.finished = true;
+    harness.run_steps(4);
+}
+
+#[test]
+fn the_interview_goes_from_topic_to_topic_then_to_code_and_the_cross_ends_it() {
+    use careertwin_prep::testing::Reply;
+    let replies = vec![Reply::text("Let us start."), Reply::text("Next topic."), Reply::text("And more.")];
+    let (mut harness, _d, _r) = harness(fixture_with("en", replies), 1120.0, 900.0);
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    harness.run();
+    harness.get_by_label("Start the interview").click();
+    harness.run_steps(3);
+    let topic = |harness: &Harness<'_, PrepApp>| match &harness.state().screen {
+        Screen::Live(view) => view.spec.lesson.as_ref().map(|lesson| lesson.topic.clone()),
+        _ => None,
+    };
+    assert_eq!(topic(&harness).as_deref(), Some("OOP"));
+    assert!(harness.state().core.run.is_some());
+    // the tutor ends the first topic by itself: the second one follows at once, with nobody pressing anything
+    the_tutor_ends_this_part(&mut harness);
+    assert_eq!(topic(&harness).as_deref(), Some("REST"));
+    assert!(harness.state().core.run.is_some());
+    // and after the last topic comes the code
+    the_tutor_ends_this_part(&mut harness);
+    assert!(matches!(harness.state().screen, Screen::Code(_)), "the coding task comes after the topics");
+    assert!(harness.state().core.run.as_ref().is_some_and(|run| run.coded));
+}
+
+#[test]
+fn ending_a_part_with_the_cross_ends_the_whole_interview() {
+    use careertwin_prep::testing::Reply;
+    let (mut harness, _d, _r) = harness(fixture_with("en", vec![Reply::text("Let us start.")]), 1120.0, 900.0);
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    harness.run();
+    harness.get_by_label("Start the interview").click();
+    harness.run_steps(3);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.session.add_turn(Who::You, "an answer", None);
+    }
+    harness.get_by_label("End call").click();
+    harness.run_steps(3);
+    assert!(harness.state().core.run.is_none(), "the cross stops the interview");
+    assert!(matches!(harness.state().screen, Screen::Review(_)));
+}
+
 #[test]
 fn with_a_plan_the_main_button_starts_the_next_topic_as_a_lesson_and_the_timer() {
     use careertwin_prep::testing::Reply;
@@ -1161,8 +1211,8 @@ fn with_a_plan_the_main_button_starts_the_next_topic_as_a_lesson_and_the_timer()
     let (mut harness, _d, _r) = harness(fixture_with("en", vec![reply]), 1120.0, 900.0);
     harness.state_mut().core.syllabus = Some(plan_of_two());
     harness.run();
-    harness.get_by_label_contains("Today: OOP, 2 terms");
-    harness.get_by_label("Start: OOP").click();
+    harness.get_by_label_contains("We begin with OOP");
+    harness.get_by_label("Start the interview").click();
     harness.run_steps(3);
     let Screen::Live(view) = &harness.state().screen else { panic!("a lesson should have started") };
     assert_eq!(view.spec.mode, Mode::Terms);
@@ -1908,7 +1958,7 @@ fn another_practised_language_is_chosen_in_settings_and_shows_in_the_lesson() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
     harness.state_mut().core.syllabus = Some(plan_of_two());
     harness.run();
-    harness.get_by_label_contains("then in English");
+    harness.get_by_label_contains("in English with your grammar");
     open_settings(&mut harness);
     // the choice sits low in the settings window, below what a headless window shows
     harness_draft(&mut harness).settings.practice_language = "German".into();
@@ -1916,7 +1966,7 @@ fn another_practised_language_is_chosen_in_settings_and_shows_in_the_lesson() {
     harness.get_by_label("Save").click();
     harness.run_steps(3);
     assert_eq!(harness.state().core.settings.practice_name(), "German");
-    harness.get_by_label_contains("then in German");
+    harness.get_by_label_contains("in German with your grammar");
     // a lesson started now practises German
     let wired = tutoring(&mut harness, Mode::Terms);
     let _ = wired;
@@ -1949,9 +1999,10 @@ fn when_every_term_is_learned_the_main_button_is_live_coding_and_a_plan_without_
     }
     harness.run_steps(2);
     harness.get_by_label_contains("Every term of the plan is learned");
-    harness.get_all_by_label("Live coding").next().unwrap().click();
+    harness.get_by_label("Start the interview").click();
     harness.run_steps(3);
-    assert!(matches!(harness.state().screen, Screen::Code(_)));
+    let Screen::Live(view) = &harness.state().screen else { panic!("the interview should have started") };
+    assert_eq!(view.spec.mode, Mode::Terms, "what is known is asked again: an interview tests everything");
 }
 
 #[test]

@@ -386,7 +386,8 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
         }
     }
     if view.finished {
-        return Some(Nav::CallEnded);
+        // the tutor ended it by itself, so an interview in progress goes on
+        return Some(Nav::CallFinished);
     }
     // Space skips what the tutor is saying, unless a text box has the keyboard
     if view.state == State::Speaking && !ctx.egui_wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Space)) {
