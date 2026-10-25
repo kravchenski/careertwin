@@ -199,12 +199,18 @@ Measured on a 12-core laptop CPU, release build, GPU not used (`cargo test --rel
 | | Time | What it means |
 |---|---|---|
 | Hearing, Whisper small, a four-second phrase | 0.65 to 0.7 s | a short answer is understood before you notice; a 20-second one takes a few seconds |
-| Voice, Kokoro, four seconds of speech | about 3 s (0.77 times real time) | the first sentence of a reply comes after about three seconds, and the next ones keep up |
+| Voice, Kokoro, four seconds of speech | about 3 s on the processor (0.77 times real time); 0.27 s on an NVIDIA card | on the processor the first piece of a reply comes after about 2.5 s; on the card after half a second |
+| The whole wait, your last word to its first, on the card with a fast model | 2.3 s | 1.1 s of it is hearing you (0.7 s of silence ends a turn), 0.6 s the model, 0.5 s the voice |
 | Round trip: the voice says a sentence, the ear hears it | 100% of the words | |
 
 The program makes Whisper read only as much audio as the clip needs, which made short answers about four times faster
 than reading a full 30-second window. On a CPU with fewer cores than that the voice can fall behind real time; then use
-a cloud or server voice and keep hearing offline. Both engines run on the CPU by default.
+a cloud or server voice and keep hearing offline. Hearing runs on the processor. The voice runs on an NVIDIA card when the installer finds one: it looks for `nvidia-smi`
+and the CUDA toolkit (`nvcc`), builds with the `gpu` feature for the card's compute capability (using an older gcc
+if yours is newer than nvcc accepts) and falls back to the processor build if that does not work; `NO_GPU=1`
+skips it. The first sentence after the program starts waits a few seconds for the card to be set up, which is
+why the voice is loaded as soon as the program opens. The build needs the CUDA libraries at run time, so on a computer
+without them use `NO_GPU=1`.
 
 Kokoro speaks English only, so the Russian half of a lesson is said by Piper, the speech engine of the Rhasspy project:
 its own Linux x86-64 release (26 MB) and one Russian voice (63 MB), fetched on first use and checked against the sizes

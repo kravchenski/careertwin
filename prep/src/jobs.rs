@@ -60,6 +60,11 @@ impl<T: Send + 'static> Jobs<T> {
         id
     }
 
+    /// Starts work nobody waits for: it is not listed, has no result and cannot be stopped.
+    pub fn detach(&self, work: impl Future<Output = ()> + Send + 'static) {
+        self.runtime.spawn(work);
+    }
+
     /// Stops a job that is still running. It never reports a result. False if it was not running.
     pub fn cancel(&mut self, id: u64) -> bool {
         let was_running = self.running.iter().any(|job| job.id == id);

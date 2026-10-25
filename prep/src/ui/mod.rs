@@ -337,6 +337,13 @@ impl Core {
         self.downloads.push(Download { name: name.to_owned(), progress, failed: None, finished: false, job, partials });
     }
 
+    /// Loads the voice in the background, so the first sentence of the first call does not wait for it.
+    pub fn warm_up_voice(&self) {
+        if let Some(tts) = self.services.tts.clone() {
+            self.jobs.detach(tts.warm_up());
+        }
+    }
+
     /// Stops a download the person does not want and removes what it had written so far.
     pub fn cancel_job(&mut self, job: u64) {
         self.jobs.cancel(job);
@@ -836,6 +843,7 @@ impl PrepApp {
         };
         crate::speech::download::remove_stale_partials(&app.core.paths.models_dir());
         app.core.prefetch_local();
+        app.core.warm_up_voice();
         app
     }
 
