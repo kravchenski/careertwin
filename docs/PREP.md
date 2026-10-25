@@ -133,6 +133,15 @@ The call is one loop (`prep/src/conversation.rs`) and each behaviour has a test 
   and each sentence is voiced as soon as it is complete, while the next is still being written.
 - **It waits for the end of a thought.** If what you said ends in "and", "so", "um" or a comma, it waits a moment for
   the rest and joins the two parts into one answer.
+- **It lets a long answer run.** The longer you have been talking, the longer a pause has to be before it takes your
+  turn as finished: a short answer is answered straight away, and after about fifteen seconds it waits up to two and a
+  half seconds more, so a minute-long story with pauses to think is one turn, not four.
+- **Its first words come quickly.** The first piece of a reply is cut at its first comma (or after a few words), so the
+  voice starts on a short piece while the rest is still being made; the voice loads while the model is thinking; and
+  the voice, the ear and the sphere run at the ordinary priority, so the rest of the machine is left alone. The real
+  wait, from your last word to its first, is measured by `prep/tests/latency.rs` on the real models. Most of what is
+  left is the model: a fast one (Settings, *Fast model*, for example one served by Groq through your gateway) answers in
+  a third of a second where a gateway's `auto` can take several seconds.
 - **It acknowledges you when it needs a moment.** If the model is slow, a short "Mm-hm" is played first, never after
   the real answer has started.
 - **It nudges you when you go quiet.** "Take your time" after 14 seconds, an offer to repeat the question after 40,
@@ -166,6 +175,9 @@ Build with the default `local` feature of the installer, then in Settings choose
 recognition and for the voice. The program downloads the models on first use. Every file has its size and SHA-256
 written in the program (`prep/src/models.rs`) and is checked before it is used, and the Kokoro files are pinned to one
 commit of their repository.
+
+A download shows how far it is in the *Background* list of the left drawer and in Settings, and has a cross that stops it
+and removes the half-written file. Choosing another model in Settings stops the one that was not wanted after all.
 
 What fits where (the program detects the memory and the cores and suggests):
 
