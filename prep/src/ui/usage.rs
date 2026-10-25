@@ -31,6 +31,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
     }
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         core.usage_open = false;
+        core.usage_seen = false;
         return;
     }
     let tr = core.tr;
@@ -42,7 +43,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
     let covered =
         core.syllabus.as_ref().map(|plan| format!("{}%", (plan.coverage(&core.progress) * 100.0).round() as u32));
     let mut close = false;
-    egui::Window::new(tr.get(K::UsageTitle))
+    let shown = egui::Window::new(tr.get(K::UsageTitle))
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 10.0))
         .fixed_size(vec2(600.0, 0.0))
         .collapsible(false)
@@ -90,7 +91,15 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
                 }
             });
         });
+    // a click anywhere outside the window closes it, but not the click that opened it
+    if let Some(shown) = shown {
+        if core.usage_seen && widgets::clicked_outside(ctx, shown.response.rect) {
+            close = true;
+        }
+        core.usage_seen = true;
+    }
     if close {
         core.usage_open = false;
+        core.usage_seen = false;
     }
 }

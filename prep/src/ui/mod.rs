@@ -185,6 +185,9 @@ pub struct Core {
     pub settings_open: bool,
     pub usage_open: bool,
     pub help_open: bool,
+    /// Whether the window has been drawn once already: the click that opened it is not one that closes it.
+    pub usage_seen: bool,
+    pub help_seen: bool,
     /// The menu over the panel at the bottom left, and its language choice.
     pub account_open: bool,
     pub language_open: bool,
@@ -728,6 +731,8 @@ impl PrepApp {
                 settings_open: false,
                 usage_open: false,
                 help_open: false,
+                usage_seen: false,
+                help_seen: false,
                 account_open: false,
                 language_open: false,
                 account_chip: Rect::NOTHING,
@@ -767,8 +772,14 @@ impl PrepApp {
             self.on_timer_signal(signal);
         }
         self.shortcuts(ui);
-        account::bar(&mut self.core, ui);
-        let mut next = self.top_bar(ui);
+        // in a call there is the sphere and two buttons, and nothing else to look at
+        let in_call = matches!(self.screen, Screen::Live(_));
+        if in_call {
+            self.core.account_open = false;
+        } else {
+            account::bar(&mut self.core, ui);
+        }
+        let mut next = self.top_bar(ui, in_call);
         if let Screen::Live(view) = &mut self.screen {
             next = next.or(live::composer(&mut self.core, view, ui));
         }
@@ -843,6 +854,11 @@ impl PrepApp {
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl_shift, Key::T))) {
             self.core.pomodoro.toggle(Instant::now());
         }
+    }
+
+    /// Opens a screen as a click on it would; for tests and for anything that drives the window.
+    pub fn navigate(&mut self, nav: Nav) {
+        self.go(nav);
     }
 
     fn go(&mut self, nav: Nav) {
@@ -1316,7 +1332,7 @@ impl PrepApp {
         }
     }
 
-    fn top_bar(&mut self, ui: &mut Ui) -> Option<Nav> {
+    fn top_bar(&mut self, ui: &mut Ui, in_call: bool) -> Option<Nav> {
         let mut nav = None;
         egui::Panel::top("bar")
             .exact_size(70.0)
@@ -1340,11 +1356,12 @@ impl PrepApp {
                         self.core.history_open = !self.core.history_open;
                     }
                 });
-                // the timer keeps its full form while there is room beside the tabs, and shrinks when not
-                let compact = pill.right() + 14.0 + focus::PILL_WIDTH > bar.right();
-                let size = vec2(if compact { focus::PILL_COMPACT } else { focus::PILL_WIDTH }, 44.0);
-                let right = Rect::from_min_size(pos2(bar.right() - size.x, bar.center().y - size.y / 2.0), size);
-                ui.scope_builder(UiBuilder::new().max_rect(right), |ui| focus::pill(&mut self.core, ui, compact));
+                // the timer runs on in a call, but it is not shown there: the break screen says when it is time
+                if !in_call {
+                    let size = vec2(focus::PILL_WIDTH, 44.0);
+                    let right = Rect::from_min_size(pos2(bar.right() - size.x, bar.center().y - size.y / 2.0), size);
+                    ui.scope_builder(UiBuilder::new().max_rect(right), |ui| focus::pill(&mut self.core, ui));
+                }
             });
         nav
     }

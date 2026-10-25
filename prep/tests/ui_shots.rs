@@ -97,12 +97,18 @@ pub fn open_ways(harness: &mut Harness<'_, PrepApp>) {
     }
 }
 
-/// Starts one of the ways to practise from the drawer.
+/// Opens one of the screens as a click on it would. They are not listed anywhere in the window any
+/// more, because the tutor leads and opens the one it needs; the table of them is still there.
 pub fn click_card(harness: &mut Harness<'_, PrepApp>, label: &str) {
-    open_ways(harness);
-    harness.get_by_label(label).scroll_to_me();
-    harness.run_steps(12);
-    harness.get_by_label(label).click();
+    let tr = harness.state().core.tr;
+    let nav = [Track::English, Track::Technical, Track::Interview]
+        .into_iter()
+        .flat_map(careertwin_prep::ui::home::ways)
+        .find(|card| tr.get(card.title) == label)
+        .unwrap_or_else(|| panic!("there is no screen called {label}"))
+        .go;
+    harness.state_mut().navigate(nav);
+    harness.run_steps(3);
 }
 
 pub fn shot(harness: &mut Harness<'_, PrepApp>, name: &str) {
@@ -121,12 +127,12 @@ fn the_three_tabs_are_there_and_the_technical_one_is_the_start() {
     harness.get_by_label("Technical");
     harness.get_by_label("Interview");
     shot(&mut harness, "home-technical-en");
+    // the menu at the left lists what you did last and nothing else: the tutor leads
     open_ways(&mut harness);
-    harness.get_by_label("Mock interview");
-    harness.get_by_label("Live coding");
-    harness.get_by_label("Your plan");
-    harness.get_by_label("Explain with pictures");
-    harness.get_by_label("Write to the tutor");
+    harness.get_by_label("RECENT");
+    for way in ["Mock interview", "Live coding", "Your plan", "Explain with pictures", "Write to the tutor"] {
+        assert!(harness.query_by_label(way).is_none(), "{way} is not listed in the menu");
+    }
     shot(&mut harness, "ways-en");
 }
 
@@ -151,6 +157,50 @@ fn live(harness: &mut Harness<'_, PrepApp>) -> Wired {
     let session = Session::new(Track::Technical, Kind::Live, "Mock interview · Daniel · Tech lead");
     app.screen = Screen::Live(Box::new(LiveView::new(session, spec, handle, None)));
     Wired { events: event_tx, commands: command_rx }
+}
+
+#[test]
+fn in_a_call_there_is_no_panel_at_the_bottom_and_no_timer() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    harness.run();
+    harness.get_by_label("Account menu");
+    harness.get_by_label("Start the timer");
+    let _wired = live(&mut harness);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.has_microphone = true;
+    }
+    harness.run_steps(3);
+    assert!(harness.query_by_label("Account menu").is_none(), "the panel is not shown in a call");
+    assert!(harness.query_by_label("Start the timer").is_none(), "nor is the timer");
+    harness.get_by_label("Mute");
+    harness.get_by_label("End call");
+}
+
+#[test]
+fn a_click_outside_your_activity_closes_it_but_the_click_that_opened_it_does_not() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.run();
+    harness.get_by_label("0 of 25 min today").click();
+    harness.run_steps(3);
+    assert!(harness.state().core.usage_open, "the click that opened it did not close it");
+    // a click on empty ground, far from the window
+    let away = egui::pos2(60.0, 500.0);
+    harness.hover_at(away);
+    harness.run_steps(1);
+    harness.event(egui::Event::PointerButton {
+        pos: away,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    harness.event(egui::Event::PointerButton {
+        pos: away,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    harness.run_steps(3);
+    assert!(!harness.state().core.usage_open, "a click anywhere else closes it");
 }
 
 #[test]
@@ -634,8 +684,7 @@ fn settings_are_checked_saved_and_applied() {
     assert_eq!(saved.llm.key.expose(), "sk-test-1234567890");
     assert_eq!(saved.ui_language, careertwin_prep::config::UiLanguage::Ru);
     harness.run_steps(2);
-    open_ways(&mut harness);
-    harness.get_by_label("Пробное собеседование");
+    harness.get_by_label("Техническое собеседование");
 }
 
 fn harness_draft<'a>(harness: &'a mut Harness<'_, PrepApp>) -> &'a mut careertwin_prep::ui::settings::Draft {
@@ -649,22 +698,16 @@ fn the_other_tabs_have_their_own_cards() {
     harness.get_by_label("English").click();
     harness.run_steps(2);
     harness.get_by_label("English practice");
-    // the ways to practise are not on the page: they are in the drawer at the left
-    assert!(harness.query_by_label("Conversation").is_none(), "no grid of cards on the page");
-    open_ways(&mut harness);
-    harness.get_by_label("Conversation");
-    harness.get_by_label("Say it in English");
-    harness.get_by_label("Phrases to review");
+    // there is no grid of cards on the page, and no list of them anywhere: the tutor leads
+    assert!(harness.query_by_label("Conversation").is_none());
     shot(&mut harness, "home-english-en");
     harness.get_by_label("Interview").click();
     harness.run_steps(2);
     harness.get_by_label("Job interview");
-    harness.get_by_label("Mock interview");
-    harness.get_by_label("Prepare for a vacancy");
     harness.get_by_label("Technical").click();
     harness.run_steps(2);
     harness.get_by_label("Technical interview");
-    harness.get_by_label("Concept checks");
+    assert!(harness.query_by_label("Concept checks").is_none());
 }
 
 #[test]
@@ -676,10 +719,6 @@ fn the_whole_interface_speaks_russian() {
     harness.get_by_label("Собеседование");
     harness.get_by_label("Техническое собеседование");
     shot(&mut harness, "home-technical-ru");
-    open_ways(&mut harness);
-    harness.get_by_label("Пробное собеседование");
-    harness.get_by_label("Проверка понимания");
-    shot(&mut harness, "ways-ru");
     click_card(&mut harness, "Пробное собеседование");
     harness.run_steps(2);
     harness.get_by_label("Начать звонок");

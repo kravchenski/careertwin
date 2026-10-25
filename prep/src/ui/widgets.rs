@@ -311,6 +311,11 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str, diameter: f32, tint: Op
     response
 }
 
+/// Whether the person clicked somewhere outside `rect` in this frame.
+pub fn clicked_outside(ctx: &egui::Context, rect: Rect) -> bool {
+    ctx.input(|i| i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|at| !rect.contains(at)))
+}
+
 /// An icon with nothing behind it, for the way out beside something that matters more.
 pub fn quiet_icon(ui: &mut Ui, icon: Icon, label: &str, size: f32) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());

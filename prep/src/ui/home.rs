@@ -1,24 +1,24 @@
 //! The first page of each tab. It looks like the call itself: the sphere, a line from the tutor and
-//! the one thing to do now, and what you did last below it. The numbers live in Your activity.
+//! and the one thing to do now. The numbers live in Your activity and what you did last in the menu.
 
 use egui::{RichText, Ui, vec2};
 
 use super::orb;
-use super::theme::{self, BERRY, FAINT, MUTED, SNOW};
+use super::theme::{self, BERRY, MUTED, SNOW};
 use super::widgets::{self, primary_button};
 use super::{Core, Nav, scrolling_column};
 use crate::i18n::K;
 use crate::prompts::tutor::Mode;
-use crate::session::{Track, ago};
+use crate::session::Track;
 
-pub(super) struct Card {
+pub struct Card {
     pub title: K,
     pub text: K,
     pub go: Nav,
 }
 
-/// The ways to practise under a tab, for the list in the drawer.
-pub(super) fn ways(track: Track) -> Vec<Card> {
+/// The screens under a tab. They are not listed anywhere: the tutor leads, and opens the one it needs.
+pub fn ways(track: Track) -> Vec<Card> {
     let chat = Card { title: K::CardChat, text: K::CardChatText, go: Nav::Tutor { mode: Mode::Chat, topic: None } };
     let show = Card { title: K::CardShow, text: K::CardShowText, go: Nav::Show { topic: None, hint: String::new() } };
     match track {
@@ -143,20 +143,6 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
                     .font(theme::mono(12.5))
                     .color(BERRY),
             );
-        }
-        ui.add_space(26.0);
-        widgets::caps(ui, tr.get(K::ContinueLabel));
-        ui.add_space(4.0);
-        let recent = core.recent(track, 5);
-        if recent.is_empty() {
-            widgets::muted(ui, tr.get(K::NothingYet));
-        }
-        let now = core.now();
-        for session in recent {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&session.title).font(theme::semibold(15.5)).color(SNOW));
-                ui.label(RichText::new(ago(session.updated, now)).font(theme::mono(12.0)).color(FAINT));
-            });
         }
         ui.add_space(40.0);
     });

@@ -13,11 +13,12 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
     }
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         core.help_open = false;
+        core.help_seen = false;
         return;
     }
     let tr = core.tr;
     let mut close = false;
-    egui::Window::new(tr.get(K::HelpTitle))
+    let shown = egui::Window::new(tr.get(K::HelpTitle))
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 10.0))
         .fixed_size(vec2(560.0, 0.0))
         .collapsible(false)
@@ -55,7 +56,15 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
                 });
             }
         });
+    // a click anywhere outside the window closes it, but not the click that opened it
+    if let Some(shown) = shown {
+        if core.help_seen && widgets::clicked_outside(ctx, shown.response.rect) {
+            close = true;
+        }
+        core.help_seen = true;
+    }
     if close {
         core.help_open = false;
+        core.help_seen = false;
     }
 }
