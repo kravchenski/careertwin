@@ -75,6 +75,14 @@ pub fn harness(
     (harness, _dir, _runtime)
 }
 
+/// Settings are opened from the menu over the panel at the bottom left.
+pub fn open_settings(harness: &mut Harness<'_, PrepApp>) {
+    harness.get_by_label("Account menu").click();
+    harness.run_steps(2);
+    harness.get_by_label("Settings").click();
+    harness.run_steps(2);
+}
+
 pub fn shot(harness: &mut Harness<'_, PrepApp>, name: &str) {
     if let Ok(dir) = std::env::var("UI_SHOTS") {
         harness.run();
@@ -222,6 +230,8 @@ fn the_start_button_opens_a_call_on_the_real_engine_with_scripted_services() {
     let (mut harness, _d, _r) = harness(fixture_with("en", vec![reply]), 1120.0, 780.0);
     harness.run();
     harness.get_by_label("Mock interview").click();
+    harness.run();
+    harness.get_by_label("Start call").scroll_to_me();
     harness.run();
     harness.get_by_label("Start call").click();
     harness.run();
@@ -584,7 +594,7 @@ fn the_history_lists_sessions_filters_opens_and_deletes_them() {
 fn settings_are_checked_saved_and_applied() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
     harness.run();
-    harness.get_by_label("Settings").click();
+    open_settings(&mut harness);
     harness.run_steps(3);
     harness.get_by_label("Language model");
     harness.get_by_label("Speech recognition");
@@ -680,7 +690,7 @@ fn without_a_profile_the_technical_tab_says_so_and_will_not_start() {
 fn settings_say_which_models_fit_this_computer_and_can_apply_the_interviewer_suggestion() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
     harness.run();
-    harness.get_by_label("Settings").click();
+    open_settings(&mut harness);
     harness.run_steps(3);
     harness.get_by_label("Offline on this computer");
     harness.get_by_label_contains("GB of memory");
@@ -743,7 +753,7 @@ fn a_failed_download_is_explained_in_settings() {
         finished: false,
     });
     harness.run();
-    harness.get_by_label("Settings").click();
+    open_settings(&mut harness);
     harness.run_steps(3);
     harness.get_by_label_contains("Could not download Kokoro: could not reach huggingface.co");
 }
@@ -770,4 +780,134 @@ fn a_call_redraws_the_sphere_a_few_times_a_second_not_every_frame() {
     }
     let renders = harness.state().core.orb_renders;
     assert!((1..=4).contains(&renders), "{renders} pictures for forty frames");
+}
+
+#[test]
+fn the_panel_at_the_bottom_opens_a_menu_without_plans_or_downloads() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    harness.run();
+    assert!(harness.query_by_label("Usage").is_none(), "the menu is closed at first");
+    harness.get_by_label("Account menu").click();
+    harness.run_steps(2);
+    // the address comes from the ABOUT.md of the demo profile
+    harness.get_by_label("alex@example.com");
+    for item in ["Settings", "Usage", "Language", "Help", "Quit"] {
+        harness.get_by_label(item);
+    }
+    for gone in ["Upgrade", "Download", "More"] {
+        assert!(harness.query_by_label_contains(gone).is_none(), "{gone} does not belong in a free program");
+    }
+    shot(&mut harness, "account-menu-en");
+    harness.get_by_label("Quit").click();
+    harness.run_steps(2);
+    assert!(harness.state().core.quit, "quit asks the window to close");
+}
+
+#[test]
+fn the_menu_speaks_russian_and_changes_the_language() {
+    let (mut harness, _d, _r) = harness(fixture("ru"), 1120.0, 780.0);
+    harness.run();
+    harness.get_by_label("Меню профиля").click();
+    harness.run_steps(2);
+    for item in ["Настройки", "Использование", "Язык", "Помощь", "Выйти"] {
+        harness.get_by_label(item);
+    }
+    harness.get_by_label("Язык").click();
+    harness.run_steps(2);
+    harness.get_by_label("English").click();
+    harness.run_steps(3);
+    harness.get_by_label("Technical");
+    assert!(!harness.state().core.tr.is_russian());
+}
+
+#[test]
+fn usage_and_help_open_from_the_menu_and_close_again() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.state_mut().core.stats.add_practice(careertwin_prep::session::now(), 12 * 60, 140);
+    harness.run();
+    harness.get_by_label("Account menu").click();
+    harness.run_steps(2);
+    harness.get_by_label("Usage").click();
+    harness.run_steps(3);
+    harness.get_by_label("DAY STREAK");
+    assert!(harness.query_all_by_label("12 min").count() >= 1, "today and the total both show the twelve minutes");
+    shot(&mut harness, "usage-en");
+    harness.get_by_label("Close").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("DAY STREAK").is_none());
+    harness.get_by_label("Account menu").click();
+    harness.run_steps(2);
+    harness.get_by_label("Help").click();
+    harness.run_steps(3);
+    harness.get_by_label("KEYS");
+    harness.get_by_label("Ctrl+Shift+,");
+    shot(&mut harness, "help-en");
+}
+
+#[test]
+fn the_shortcut_opens_settings_from_anywhere() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::Comma);
+    harness.run_steps(3);
+    harness.get_by_label("Language model");
+    // and about you is in them
+    harness.get_by_label("YOUR NAME");
+    harness.get_by_label("Focus timer and goal");
+}
+
+#[test]
+fn the_focus_timer_starts_pauses_and_skips() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    harness.run();
+    assert!(!harness.state().core.pomodoro.running());
+    harness.get_by_label("Start the timer").click();
+    harness.run_steps(2);
+    assert!(harness.state().core.pomodoro.running());
+    harness.get_by_label("Pause the timer");
+    shot(&mut harness, "timer-running-en");
+    harness.get_by_label("Skip to the next phase").click();
+    harness.run_steps(2);
+    assert_eq!(harness.state().core.pomodoro.phase(), careertwin_prep::pomodoro::Phase::ShortBreak);
+    assert_eq!(harness.state().core.pomodoro.blocks, 0, "a skipped block is not counted");
+    harness.get_by_label("Pause the timer").click();
+    harness.run_steps(2);
+    assert!(!harness.state().core.pomodoro.running());
+}
+
+#[test]
+fn a_finished_block_is_counted_announced_and_chimed() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    harness.run();
+    harness
+        .state_mut()
+        .core
+        .on_timer(careertwin_prep::pomodoro::Signal::FocusDone { next: careertwin_prep::pomodoro::Phase::ShortBreak });
+    harness.run_steps(2);
+    harness.get_by_label_contains("Focus block done. Rest for 5 minutes");
+    assert_eq!(harness.state().core.stats.today(careertwin_prep::session::now()).focus_blocks, 1);
+    harness.get_by_label("Dismiss").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label_contains("Focus block done").is_none());
+}
+
+#[test]
+fn a_call_ending_is_counted_in_the_practice_log() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    let wired = live(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired
+        .events
+        .send(Event::Turn {
+            who: Who::You,
+            text: "I build the order API in Python.".into(),
+            language: None,
+            append: false,
+        })
+        .unwrap();
+    harness.run();
+    harness.get_by_label("End call").click();
+    harness.run_steps(3);
+    let today = harness.state().core.stats.today(careertwin_prep::session::now());
+    assert_eq!((today.sessions, today.words), (1, 7));
 }

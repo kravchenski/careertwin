@@ -1,7 +1,10 @@
 //! The window: a pill of three tabs at the top, a centred column under it, and a conversation in
 //! the middle of it. History and settings slide over it when asked for.
 
+pub mod account;
 pub mod concepts;
+pub mod focus;
+pub mod help;
 pub mod history;
 pub mod home;
 pub mod live;
@@ -13,6 +16,7 @@ pub mod settings;
 pub mod setup;
 pub mod theme;
 pub mod translate;
+pub mod usage;
 pub mod widgets;
 
 use std::sync::Arc;
@@ -25,6 +29,7 @@ use crate::config::{Paths, Settings};
 use crate::i18n::{K, Tr};
 use crate::jobs::Jobs;
 use crate::ops::OpError;
+use crate::pomodoro::Pomodoro;
 use crate::prompts::Lang;
 use crate::prompts::cards::ConceptCard;
 use crate::prompts::feedback::Feedback;
@@ -35,6 +40,7 @@ use crate::services::{Problems, Services};
 use crate::session::{Session, Store, Track};
 use crate::speech::Transcript;
 use crate::srs::Deck;
+use crate::stats::Stats;
 
 use self::theme::{BG, LINE, SNOW};
 use self::widgets::{Icon, icon_button, pill_tabs, pill_width};
@@ -135,10 +141,22 @@ pub struct Core {
     pub started: Instant,
     pub history_open: bool,
     pub settings_open: bool,
+    pub usage_open: bool,
+    pub help_open: bool,
+    /// The menu over the panel at the bottom left, and its language choice.
+    pub account_open: bool,
+    pub language_open: bool,
+    /// Where the panel was drawn last frame, so a click outside the menu can tell.
+    pub account_chip: Rect,
+    /// Set by Quit in the menu; the window closes on the next frame.
+    pub quit: bool,
+    pub stats: Stats,
+    pub pomodoro: Pomodoro,
     /// Asks the window to draw again.
     pub wake: Arc<dyn Fn() + Send + Sync>,
     /// A message for the person that no open screen has a place for.
     pub notice: Option<String>,
+    pub notice_at: Option<Instant>,
     pub vacancy: Vacancy,
     /// Models the gateway offered when last asked, for the picker in Settings.
     pub models: Vec<String>,
@@ -237,6 +255,7 @@ impl Core {
                 self.brief_note = Some(error.to_string());
             }
         }
+        self.pomodoro.configure(settings.pomodoro);
         self.settings = settings;
         self.prefetch_local();
         Ok(())
@@ -286,6 +305,28 @@ impl Core {
         let mut brief = self.brief.clone().unwrap_or_default();
         brief.set_vacancy(&self.vacancy.title, &self.vacancy.company, &self.vacancy.description);
         brief
+    }
+
+    /// Your name for the panel at the bottom: what you typed, or what your notes say.
+    pub fn display_name(&self) -> String {
+        let typed = self.settings.profile.name.trim();
+        if !typed.is_empty() {
+            return typed.to_owned();
+        }
+        self.brief.as_ref().and_then(Brief::candidate_name).unwrap_or_default()
+    }
+
+    /// Your address for the panel at the bottom: what you typed, or the first one in your notes.
+    pub fn display_email(&self) -> String {
+        let typed = self.settings.profile.email.trim();
+        if !typed.is_empty() {
+            return typed.to_owned();
+        }
+        self.brief.as_ref().and_then(Brief::email).unwrap_or_default()
+    }
+
+    pub fn save_stats(&self) {
+        let _ = self.stats.save(&self.paths.stats_file());
     }
 
     pub fn save_vacancy(&self) {
@@ -436,6 +477,8 @@ impl PrepApp {
         let store = Store::new(paths.sessions_dir());
         let deck = Deck::load(&paths.deck_file());
         let tr = Tr::new(settings.ui_language);
+        let stats = Stats::load(&paths.stats_file());
+        let pomodoro = Pomodoro::new(settings.pomodoro);
         let mut app = Self {
             core: Core {
                 paths,
@@ -452,8 +495,17 @@ impl PrepApp {
                 started: Instant::now(),
                 history_open: false,
                 settings_open: false,
+                usage_open: false,
+                help_open: false,
+                account_open: false,
+                language_open: false,
+                account_chip: Rect::NOTHING,
+                quit: false,
+                stats,
+                pomodoro,
                 wake,
                 notice: None,
+                notice_at: None,
                 vacancy,
                 models: Vec::new(),
                 downloads: Vec::new(),
@@ -474,6 +526,11 @@ impl PrepApp {
         for (_, outcome) in self.core.jobs.poll() {
             self.apply(outcome);
         }
+        if let Some(signal) = self.core.pomodoro.update(Instant::now()) {
+            self.core.on_timer(signal);
+        }
+        self.shortcuts(ui);
+        account::bar(&mut self.core, ui);
         let mut next = self.top_bar(ui);
         if let Screen::Live(view) = &mut self.screen {
             next = next.or(live::composer(&mut self.core, view, ui));
@@ -494,9 +551,29 @@ impl PrepApp {
         let ctx = ui.ctx().clone();
         next = next.or(history::ui(&mut self.core, &mut self.history, &ctx));
         settings::show(&mut self.core, &mut self.draft, &ctx);
+        usage::show(&mut self.core, &ctx);
+        help::show(&mut self.core, &ctx);
+        account::menu(&mut self.core, &ctx);
+        focus::toast(&mut self.core, &ctx);
+        if self.core.quit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         if let Some(nav) = next {
             self.go(nav);
             ui.ctx().request_repaint();
+        }
+    }
+
+    /// The keys that work on every screen.
+    fn shortcuts(&mut self, ui: &mut Ui) {
+        use egui::{Key, KeyboardShortcut, Modifiers};
+        let ctrl_shift = Modifiers::CTRL | Modifiers::SHIFT;
+        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl_shift, Key::Comma))) {
+            self.core.account_open = false;
+            self.core.settings_open = !self.core.settings_open;
+        }
+        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl_shift, Key::T))) {
+            self.core.pomodoro.toggle(Instant::now());
         }
     }
 
@@ -568,6 +645,14 @@ impl PrepApp {
             }
             session.finish();
             let _ = self.core.store.save(&session);
+            let words = session
+                .turns
+                .iter()
+                .filter(|t| t.who == crate::session::Speaker::You)
+                .map(|t| t.text.split_whitespace().count() as u32)
+                .sum();
+            self.core.stats.add_practice(self.core.now(), view.elapsed(), words);
+            self.core.save_stats();
             self.core.spawn_review(&session);
             self.screen = Screen::Review(Box::new(review::ReviewView::new(session)));
         }
@@ -770,12 +855,9 @@ impl PrepApp {
                         nav = Some(Nav::Home);
                     }
                 });
-                let right = Rect::from_min_size(pos2(bar.right() - 40.0, bar.center().y - 20.0), vec2(40.0, 40.0));
-                ui.scope_builder(UiBuilder::new().max_rect(right).layout(Layout::right_to_left(Align::Center)), |ui| {
-                    if icon_button(ui, Icon::Sliders, tr.get(K::SettingsTitle), 38.0, None).clicked() {
-                        self.core.settings_open = !self.core.settings_open;
-                    }
-                });
+                let size = vec2(focus::PILL_WIDTH, 44.0);
+                let right = Rect::from_min_size(pos2(bar.right() - size.x, bar.center().y - size.y / 2.0), size);
+                ui.scope_builder(UiBuilder::new().max_rect(right), |ui| focus::pill(&mut self.core, ui));
             });
         nav
     }

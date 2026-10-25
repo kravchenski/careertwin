@@ -28,9 +28,18 @@ pub enum Icon {
     Trash,
     Speaker,
     Search,
+    Gear,
+    Clock,
+    Globe,
+    Help,
+    Exit,
+    Chevron,
+    Pause,
+    Skip,
+    Notebook,
 }
 
-fn arc(center: Pos2, radius: f32, from: f32, to: f32, steps: usize) -> Vec<Pos2> {
+pub(crate) fn arc(center: Pos2, radius: f32, from: f32, to: f32, steps: usize) -> Vec<Pos2> {
     (0..=steps)
         .map(|i| {
             let angle = from + (to - from) * i as f32 / steps as f32;
@@ -130,6 +139,62 @@ pub fn paint_icon(painter: &egui::Painter, icon: Icon, center: Pos2, size: f32, 
         Icon::Search => {
             painter.circle_stroke(at(-0.06, -0.06), 0.22 * s, stroke);
             line(at(0.1, 0.1), at(0.32, 0.32));
+        }
+        Icon::Gear => {
+            painter.circle_stroke(center, 0.12 * s, stroke);
+            painter.circle_stroke(center, 0.26 * s, stroke);
+            for i in 0..8 {
+                let angle = i as f32 * std::f32::consts::TAU / 8.0;
+                let (sin, cos) = angle.sin_cos();
+                line(at(0.26 * cos, 0.26 * sin), at(0.37 * cos, 0.37 * sin));
+            }
+        }
+        Icon::Clock => {
+            painter.circle_stroke(center, 0.32 * s, stroke);
+            line(at(0.0, 0.0), at(0.0, -0.19));
+            line(at(0.0, 0.0), at(0.14, 0.08));
+        }
+        Icon::Globe => {
+            painter.circle_stroke(center, 0.32 * s, stroke);
+            line(at(-0.32, 0.0), at(0.32, 0.0));
+            let ellipse: Vec<Pos2> = (0..=24)
+                .map(|i| {
+                    let angle = i as f32 * std::f32::consts::TAU / 24.0;
+                    at(0.15 * angle.cos(), 0.32 * angle.sin())
+                })
+                .collect();
+            path(ellipse);
+        }
+        Icon::Help => {
+            painter.circle_stroke(center, 0.32 * s, stroke);
+            painter.text(center, Align2::CENTER_CENTER, "?", theme::semibold(s * 0.5), color);
+        }
+        Icon::Exit => {
+            path(vec![at(0.0, -0.3), at(-0.3, -0.3), at(-0.3, 0.3), at(0.0, 0.3)]);
+            line(at(-0.06, 0.0), at(0.34, 0.0));
+            path(vec![at(0.2, -0.14), at(0.34, 0.0), at(0.2, 0.14)]);
+        }
+        Icon::Chevron => path(vec![at(-0.1, -0.22), at(0.12, 0.0), at(-0.1, 0.22)]),
+        Icon::Pause => {
+            let thick = Stroke::new(stroke.width * 1.7, color);
+            painter.line_segment([at(-0.12, -0.24), at(-0.12, 0.24)], thick);
+            painter.line_segment([at(0.12, -0.24), at(0.12, 0.24)], thick);
+        }
+        Icon::Skip => {
+            painter.add(Shape::convex_polygon(
+                vec![at(-0.26, -0.24), at(0.1, 0.0), at(-0.26, 0.24)],
+                color,
+                Stroke::NONE,
+            ));
+            painter.line_segment([at(0.24, -0.24), at(0.24, 0.24)], Stroke::new(stroke.width * 1.5, color));
+        }
+        Icon::Notebook => {
+            let body = Rect::from_center_size(center, vec2(0.54 * s, 0.68 * s));
+            painter.rect_stroke(body, CornerRadius::same((0.06 * s) as u8), stroke, StrokeKind::Middle);
+            line(at(-0.1, -0.34), at(-0.1, 0.34));
+            line(at(0.02, -0.12), at(0.17, -0.12));
+            line(at(0.02, 0.04), at(0.17, 0.04));
+            line(at(0.02, 0.2), at(0.12, 0.2));
         }
     }
 }

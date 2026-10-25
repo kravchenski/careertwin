@@ -282,6 +282,74 @@ strings! {
     Close => ("Close", "Закрыть"),
     TestPhrase => ("Hello, I'm your interviewer. Let's begin.", "Hello, I'm your interviewer. Let's begin."),
     Dismiss => ("Dismiss", "Скрыть"),
+
+    // the panel at the bottom of the window
+    AccountMenu => ("Account menu", "Меню профиля"),
+    AppName => ("CareerTwin Prep", "CareerTwin Prep"),
+    MenuUsage => ("Usage", "Использование"),
+    MenuLanguage => ("Language", "Язык"),
+    MenuHelp => ("Help", "Помощь"),
+    MenuQuit => ("Quit", "Выйти"),
+    BarToday => ("Today {done} of {goal} min", "Сегодня {done} из {goal} мин"),
+    BarStreak => ("{n}-day streak", "Серия: {n} дн."),
+
+    // usage
+    UsageTitle => ("Usage", "Использование"),
+    UsageToday => ("Today", "Сегодня"),
+    UsageWeek => ("Last 7 days", "Последние 7 дней"),
+    UsageTotal => ("In total", "Всего"),
+    UsageStreak => ("Day streak", "Дней подряд"),
+    UsageSessions => ("Sessions", "Занятий"),
+    UsageFocusBlocks => ("Focus blocks", "Блоков фокуса"),
+    UsageWords => ("Words you said", "Сказано слов"),
+    UsagePractised => ("Practised", "Занимались"),
+    UsageGoal => ("Goal for the day: {n} min", "Цель на день: {n} мин"),
+    UsageNothing => ("Nothing yet. The first minutes count too.", "Пока ничего. Первые минуты тоже считаются."),
+    UnitHour => ("h", "ч"),
+    UnitMinute => ("min", "мин"),
+    UnitSecond => ("s", "с"),
+
+    // help
+    HelpTitle => ("How to use it", "Как пользоваться"),
+    HelpShortcuts => ("Keys", "Клавиши"),
+    HelpKeySettings => ("Settings", "Настройки"),
+    HelpKeySkip => ("Skip what the tutor is saying", "Перебить репетитора"),
+    HelpKeyEscape => ("Close a panel", "Закрыть панель"),
+    HelpKeyTimer => ("Start or pause the focus timer", "Запустить или остановить таймер"),
+    HelpTalk => (
+        "Pick a tab and press Start. Talk like on a call; the tutor answers like a person. You can type instead.",
+        "Выберите вкладку и нажмите «Начать». Говорите, как на созвоне: репетитор отвечает как человек. Можно писать текстом."
+    ),
+    HelpFocus => (
+        "The timer at the top right is a Pomodoro: work for a block, then rest. Click it to start or pause.",
+        "Таймер справа вверху — помодоро: блок работы, потом отдых. Нажмите на него, чтобы запустить или остановить."
+    ),
+
+    // the focus timer
+    TimerLabel => ("Focus timer", "Таймер фокуса"),
+    TimerStart => ("Start the timer", "Запустить таймер"),
+    TimerPause => ("Pause the timer", "Остановить таймер"),
+    TimerSkip => ("Skip to the next phase", "К следующему этапу"),
+    TimerReset => ("Reset the timer", "Сбросить таймер"),
+    PhaseFocus => ("Focus", "Фокус"),
+    PhaseShortBreak => ("Break", "Перерыв"),
+    PhaseLongBreak => ("Long break", "Долгий перерыв"),
+    FocusDone => (
+        "Focus block done. Rest for {n} minutes; the timer is running.",
+        "Блок фокуса закончен. Отдохните {n} мин: таймер уже идёт."
+    ),
+    BreakDone => ("The break is over. Ready for the next block?", "Перерыв закончился. Начнём следующий блок?"),
+
+    // settings: about you and the timer
+    SecAccount => ("About you", "О вас"),
+    YourName => ("Your name", "Ваше имя"),
+    YourEmail => ("E-mail (shown in the panel below)", "Почта (видна в панели внизу)"),
+    SecFocus => ("Focus timer and goal", "Таймер фокуса и цель"),
+    FocusMinutes => ("Focus, min", "Фокус, мин"),
+    ShortMinutes => ("Break, min", "Перерыв, мин"),
+    LongMinutes => ("Long break, min", "Долгий перерыв, мин"),
+    LongEvery => ("Long break after", "Долгий после"),
+    GoalMinutes => ("Goal per day, min", "Цель на день, мин"),
 }
 
 /// The strings of one language.
