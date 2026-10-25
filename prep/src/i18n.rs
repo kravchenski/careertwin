@@ -352,7 +352,7 @@ strings! {
     GoalMinutes => ("Goal per day, min", "Цель на день, мин"),
     HeatLabel => ("Practice calendar", "Календарь занятий"),
     HeatCaption => (
-        "{days} days of practice in the last {weeks} weeks",
+        "Practice days in the last {weeks} weeks: {days}",
         "Дней с практикой за последние {weeks} нед.: {days}"
     ),
     HeatLess => ("Less", "Меньше"),

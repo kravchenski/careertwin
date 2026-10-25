@@ -5,7 +5,7 @@ like a person. It is not part of the interview overlay: the overlay helps during
 for it.
 
 Every part looks the same: a glowing sphere in the middle that moves with the voice, what the tutor says written under
-it word by word as it is spoken, and a bar at the bottom to talk or type. A pill of three tabs sits at the top.
+it word by word as it is spoken, and two buttons at the bottom: the microphone and a cross to end the call. Start typing and a text box appears. A pill of three tabs sits at the top, and the ways to practise under each tab are in the drawer at the top left.
 
 | Tab | What it is for |
 |---|---|
