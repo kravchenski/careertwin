@@ -1189,6 +1189,18 @@ fn the_english_tab_makes_a_lesson_of_what_you_bring_and_starts_it() {
 }
 
 #[test]
+fn with_a_plan_the_vacancy_and_the_plan_stay_one_click_away() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.run();
+    assert!(harness.query_by_label("Vacancy and plan").is_none(), "without a plan the main button leads there");
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    harness.run_steps(2);
+    harness.get_by_label("Vacancy and plan").click();
+    harness.run_steps(3);
+    assert!(matches!(harness.state().screen, Screen::Plan(_)));
+}
+
+#[test]
 fn the_interview_goes_from_topic_to_topic_then_to_code_and_the_cross_ends_it() {
     use careertwin_prep::testing::Reply;
     let replies = vec![Reply::text("Let us start."), Reply::text("Next topic."), Reply::text("And more.")];

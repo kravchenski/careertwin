@@ -473,6 +473,7 @@ strings! {
     HomeStart => ("Start talking", "Начать разговор"),
     HomeStartTopic => ("Start: {topic}", "Начать: {topic}"),
     HomeStartRun => ("Start the interview", "Начать собеседование"),
+    HomeVacancy => ("Vacancy and plan", "Вакансия и план"),
     HomeStudy => ("Study something together", "Учить что-то вместе"),
     HomeLineStudy => (
         "Bring a text, your notes, new words or a topic. We go through it in your words first, then in English, and I fix your grammar.",

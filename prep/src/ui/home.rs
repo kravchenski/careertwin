@@ -112,6 +112,13 @@ pub fn ui(core: &mut Core, ui: &mut Ui) -> Option<Nav> {
             if primary_button(ui, &button, true).clicked() {
                 nav = Some(go.clone());
             }
+            // the vacancy and the plan are edited here: nothing else in the program leads to them once there is a plan
+            if track == Track::Technical && core.syllabus.is_some() {
+                ui.add_space(8.0);
+                if widgets::ghost_button(ui, tr.get(K::HomeVacancy)).clicked() {
+                    nav = Some(Nav::Plan);
+                }
+            }
         });
 
         for download in core.downloading() {
