@@ -270,6 +270,9 @@ async fn a_real_model_draws_an_explanation_a_beginner_can_follow() {
             );
         }
     }
+    if let Ok(path) = std::env::var("LIVE_SAVE") {
+        std::fs::write(path, serde_json::to_string_pretty(&board).unwrap()).unwrap();
+    }
     assert!(board.scenes.len() >= 4, "a story of at least four scenes");
 }
 

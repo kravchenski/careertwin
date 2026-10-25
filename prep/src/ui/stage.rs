@@ -265,8 +265,19 @@ pub fn paint(core: &mut Core, stage: &mut Picture, ui: &mut Ui, area: Rect) -> O
         pos2(captions.right() - 6.0, captions.bottom() - 4.0),
     );
     if let Some(scene) = player.board.scenes.get(index) {
+        // the words are as large as the room allows, and wrap: a story told in two or three sentences
+        // is longer than one line, and a line that runs off the window cannot be read
+        let size = [24.0, 21.0, 19.0, 17.0, 15.5]
+            .into_iter()
+            .find(|&size| {
+                ui.painter().layout_job(caption(&scene.say, progress, words.width(), size)).size().y <= words.height()
+            })
+            .unwrap_or(15.5);
         ui.scope_builder(UiBuilder::new().max_rect(words).layout(Layout::left_to_right(Align::Center)), |ui| {
-            ui.label(caption(&scene.say, progress, words.width(), 24.0));
+            ui.add(
+                egui::Label::new(caption(&scene.say, progress, words.width(), size))
+                    .wrap_mode(egui::TextWrapMode::Wrap),
+            );
         });
     }
 

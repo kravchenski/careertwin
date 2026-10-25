@@ -1546,6 +1546,79 @@ fn the_picture_page_asks_for_a_topic_then_draws_and_tells_it() {
 }
 
 #[test]
+fn a_long_narration_wraps_inside_the_window_instead_of_running_off_it() {
+    let long = r#"{"title": "Очередь", "check": "Кто выходит первым?",
+     "scenes": [{"say": "Представь очередь в магазине: кто пришёл первым, того и обслужат первым, а остальные ждут своей очереди и никого не обгоняют, потому что так устроен порядок, и все это знают.",
+       "panels": [{"id": "l", "kind": "cells", "title": "Люди", "items": ["Аня", "Боря"]}]}]}"#;
+    let (mut harness, _d, _r) =
+        harness(fixture_with("en", vec![careertwin_prep::testing::Reply::text(long)]), 1120.0, 860.0);
+    harness.state_mut().screen = Screen::Show(Box::default());
+    harness.run();
+    let stage = harness.state_mut().core.begin_stage("очередь", "", false);
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage = Some(stage);
+    }
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Show(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage.as_mut().unwrap().player_mut().unwrap().set_voice(0, None);
+    }
+    harness.run_steps(4);
+    let rect = harness.get_by_label_contains("Представь очередь").rect();
+    assert!(rect.right() <= 1120.0, "the words run off the window: {rect:?}");
+    assert!(rect.height() > 40.0, "a long sentence takes more than one line: {rect:?}");
+    assert!(rect.bottom() < 800.0, "and stays above the bar at the bottom: {rect:?}");
+}
+
+/// Draws a story that was saved from a real model, scene by scene, as pictures of the real window.
+///
+/// `STORY_FILE=story.json UI_SHOTS=/some/dir cargo test --test ui_shots a_story_from_a_file -- --ignored`
+#[test]
+#[ignore = "needs a saved story and UI_SHOTS"]
+fn a_story_from_a_file_is_drawn_scene_by_scene() {
+    let path = std::env::var("STORY_FILE").expect("STORY_FILE is the saved story");
+    let story = std::fs::read_to_string(path).unwrap();
+    let scenes = serde_json::from_str::<serde_json::Value>(&story).unwrap()["scenes"].as_array().unwrap().len();
+    let (mut harness, _d, _r) =
+        harness(fixture_with("ru", vec![careertwin_prep::testing::Reply::text(&story)]), 1120.0, 860.0);
+    harness.state_mut().screen = Screen::Show(Box::default());
+    harness.run();
+    let stage = harness.state_mut().core.begin_stage("хеш-таблица", "", false);
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage = Some(stage);
+    }
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Show(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        let player = view.stage.as_mut().unwrap().player_mut().unwrap();
+        for scene in 0..scenes {
+            player.set_voice(scene, None);
+        }
+    }
+    let next = harness.state().core.tr.get(careertwin_prep::i18n::K::StageNext);
+    for scene in 0..scenes {
+        // the panels come in and the old ones go out on the clock of the wall: give them their time
+        harness.run_steps(3);
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        harness.run_steps(2);
+        if let Screen::Show(view) = &mut harness.state_mut().screen {
+            view.stage.as_mut().unwrap().player_mut().unwrap().seek(0.9, std::time::Instant::now());
+        }
+        harness.run_steps(2);
+        shot(&mut harness, &format!("story-{}", scene + 1));
+        if scene + 1 < scenes {
+            harness.get_by_label(next).click();
+        }
+    }
+}
+
+#[test]
 fn a_story_can_be_paused_and_played_from_the_controls() {
     let (mut harness, _d, _r) = harness(picture_fixture(), 1120.0, 860.0);
     harness.state_mut().screen = Screen::Show(Box::default());
