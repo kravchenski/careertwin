@@ -778,6 +778,8 @@ fn a_model_being_downloaded_is_shown_and_the_call_waits_for_it() {
         progress,
         failed: None,
         finished: false,
+        job: 0,
+        partials: Vec::new(),
     });
     harness.run();
     harness.get_by_label("Downloading Whisper small… 42%");
@@ -799,6 +801,45 @@ fn a_model_being_downloaded_is_shown_and_the_call_waits_for_it() {
 }
 
 #[test]
+fn a_download_can_be_cancelled_from_the_background_list_and_its_half_file_goes() {
+    use careertwin_prep::speech::download::Asset;
+    let (mut harness, dir, _r) = harness(fixture("en"), 1120.0, 900.0);
+    // a server that accepts and never answers: the download stays on its way for as long as we like
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://127.0.0.1:{}/model.bin", listener.local_addr().unwrap().port());
+    let folder = dir.path().join("models");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("model.part"), b"half of a model").unwrap();
+    let asset = Asset::new(url, "model.bin", 100, &"0".repeat(64));
+    harness.state_mut().core.download("Whisper large-v3-turbo", vec![asset], folder.clone());
+    harness.run_steps(2);
+    assert!(harness.state().core.jobs.is_busy());
+    open_ways(&mut harness);
+    assert!(harness.query_all_by_label("Downloading Whisper large-v3-turbo… 0%").count() >= 1);
+    harness.get_by_label("Cancel").click();
+    harness.run_steps(3);
+    let core = &harness.state().core;
+    assert!(!core.jobs.is_busy(), "the job was stopped");
+    assert!(core.downloads.is_empty(), "and it is not listed any more");
+    assert!(!folder.join("model.part").exists(), "what it had written is removed");
+    drop(listener);
+}
+
+#[test]
+fn a_model_chosen_and_then_changed_back_stops_downloading() {
+    use careertwin_prep::speech::download::Asset;
+    let (mut harness, dir, _r) = harness(fixture("en"), 1120.0, 900.0);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://127.0.0.1:{}/model.bin", listener.local_addr().unwrap().port());
+    let asset = Asset::new(url, "model.bin", 100, &"0".repeat(64));
+    harness.state_mut().core.download("Something nobody asked for", vec![asset], dir.path().join("models"));
+    assert!(harness.state().core.jobs.is_busy());
+    harness.state_mut().core.prefetch_local();
+    assert!(!harness.state().core.downloads.iter().any(|d| d.name == "Something nobody asked for"));
+    drop(listener);
+}
+
+#[test]
 fn a_failed_download_is_explained_in_settings() {
     let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
     let progress = std::sync::Arc::new(careertwin_prep::speech::download::Progress::default());
@@ -807,6 +848,8 @@ fn a_failed_download_is_explained_in_settings() {
         progress,
         failed: Some("could not reach huggingface.co".into()),
         finished: false,
+        job: 0,
+        partials: Vec::new(),
     });
     harness.run();
     open_settings(&mut harness);

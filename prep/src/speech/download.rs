@@ -102,6 +102,27 @@ fn client() -> Result<reqwest::Client, DownloadError> {
         .map_err(|e| DownloadError::Network(e.to_string()))
 }
 
+/// The half-written files a download of `assets` leaves under `root` while it runs.
+pub fn partial_files(assets: &[Asset], root: &Path) -> Vec<PathBuf> {
+    assets.iter().filter_map(|a| safe_relative(&a.relative)).map(|p| root.join(p).with_extension("part")).collect()
+}
+
+/// Removes the half-written files an earlier run left behind (it was closed or stopped while it
+/// downloaded). Nothing is downloading when the program starts, so none of them is wanted.
+pub fn remove_stale_partials(root: &Path) -> usize {
+    let mut removed = 0;
+    let Ok(entries) = std::fs::read_dir(root) else { return 0 };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            removed += remove_stale_partials(&path);
+        } else if path.extension().is_some_and(|e| e == "part") && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 /// Makes sure every asset is under `root`, downloading what is missing or wrong.
 pub async fn ensure(assets: &[Asset], root: &Path, progress: &Progress) -> Result<(), DownloadError> {
     let mut missing = Vec::new();
@@ -194,6 +215,19 @@ fn host(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn half_written_files_from_an_earlier_run_are_removed_and_nothing_else() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("kokoro")).unwrap();
+        std::fs::write(dir.path().join("ggml-large.part"), b"half").unwrap();
+        std::fs::write(dir.path().join("kokoro/voice.part"), b"half").unwrap();
+        std::fs::write(dir.path().join("ggml-small.bin"), b"whole").unwrap();
+        assert_eq!(remove_stale_partials(dir.path()), 2);
+        assert!(dir.path().join("ggml-small.bin").exists());
+        assert!(!dir.path().join("ggml-large.part").exists());
+        assert_eq!(remove_stale_partials(&dir.path().join("missing")), 0);
+    }
+
     use super::*;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

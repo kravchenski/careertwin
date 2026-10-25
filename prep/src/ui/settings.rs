@@ -492,6 +492,7 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
     if !cfg!(feature = "local-stt") && !cfg!(feature = "local-tts") {
         ui.label(RichText::new(tr.get(K::OfflineNotBuilt)).font(theme::sans(13.0)).color(FAINT));
     }
+    let mut stop = None;
     for download in &core.downloads {
         if let Some(why) = &download.failed {
             ui.label(
@@ -500,15 +501,23 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
                     .color(BERRY),
             );
         } else if !download.finished {
-            ui.label(
-                RichText::new(tr.fill(
-                    K::Downloading,
-                    &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
-                ))
-                .font(theme::mono(12.5))
-                .color(MUTED),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(tr.fill(
+                        K::Downloading,
+                        &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
+                    ))
+                    .font(theme::mono(12.5))
+                    .color(MUTED),
+                );
+                if widgets::quiet_icon(ui, widgets::Icon::Close, tr.get(K::Cancel), 22.0).clicked() {
+                    stop = Some(download.job);
+                }
+            });
         }
+    }
+    if let Some(job) = stop {
+        core.cancel_job(job);
     }
 
     section(ui, tr.get(K::SecAudio));

@@ -162,6 +162,9 @@ pub struct Download {
     pub progress: Arc<crate::speech::download::Progress>,
     pub failed: Option<String>,
     pub finished: bool,
+    /// The background job that fetches it, and the half-written files to remove if it is stopped.
+    pub job: u64,
+    pub partials: Vec<std::path::PathBuf>,
 }
 
 /// The vacancy you are preparing for. It is kept between runs and the interviewer uses it.
@@ -281,33 +284,58 @@ impl Core {
     /// Fetches the models the offline engines need, if they are chosen and not on disk yet.
     pub fn prefetch_local(&mut self) {
         let settings = self.settings.effective();
+        let mut wanted: Vec<&str> = Vec::new();
         if cfg!(feature = "local-stt") && settings.stt.engine == crate::config::SttEngine::Local {
             let model = crate::speech::local_stt_model(&settings);
+            wanted.push(model.label);
             self.download(model.label, vec![crate::models::stt_asset(model)], self.paths.models_dir());
         }
         if cfg!(feature = "local-tts")
             && settings.tts.engine == crate::config::TtsEngine::Local
             && let Some(assets) = crate::models::kokoro_assets(&settings.tts.voice_en)
         {
+            wanted.push("Kokoro");
             self.download("Kokoro", assets, crate::speech::local_tts_folder(&self.paths));
+        }
+        // a model that was chosen and then changed back is not fetched any more
+        let unwanted: Vec<u64> = self
+            .downloads
+            .iter()
+            .filter(|d| !d.finished && d.failed.is_none() && !wanted.contains(&d.name.as_str()))
+            .map(|d| d.job)
+            .collect();
+        for job in unwanted {
+            self.cancel_job(job);
         }
     }
 
-    fn download(&mut self, name: &str, assets: Vec<crate::speech::download::Asset>, folder: std::path::PathBuf) {
+    pub fn download(&mut self, name: &str, assets: Vec<crate::speech::download::Asset>, folder: std::path::PathBuf) {
+        // one already on its way is left alone: two would write the same file
+        if self.downloads.iter().any(|d| d.name == name && !d.finished && d.failed.is_none()) {
+            return;
+        }
         let progress = Arc::new(crate::speech::download::Progress::default());
         self.downloads.retain(|d| d.name != name);
-        self.downloads.push(Download {
-            name: name.to_owned(),
-            progress: Arc::clone(&progress),
-            failed: None,
-            finished: false,
-        });
+        let partials = crate::speech::download::partial_files(&assets, &folder);
         let label = self.tr.fill(K::Downloading, &[("name", name), ("percent", "0")]);
-        let name = name.to_owned();
-        self.jobs.spawn(label, async move {
-            let result = crate::speech::download::ensure(&assets, &folder, &progress).await.map_err(|e| e.to_string());
-            Outcome::Downloaded { name, result }
+        let owned = name.to_owned();
+        let working = Arc::clone(&progress);
+        let job = self.jobs.spawn_cancellable(label, async move {
+            let result = crate::speech::download::ensure(&assets, &folder, &working).await.map_err(|e| e.to_string());
+            Outcome::Downloaded { name: owned, result }
         });
+        self.downloads.push(Download { name: name.to_owned(), progress, failed: None, finished: false, job, partials });
+    }
+
+    /// Stops a download the person does not want and removes what it had written so far.
+    pub fn cancel_job(&mut self, job: u64) {
+        self.jobs.cancel(job);
+        if let Some(at) = self.downloads.iter().position(|d| d.job == job) {
+            let download = self.downloads.remove(at);
+            for partial in &download.partials {
+                let _ = std::fs::remove_file(partial);
+            }
+        }
     }
 
     /// The offline models that are still being fetched.
@@ -796,6 +824,7 @@ impl PrepApp {
             history: history::HistoryState::default(),
             draft: None,
         };
+        crate::speech::download::remove_stale_partials(&app.core.paths.models_dir());
         app.core.prefetch_local();
         app
     }
