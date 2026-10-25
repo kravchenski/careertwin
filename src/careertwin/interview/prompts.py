@@ -28,6 +28,7 @@ two or three sentences on where and how this is used in practice, or how it appl
 vacancy and the candidate's real work
 
 Rules
+- When WHAT WAS HEARD tells you to reply with exactly SKIP, the whole reply is the one word SKIP.
 - Every section is content, never advice about how to answer. Wrong: "Greet warmly", "Keep it \
 short", "Mention your experience", "Confirm you are ready". Right: "Hi, nice to meet you!", \
 "I'm **<name from the context>**, glad to be here", "I build **APIs** with Python and FastAPI".
@@ -184,6 +185,28 @@ STYLE_HINTS = {
 }
 
 
+SKIP = "SKIP"
+
+# What the model is told when the program cannot tell a question from the rest of what the computer
+# plays: words that are not put to the candidate get no answer at all.
+LISTENING_HINTS = {
+    "heard": (
+        "WHAT WAS HEARD: it came from the call audio, which may be anything the computer plays, not only "
+        "the interviewer. If the words are not a question, a task or a prompt put to the candidate (a "
+        "statement, an explanation, a story, narration, thanks, small talk that needs no reply, a video, "
+        "a tutorial, someone else's talk), reply with exactly SKIP and nothing else. If they ask or "
+        "request anything of the candidate, answer."
+    ),
+    "hearing": (
+        "WHAT WAS HEARD: the interviewer is still speaking, so the words may stop in the middle and the "
+        "real question may still come. If what is said so far is already a question, a task or a "
+        "prompt put to the candidate, answer it as far as it goes; if it is only a statement, an "
+        "explanation or background so far, or it is not the interviewer talking to the candidate (a video, "
+        "a tutorial, someone else's talk), reply with exactly SKIP and nothing else."
+    ),
+}
+
+
 def user_prompt(
     brief: InterviewBrief,
     question: str,
@@ -193,19 +216,24 @@ def user_prompt(
     style: str = "standard",
     layout: str = "lines",
     code: str = "",
+    listening: str | None = None,
 ) -> str:
     """`language` is the interview language; without one it is guessed from the question.
-    `code` is what the search of the candidate's project found for this question."""
+    `code` is what the search of the candidate's project found for this question. `listening` is
+    set when the words came from the call audio and not from the person at the window: "heard" for a
+    finished utterance, "hearing" for one still being said."""
     name = languages.name(language or detect_language(question))
     recent = "\n".join(history[-6:]) or "(start of the interview)"
     excerpts = f"RELEVANT CODE FROM THE PROJECT (excerpts)\n{code}\n\n" if code else ""
+    heard = f"{LISTENING_HINTS[listening]}\n" if listening in LISTENING_HINTS else ""
     return (
         f"{brief.render()}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\n"
         f"INTERVIEWER'S QUESTION: {question}\nTYPE: {kind.value}. {KIND_HINTS[kind]}\n"
         f"INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n"
         f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}\n"
-        f"{LAYOUT_HINTS.get(layout, LAYOUT_HINTS['lines'])}"
-    )
+        f"{LAYOUT_HINTS.get(layout, LAYOUT_HINTS['lines'])}\n"
+        f"{heard}"
+    ).rstrip()
 
 
 def screenshot_prompt(brief: InterviewBrief, language: str | None, layout: str = "lines") -> str:
