@@ -137,18 +137,24 @@ what to say.
 
 ## Practise with CareerTwin Prep
 
-The overlay helps during a call; **Prep** is where you train for one. It is a separate program, written in Rust, with
-three tabs: English, Technical interview and Job interview. You talk, out loud, to an interviewer who answers like a
-person: it starts speaking as soon as its first sentence is written, waits when your thought is not finished,
-follows up on a vague answer, stops when you talk over it (with headphones), nudges you when you go quiet and asks
-about the real work in your `ABOUT.md`. Afterwards it gives a review, with a better answer you can listen to and
-say yourself.
+The overlay helps during a call; **Prep** is where you train for one. It is a separate program, written in Rust: a
+conversation with a tutor who talks like a person, with the same look everywhere: a glowing sphere that moves with the
+voice, and the tutor's words written under it as they are spoken.
 
-<p align="center"><img src="docs/media/prep-call.png" alt="A call in CareerTwin Prep: the glowing sphere, the interviewer's sentence with the spoken words bright, and the bar to talk or type" width="760"></p>
+- **A plan for the vacancy by the 80/20 rule**: the few topics that hold most of the likely questions, every term in
+  plain words in your language.
+- **A terms lesson**: each term first in your own language, then in English, as in the interview.
+- **Pictures**: ask it to show something and it tells it as a short animated story with floating panels and a voice.
+- **Live coding**: it watches your code, stays quiet while you are on the right track, asks instead of telling when
+  something is off, and notices a pasted block. It never gives the answer.
+- **Your introduction, mock interviews, an English conversation**, a quiet chat for lectures, notes with the 20% that
+  matters, a focus timer and a streak.
+
+<p align="center"><img src="docs/media/prep-call.png" alt="A terms lesson in CareerTwin Prep: the sphere, the tutor's sentence with the spoken words bright, the term and its stage" width="760"></p>
 
 It works with cloud engines, with your own servers, or **fully offline**: Whisper for hearing, Kokoro for the English
-voice and a small model in Ollama for the interviewer. The program detects the memory and the cores and says which
-sizes fit. See [docs/PREP.md](docs/PREP.md).
+voice and a small model in Ollama for the tutor. The program detects the memory and the cores and says which sizes fit.
+See [docs/PREP.md](docs/PREP.md).
 
 ```bash
 ./scripts/install-prep.sh     # builds it, with the offline engines

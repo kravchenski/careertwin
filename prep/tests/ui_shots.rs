@@ -1690,3 +1690,106 @@ fn the_finished_code_and_what_the_editor_saw_go_into_the_review() {
     assert!(prompt.contains("THE CODE AT THE END") && prompt.contains("return [0, 1]"), "{prompt}");
     assert!(prompt.contains("WHAT THE EDITOR SAW: nothing unusual."));
 }
+
+// ---- the pictures used in the documentation (written only when UI_SHOTS names a folder) ----
+
+#[test]
+fn docs_a_picture_in_the_middle_of_its_story() {
+    if std::env::var("UI_SHOTS").is_err() {
+        return;
+    }
+    let (mut harness, _d, _r) = harness(picture_fixture(), 1120.0, 780.0);
+    let stage = harness.state_mut().core.begin_stage("queue", "", false);
+    harness.state_mut().screen =
+        Screen::Show(Box::new(careertwin_prep::ui::show::ShowView { stage: Some(stage), ..Default::default() }));
+    wait_until(
+        &mut harness,
+        "the story is ready",
+        |h| matches!(&h.state().screen, Screen::Show(v) if v.stage.as_ref().is_some_and(|s| s.player().is_some())),
+    );
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        let player = view.stage.as_mut().unwrap().player_mut().unwrap();
+        for i in 0..3 {
+            player.set_voice(i, None);
+        }
+    }
+    harness.run_steps(2);
+    harness.get_by_label("Next scene").click();
+    harness.run_steps(3);
+    // let the panels settle in, then stand at the moment the sentence is half said
+    for _ in 0..30 {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        harness.run_steps(1);
+    }
+    if let Screen::Show(view) = &mut harness.state_mut().screen {
+        view.stage.as_mut().unwrap().player_mut().unwrap().seek(0.7, std::time::Instant::now());
+    }
+    harness.run_steps(2);
+    shot(&mut harness, "docs-picture");
+}
+
+#[test]
+fn docs_a_lesson_with_the_tutor_speaking() {
+    if std::env::var("UI_SHOTS").is_err() {
+        return;
+    }
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    let wired = tutoring(&mut harness, Mode::Terms);
+    wired.events.send(Event::State(State::Speaking)).unwrap();
+    wired
+        .events
+        .send(Event::Lesson(LessonView { index: 1, total: 4, name: "Polymorphism".into(), stage: Stage::English }))
+        .unwrap();
+    wired
+        .events
+        .send(Event::Caption {
+            text: "That's the idea: one method name, different behaviour in each class.".into(),
+            seconds: 6.0,
+        })
+        .unwrap();
+    wired
+        .events
+        .send(Event::Caption { text: "Now say it the way you would in the interview.".into(), seconds: 4.0 })
+        .unwrap();
+    harness.run();
+    shot(&mut harness, "docs-lesson");
+}
+
+#[test]
+fn docs_the_home_with_a_plan_and_a_streak() {
+    if std::env::var("UI_SHOTS").is_err() {
+        return;
+    }
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    let now = careertwin_prep::session::now();
+    for back in 1..=4u64 {
+        harness.state_mut().core.stats.add_practice(now - back * 86_400, 15 * 60, 200);
+    }
+    harness.state_mut().core.stats.add_practice(now, 9 * 60, 120);
+    harness.state_mut().core.progress.record("OOP", "Encapsulation", careertwin_prep::syllabus::Half::Native, 3, now);
+    harness.run();
+    shot(&mut harness, "docs-home");
+}
+
+#[test]
+fn docs_live_coding_with_a_question_from_the_tutor() {
+    if std::env::var("UI_SHOTS").is_err() {
+        return;
+    }
+    let (mut harness, _d, _r) = harness(fixture("en"), 1280.0, 780.0);
+    let wired = coding(&mut harness);
+    wired.events.send(Event::State(State::Speaking)).unwrap();
+    wired
+        .events
+        .send(Event::Caption {
+            text: "Take [2, 7, 11] with the target 9 and follow the loop. What does it return?".into(),
+            seconds: 5.0,
+        })
+        .unwrap();
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.coding.as_mut().unwrap().text = "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        seen[n] = i\n        if target - n in seen:\n            return [target - n, n]\n    return []\n".into();
+    }
+    harness.run_steps(3);
+    shot(&mut harness, "docs-coding");
+}
