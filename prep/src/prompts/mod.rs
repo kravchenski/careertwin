@@ -11,6 +11,7 @@ pub mod json;
 pub mod prepare;
 pub mod research;
 pub mod translate;
+pub mod tutor;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

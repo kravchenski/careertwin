@@ -150,20 +150,26 @@ impl Stt for FakeStt {
 /// A voice that makes silence as long as the sentence would take to say.
 pub struct FakeTts {
     pub spoken: Mutex<Vec<String>>,
+    /// The voice each sentence was asked for in, in the same order.
+    pub voices: Mutex<Vec<String>>,
     pub fail: bool,
 }
 
 impl FakeTts {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self { spoken: Mutex::default(), fail: false })
+        Arc::new(Self { spoken: Mutex::default(), voices: Mutex::default(), fail: false })
     }
 
     pub fn failing() -> Arc<Self> {
-        Arc::new(Self { spoken: Mutex::default(), fail: true })
+        Arc::new(Self { spoken: Mutex::default(), voices: Mutex::default(), fail: true })
     }
 
     pub fn said(&self) -> Vec<String> {
         self.spoken.lock().unwrap().clone()
+    }
+
+    pub fn voices_used(&self) -> Vec<String> {
+        self.voices.lock().unwrap().clone()
     }
 }
 
@@ -177,8 +183,9 @@ impl Tts for FakeTts {
         "fake|voice".into()
     }
 
-    fn synthesize(&self, text: String, _: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
+    fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>> {
         self.spoken.lock().unwrap().push(text.clone());
+        self.voices.lock().unwrap().push(voice.name);
         let fail = self.fail;
         async move {
             tokio::time::sleep(Duration::from_millis(120)).await;

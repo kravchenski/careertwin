@@ -12,6 +12,7 @@ use super::widgets::{self, Icon, card_frame, ghost_button, icon_button, primary_
 use super::{Core, Nav, scrolling_column};
 use crate::i18n::{K, Tr};
 use crate::prompts::Lang;
+use crate::prompts::tutor::Mode;
 use crate::syllabus::{Progress, Syllabus, Topic};
 
 #[derive(Default)]
@@ -47,7 +48,7 @@ enum Action {
     Open(usize),
     WriteTerms(usize),
     Listen(String),
-    Practise(String),
+    Practise(usize),
 }
 
 pub fn ui(core: &mut Core, view: &mut PlanView, ui: &mut Ui) -> Option<Nav> {
@@ -152,7 +153,7 @@ pub fn ui(core: &mut Core, view: &mut PlanView, ui: &mut Ui) -> Option<Nav> {
             core.speak(text, Lang::En);
             ui.ctx().request_repaint();
         }
-        Some(Action::Practise(topic)) => nav = Some(Nav::PracticeQuestion(topic)),
+        Some(Action::Practise(index)) => nav = Some(Nav::Tutor { mode: Mode::Terms, topic: Some(index) }),
         None => {}
     }
     nav
@@ -252,7 +253,7 @@ fn topic_card(
                         .color(FAINT),
                 );
                 if ghost_button(ui, tr.get(K::PlanPractise)).clicked() {
-                    *action = Some(Action::Practise(topic.name.clone()));
+                    *action = Some(Action::Practise(index));
                 }
             }
         });

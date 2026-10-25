@@ -83,6 +83,14 @@ pub fn open_settings(harness: &mut Harness<'_, PrepApp>) {
     harness.run_steps(2);
 }
 
+/// The cards under the sphere may be below the fold of a short window.
+pub fn click_card(harness: &mut Harness<'_, PrepApp>, label: &str) {
+    harness.get_by_label(label).scroll_to_me();
+    // the scroll glides for a few frames; a click before it stops would miss
+    harness.run_steps(12);
+    harness.get_by_label(label).click();
+}
+
 pub fn shot(harness: &mut Harness<'_, PrepApp>, name: &str) {
     if let Ok(dir) = std::env::var("UI_SHOTS") {
         harness.run();
@@ -229,7 +237,7 @@ fn the_start_button_opens_a_call_on_the_real_engine_with_scripted_services() {
     let reply = careertwin_prep::testing::Reply::text("Hi Alex, I'm Daniel. What are you working on at the moment?");
     let (mut harness, _d, _r) = harness(fixture_with("en", vec![reply]), 1120.0, 780.0);
     harness.run();
-    harness.get_by_label("Mock interview").click();
+    click_card(&mut harness, "Mock interview");
     harness.run();
     harness.get_by_label("Start call").scroll_to_me();
     harness.run();
@@ -398,7 +406,7 @@ fn click_right_option(harness: &mut Harness<'_, PrepApp>, option: &str) {
 fn a_concept_check_asks_how_sure_you_are_and_what_you_get_wrong_comes_back() {
     let (mut harness, _d, _r) = harness(fixture_with("en", vec![reply(CARDS)]), 1120.0, 1500.0);
     harness.run();
-    harness.get_by_label("Concept checks").click();
+    click_card(&mut harness, "Concept checks");
     harness.run_steps(2);
     harness.get_by_label("Make questions").click();
     assert!(wait_for_label(&mut harness, "most likely fix"), "no questions arrived");
@@ -479,7 +487,7 @@ const QUESTIONS: &str = r#"{"questions": [{"question": "Tell me about a producti
 fn a_vacancy_is_compared_with_the_cv_and_a_question_can_be_practised() {
     let (mut harness, _d, _r) = harness(fixture_with("en", vec![reply(ANALYSIS), reply(QUESTIONS)]), 1120.0, 1800.0);
     harness.run();
-    harness.get_by_label("Prepare for a vacancy").click();
+    click_card(&mut harness, "Prepare for a vacancy");
     harness.run_steps(2);
     {
         let core = &mut harness.state_mut().core;
@@ -530,7 +538,7 @@ fn the_cards_that_are_due_come_back_and_can_be_graded() {
     }
     harness.run();
     harness.get_by_label_contains("1 to review today");
-    harness.get_by_label("Phrases to review").click();
+    click_card(&mut harness, "Phrases to review");
     harness.run_steps(2);
     harness.get_by_label("I'd like to walk you through it");
     assert!(harness.query_by_label("Good").is_none(), "the answer is hidden until asked for");
@@ -663,7 +671,7 @@ fn the_whole_interface_speaks_russian() {
     harness.get_by_label("Пробное собеседование");
     harness.get_by_label("Проверка понимания");
     shot(&mut harness, "home-technical-ru");
-    harness.get_by_label("Пробное собеседование").click();
+    click_card(&mut harness, "Пробное собеседование");
     harness.run_steps(2);
     harness.get_by_label("Начать звонок");
     harness.get_by_label("ИНТЕРВЬЮЕР");
@@ -679,7 +687,7 @@ fn without_a_profile_the_technical_tab_says_so_and_will_not_start() {
     let (mut harness, _d, _r) = harness(fixture, 1120.0, 900.0);
     harness.run();
     harness.get_by_label_contains("No profile found");
-    harness.get_by_label("Mock interview").click();
+    click_card(&mut harness, "Mock interview");
     harness.run_steps(2);
     harness.get_by_label("Start call").click();
     harness.run_steps(2);
@@ -725,7 +733,7 @@ fn a_model_being_downloaded_is_shown_and_the_call_waits_for_it() {
     });
     harness.run();
     harness.get_by_label("Downloading Whisper small… 42%");
-    harness.get_by_label("Mock interview").click();
+    click_card(&mut harness, "Mock interview");
     harness.run_steps(2);
     harness.get_by_label("The offline models are still downloading.");
     harness.get_by_label("Start call").click();
@@ -829,12 +837,12 @@ fn usage_and_help_open_from_the_menu_and_close_again() {
     harness.run_steps(2);
     harness.get_by_label("Usage").click();
     harness.run_steps(3);
-    harness.get_by_label("DAY STREAK");
+    assert_eq!(harness.query_all_by_label("DAY STREAK").count(), 2, "on the home page and in the window");
     assert!(harness.query_all_by_label("12 min").count() >= 1, "today and the total both show the twelve minutes");
     shot(&mut harness, "usage-en");
     harness.get_by_label("Close").click();
     harness.run_steps(2);
-    assert!(harness.query_by_label("DAY STREAK").is_none());
+    assert_eq!(harness.query_all_by_label("DAY STREAK").count(), 1, "only the home page's");
     harness.get_by_label("Account menu").click();
     harness.run_steps(2);
     harness.get_by_label("Help").click();
@@ -930,7 +938,11 @@ fn wait_until(harness: &mut Harness<'_, PrepApp>, what: &str, done: impl Fn(&Har
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
-    panic!("never happened: {what}");
+    panic!(
+        "never happened: {what} (notice: {:?}, researching: {})",
+        harness.state().core.notice,
+        harness.state().core.research.is_some()
+    );
 }
 
 #[test]
@@ -940,7 +952,7 @@ fn the_plan_is_researched_from_the_vacancy_and_the_few_that_matter_come_first() 
     let (mut harness, _d, _r) = harness(fixture_with("en", replies), 1120.0, 1000.0);
     harness.state_mut().core.vacancy.description = "Python, FastAPI and PostgreSQL for an order API.".into();
     harness.run();
-    harness.get_by_label("Your plan").click();
+    click_card(&mut harness, "Your plan");
     harness.run_steps(2);
     harness.get_by_label_contains("There is no plan yet");
     harness.get_by_label("Research the vacancy").click();
@@ -1050,4 +1062,229 @@ fn after_a_call_the_review_is_made_and_then_the_notes_that_matter() {
     harness.get_by_label("Open notes").click();
     harness.run_steps(2);
     harness.get_by_label("Give one number for every story.");
+}
+
+// ---- the tutor ----
+
+use careertwin_prep::prompts::Lang;
+use careertwin_prep::prompts::tutor::{LessonView, Mode, Stage};
+use careertwin_prep::syllabus::{Half, Syllabus, Term, Topic, TopicKind};
+
+fn plan_of_two() -> Syllabus {
+    let term = |name: &str| Term {
+        name: name.into(),
+        plain: format!("{name} in plain words."),
+        analogy: "Like a shop.".into(),
+        english: format!("{name} means something."),
+        follow_ups: vec!["Why?".into()],
+        visual: String::new(),
+    };
+    Syllabus {
+        role: "Backend Engineer".into(),
+        topics: vec![
+            Topic {
+                name: "OOP".into(),
+                kind: TopicKind::Concept,
+                likelihood: 9,
+                effort: 2,
+                terms: vec![term("Encapsulation"), term("Polymorphism")],
+                ..Topic::default()
+            },
+            Topic {
+                name: "REST".into(),
+                likelihood: 8,
+                effort: 3,
+                terms: vec![term("Idempotency")],
+                ..Topic::default()
+            },
+        ],
+        native: Lang::En,
+        ..Syllabus::default()
+    }
+}
+
+#[test]
+fn with_a_plan_the_main_button_starts_the_next_topic_as_a_lesson_and_the_timer() {
+    use careertwin_prep::testing::Reply;
+    let reply = Reply::text("Hi Alex. In your own words, what is encapsulation?");
+    let (mut harness, _d, _r) = harness(fixture_with("en", vec![reply]), 1120.0, 900.0);
+    harness.state_mut().core.syllabus = Some(plan_of_two());
+    harness.run();
+    harness.get_by_label_contains("Today: OOP, 2 terms");
+    harness.get_by_label("Start: OOP").click();
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!("a lesson should have started") };
+    assert_eq!(view.spec.mode, Mode::Terms);
+    assert_eq!(view.spec.lesson.as_ref().unwrap().terms.len(), 2);
+    assert_eq!(view.spec.persona.first_name(), "Maya");
+    assert!(harness.state().core.pomodoro.running(), "a lesson is a focus block");
+    wait_until(&mut harness, "the tutor speaks", |h| h.query_by_label_contains("what is encapsulation").is_some());
+    harness.get_by_label("Term 1 of 2");
+    harness.get_by_label("Encapsulation");
+    harness.get_by_label("IN YOUR WORDS");
+    shot(&mut harness, "lesson-en");
+}
+
+/// A tutoring call wired to the test, like `live` is for an interview.
+fn tutoring(harness: &mut Harness<'_, PrepApp>, mode: Mode) -> Wired {
+    use careertwin_prep::prompts::interviewer::InterviewerSpec;
+    let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+    let handle = Handle::from_parts(command_tx, event_rx);
+    let app = harness.state_mut();
+    let mut spec = InterviewerSpec::tutoring(Track::Technical, mode, Lang::En, 20);
+    if mode == Mode::Terms {
+        spec.lesson = plan_of_two()
+            .topics
+            .into_iter()
+            .next()
+            .map(|topic| careertwin_prep::prompts::tutor::Lesson { topic: topic.name, terms: topic.terms });
+    }
+    let session = Session::new(Track::Technical, Kind::Live, "OOP");
+    app.screen = Screen::Live(Box::new(LiveView::new(session, spec, handle, None)));
+    Wired { events: event_tx, commands: command_rx }
+}
+
+#[test]
+fn a_lesson_shows_the_term_the_stage_and_remembers_how_it_went() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    let wired = tutoring(&mut harness, Mode::Terms);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired
+        .events
+        .send(Event::Lesson(LessonView { index: 0, total: 2, name: "Encapsulation".into(), stage: Stage::Native }))
+        .unwrap();
+    harness.run();
+    harness.get_by_label("Term 1 of 2");
+    harness.get_by_label("Encapsulation");
+    harness.get_by_label("IN YOUR WORDS");
+    // your own words went well, then English
+    wired
+        .events
+        .send(Event::TermProgress { index: 0, name: "Encapsulation".into(), half: Half::Native, score: 3 })
+        .unwrap();
+    wired
+        .events
+        .send(Event::Lesson(LessonView { index: 0, total: 2, name: "Encapsulation".into(), stage: Stage::English }))
+        .unwrap();
+    harness.run();
+    harness.get_by_label("IN ENGLISH");
+    let progress = &harness.state().core.progress;
+    assert_eq!(progress.get("OOP", "Encapsulation").native, 3);
+    assert!(harness.state().core.paths.progress_file().exists(), "what you know is kept for the next run");
+    // the tutor's note goes into the notebook under the topic
+    wired.events.send(Event::Tag(careertwin_prep::tags::Tag::Note("Encapsulation hides state.".into()))).unwrap();
+    harness.run();
+    let notes = &harness.state().core.notebook.notes;
+    assert_eq!((notes[0].topic.as_str(), notes[0].text.as_str()), ("OOP", "Encapsulation hides state."));
+    shot(&mut harness, "lesson-stage-en");
+}
+
+#[test]
+fn the_chat_is_quiet_has_no_microphone_and_keeps_what_you_write() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    let mut wired = tutoring(&mut harness, Mode::Chat);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired
+        .events
+        .send(Event::Turn {
+            who: Who::Interviewer,
+            text: "I'm here. Type anything.".into(),
+            language: None,
+            append: false,
+        })
+        .unwrap();
+    wired
+        .events
+        .send(Event::Turn { who: Who::You, text: "What is a closure?".into(), language: None, append: false })
+        .unwrap();
+    wired
+        .events
+        .send(Event::Turn {
+            who: Who::Interviewer,
+            text: "A function that remembers the variables around it.".into(),
+            language: None,
+            append: false,
+        })
+        .unwrap();
+    harness.run();
+    harness.get_by_label("Write to me. I'm here.");
+    harness.get_by_label("A function that remembers the variables around it.");
+    harness.get_by_label("Finish chat");
+    assert!(
+        harness.query_by_label("Mute").is_none() && harness.query_by_label("Unmute the tutor").is_none(),
+        "no microphone, no voice"
+    );
+    assert!(harness.query_by_label("Transcript").is_none());
+    harness.get_by_role(egui::accesskit::Role::TextInput).focus();
+    harness.run();
+    harness.get_by_role(egui::accesskit::Role::TextInput).type_text("and a decorator?");
+    harness.run();
+    harness.get_by_label("Send").click();
+    harness.run();
+    match wired.commands.try_recv() {
+        Ok(Command::Say(text)) => assert_eq!(text, "and a decorator?"),
+        other => panic!("expected the typed question, got {other:?}"),
+    }
+    // a note the tutor writes in a chat is a lecture note
+    wired.events.send(Event::Tag(careertwin_prep::tags::Tag::Note("A closure keeps its scope.".into()))).unwrap();
+    harness.run();
+    assert_eq!(harness.state().core.notebook.notes[0].kind, careertwin_prep::notes::NoteKind::Lecture);
+    shot(&mut harness, "chat-en");
+}
+
+#[test]
+fn the_voice_can_be_switched_off_during_a_call() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    let mut wired = tutoring(&mut harness, Mode::Terms);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run();
+    harness.get_by_label("Mute the tutor").click();
+    harness.run();
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Voice(false))));
+    harness.get_by_label("Unmute the tutor").click();
+    harness.run();
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Voice(true))));
+}
+
+#[test]
+fn the_interview_tab_starts_the_introduction_coach_and_the_english_tab_a_conversation() {
+    use careertwin_prep::testing::Reply;
+    let (mut harness, _d, _r) = harness(
+        fixture_with(
+            "en",
+            vec![Reply::text("Hi Alex. Tell me about yourself."), Reply::text("Hello. How was your day?")],
+        ),
+        1120.0,
+        900.0,
+    );
+    harness.run();
+    harness.get_by_label("Interview").click();
+    harness.run_steps(3);
+    harness.get_by_label("Practise my introduction").click();
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!("the coach should have started") };
+    assert_eq!(view.spec.mode, Mode::Intro);
+    wait_until(&mut harness, "the coach asks", |h| h.query_by_label_contains("Tell me about yourself").is_some());
+    harness.get_by_label("End call").click();
+    harness.run_steps(3);
+    harness.get_by_label("English").click();
+    harness.run_steps(3);
+    harness.get_by_label("Start talking").click();
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!("the conversation should have started") };
+    assert_eq!(view.spec.mode, Mode::Interview);
+    assert_eq!(view.spec.track, Track::English);
+}
+
+#[test]
+fn writing_instead_opens_a_quiet_chat_from_any_tab() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    harness.run();
+    harness.get_by_label("Write instead").click();
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!("the chat should have opened") };
+    assert_eq!(view.spec.mode, Mode::Chat);
+    assert!(!harness.state().core.pomodoro.running(), "a chat in a lecture does not start the timer");
+    wait_until(&mut harness, "the greeting", |h| h.query_by_label_contains("Type anything").is_some());
 }

@@ -421,6 +421,56 @@ strings! {
     DigestNext => ("Next time", "В следующий раз"),
     DigestSaved => ("Saved to your notes", "Сохранено в заметки"),
     OpenNotes => ("Open notes", "Открыть заметки"),
+
+    // the tutor's call
+    StatusChat => ("Write to me. I'm here.", "Пишите мне, я здесь."),
+    LessonTerm => ("Term {n} of {total}", "Термин {n} из {total}"),
+    StageNative => ("In your words", "Своими словами"),
+    StageEnglish => ("In English", "По-английски"),
+    WriteToTutor => ("Write to the tutor…", "Напишите репетитору…"),
+    CloseChat => ("Finish chat", "Закрыть чат"),
+    VoiceOff => ("Mute the tutor", "Отключить голос"),
+    VoiceOn => ("Unmute the tutor", "Включить голос"),
+    RoleMentor => ("Tutor", "Репетитор"),
+
+    // the home of each tab
+    HomeStart => ("Start talking", "Начать разговор"),
+    HomeStartTopic => ("Start: {topic}", "Начать: {topic}"),
+    HomeWrite => ("Write instead", "Написать вместо этого"),
+    HomeIntroStart => ("Practise my introduction", "Потренировать самопрезентацию"),
+    HomeLineEnglish => (
+        "Ten minutes of real conversation. Mistakes are fine: I answer like a person would.",
+        "Десять минут живого разговора. Ошибки не страшны: я отвечаю как человек."
+    ),
+    HomeLineTechnical => (
+        "Today: {topic}, {n} terms. First in your words, then in English.",
+        "Сегодня: {topic}, терминов: {n}. Сначала своими словами, потом по-английски."
+    ),
+    HomeLineNoPlan => (
+        "Paste the vacancy and I will work out what they are likely to ask.",
+        "Вставьте вакансию, и я выясню, о чём вас, скорее всего, спросят."
+    ),
+    HomeLineAllLearned => (
+        "Every term of the plan is learned. A mock interview is the next step.",
+        "Все термины плана выучены. Следующий шаг — пробное собеседование."
+    ),
+    HomeLineInterview => (
+        "Let's make your introduction sound like you, in about a minute.",
+        "Сделаем вашу самопрезентацию живой: примерно за минуту."
+    ),
+    HomeMore => ("More ways to practise", "Другие способы"),
+    CardChat => ("Write to the tutor", "Написать репетитору"),
+    CardChatText => (
+        "Quiet questions in a lecture or at work; nothing is spoken. Good answers become notes.",
+        "Тихие вопросы на лекции или на работе: ничего не озвучивается. Хорошие ответы становятся заметками."
+    ),
+    CardTerms => ("Terms lesson", "Урок по терминам"),
+    CardIntro => ("Your introduction", "Ваша самопрезентация"),
+    CardIntroText => (
+        "\"Tell me about yourself\", coached until it is short, true and yours.",
+        "«Расскажите о себе»: репетитор доводит ответ до короткого, честного и вашего."
+    ),
+    TodayCoverage => ("Questions covered", "Закрыто вопросов"),
 }
 
 /// The strings of one language.

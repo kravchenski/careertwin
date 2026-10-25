@@ -40,6 +40,7 @@ use crate::prompts::interviewer::InterviewerSpec;
 use crate::prompts::prepare::{Analysis, BankQuestion};
 use crate::prompts::research::Digest;
 use crate::prompts::translate::Translation;
+use crate::prompts::tutor::{Lesson, Mode};
 use crate::services::{Problems, Services};
 use crate::session::{Session, Store, Track};
 use crate::speech::Transcript;
@@ -75,6 +76,13 @@ pub enum Nav {
     Prepare,
     Plan,
     Notes,
+    /// A call with the defaults of the tab, with no setup page.
+    QuickCall,
+    /// A lesson with the tutor; `topic` is an index into the plan, for a terms lesson.
+    Tutor {
+        mode: Mode,
+        topic: Option<usize>,
+    },
     StartCall {
         spec: Box<InterviewerSpec>,
         headphones: bool,
@@ -415,6 +423,23 @@ impl Core {
         });
     }
 
+    /// Does what the tutor asked for in the call: keeps a note, records a result.
+    pub fn apply_effect(&mut self, spec: &InterviewerSpec, effect: live::Effect) {
+        let topic = spec.lesson.as_ref().map_or_else(|| spec.focus.clone(), |lesson| lesson.topic.clone());
+        match effect {
+            live::Effect::Progress { term, half, score } => {
+                let now = self.now();
+                self.progress.record(&topic, &term, half, score, now);
+                self.save_progress();
+            }
+            live::Effect::Note(text) => {
+                let kind = if spec.mode == Mode::Chat { NoteKind::Lecture } else { NoteKind::Vital };
+                self.add_note(kind, &topic, &text);
+            }
+            live::Effect::Show(_) => {}
+        }
+    }
+
     pub fn save_stats(&self) {
         let _ = self.stats.save(&self.paths.stats_file());
     }
@@ -542,6 +567,9 @@ impl Core {
 pub struct PrepApp {
     pub core: Core,
     pub screen: Screen,
+    /// Which kind of screen was open last frame, and how many times it has changed: a new page
+    /// starts at its top instead of where the last one was scrolled to.
+    page: (Option<std::mem::Discriminant<Screen>>, u32),
     pub history: history::HistoryState,
     pub draft: Option<settings::Draft>,
 }
@@ -611,6 +639,7 @@ impl PrepApp {
                 orb_renders: 0,
             },
             screen: Screen::Home,
+            page: (None, 0),
             history: history::HistoryState::default(),
             draft: None,
         };
@@ -625,6 +654,12 @@ impl PrepApp {
         }
         if let Some(signal) = self.core.pomodoro.update(Instant::now()) {
             self.core.on_timer(signal);
+            if let (Screen::Live(view), crate::pomodoro::Signal::FocusDone { .. }) = (&self.screen, signal) {
+                let minutes = self.core.settings.pomodoro.focus_minutes;
+                view.send(crate::conversation::Command::Context(format!(
+                    "the {minutes}-minute focus block has just ended; at the next natural pause, suggest a short break"
+                )));
+            }
         }
         self.shortcuts(ui);
         account::bar(&mut self.core, ui);
@@ -632,20 +667,27 @@ impl PrepApp {
         if let Screen::Live(view) = &mut self.screen {
             next = next.or(live::composer(&mut self.core, view, ui));
         }
+        let kind = std::mem::discriminant(&self.screen);
+        if self.page.0 != Some(kind) {
+            self.page = (Some(kind), self.page.1 + 1);
+        }
+        let page = self.page.1;
         egui::CentralPanel::default().frame(Frame::new().fill(BG)).show(ui, |ui| {
-            let screen_nav = match &mut self.screen {
-                Screen::Home => home::ui(&mut self.core, ui),
-                Screen::Setup(view) => setup::ui(&mut self.core, view, ui),
-                Screen::Live(view) => live::ui(&mut self.core, view, ui),
-                Screen::Review(view) => review::ui(&mut self.core, view, ui),
-                Screen::Concepts(view) => concepts::ui(&mut self.core, view, ui),
-                Screen::Translate(view) => translate::ui(&mut self.core, view, ui),
-                Screen::Prepare(view) => prepare::ui(&mut self.core, view, ui),
-                Screen::Phrases(view) => phrases::ui(&mut self.core, view, ui),
-                Screen::Plan(view) => plan::ui(&mut self.core, view, ui),
-                Screen::Notes(view) => notebook::ui(&mut self.core, view, ui),
-            };
-            next = next.take().or(screen_nav);
+            ui.push_id(page, |ui| {
+                let screen_nav = match &mut self.screen {
+                    Screen::Home => home::ui(&mut self.core, ui),
+                    Screen::Setup(view) => setup::ui(&mut self.core, view, ui),
+                    Screen::Live(view) => live::ui(&mut self.core, view, ui),
+                    Screen::Review(view) => review::ui(&mut self.core, view, ui),
+                    Screen::Concepts(view) => concepts::ui(&mut self.core, view, ui),
+                    Screen::Translate(view) => translate::ui(&mut self.core, view, ui),
+                    Screen::Prepare(view) => prepare::ui(&mut self.core, view, ui),
+                    Screen::Phrases(view) => phrases::ui(&mut self.core, view, ui),
+                    Screen::Plan(view) => plan::ui(&mut self.core, view, ui),
+                    Screen::Notes(view) => notebook::ui(&mut self.core, view, ui),
+                };
+                next = next.take().or(screen_nav);
+            });
         });
         let ctx = ui.ctx().clone();
         next = next.or(history::ui(&mut self.core, &mut self.history, &ctx));
@@ -686,6 +728,12 @@ impl PrepApp {
             Nav::Phrases => self.screen = Screen::Phrases(Box::default()),
             Nav::Translate => self.screen = Screen::Translate(Box::default()),
             Nav::Prepare => self.screen = Screen::Prepare(Box::default()),
+            Nav::QuickCall => {
+                let spec = InterviewerSpec::new(self.core.track);
+                let headphones = self.core.settings.audio.headphones;
+                self.start_call(spec, headphones);
+            }
+            Nav::Tutor { mode, topic } => self.start_tutor(mode, topic),
             Nav::Plan => self.screen = Screen::Plan(Box::default()),
             Nav::Notes => self.screen = Screen::Notes(Box::default()),
             Nav::PracticeQuestion(question) => {
@@ -701,12 +749,20 @@ impl PrepApp {
         let core = &mut self.core;
         let effective = core.settings.effective();
         let brief = core.working_brief();
-        let (mic, guard) = match (core.services.mic)(&effective.audio.input_device) {
-            Ok((frames, guard)) => (Some(frames), Some(guard)),
-            Err(_) => (None, None),
+        let (mic, guard) = match (spec.mode.spoken(), (core.services.mic)(&effective.audio.input_device)) {
+            (true, Ok((frames, guard))) => (Some(frames), Some(guard)),
+            _ => (None, None),
         };
         let voice = crate::speech::voice_for(&effective, spec.language);
-        let title = format!("{} · {}", setup::title_for(core), setup::persona_label(core, spec.persona));
+        let other =
+            if spec.language == crate::prompts::Lang::En { crate::prompts::Lang::Ru } else { crate::prompts::Lang::En };
+        let voice_alt = Some(crate::speech::voice_for(&effective, other));
+        let title = match spec.mode {
+            Mode::Interview => format!("{} · {}", setup::title_for(core), setup::persona_label(core, spec.persona)),
+            Mode::Terms => format!("{} · {}", core.tr.get(K::CardTerms), spec.focus),
+            Mode::Intro => core.tr.get(K::CardIntro).to_owned(),
+            Mode::Chat => core.tr.get(K::CardChat).to_owned(),
+        };
         let mut session = Session::new(core.track, crate::session::Kind::Live, &title);
         session.setup = serde_json::to_value(&spec).unwrap_or_default();
         let _ = core.store.save(&session);
@@ -717,6 +773,7 @@ impl PrepApp {
             model: effective.llm.interviewer_model().to_owned(),
             headphones,
             voice,
+            voice_alt,
             stt_hint: crate::speech::SttHint {
                 language: match effective.stt.language.as_str() {
                     "" | "auto" => None,
@@ -728,13 +785,67 @@ impl PrepApp {
         let deps = crate::conversation::Deps {
             llm: core.services.llm.clone(),
             stt: core.services.stt.clone().unwrap_or_else(|| Arc::new(NoRecognition)),
-            tts: core.services.tts.clone(),
+            tts: if spec.mode.spoken() { core.services.tts.clone() } else { None },
             speaker: core.services.speaker.clone(),
             mic,
             wake: Arc::clone(&core.wake),
         };
         let handle = crate::conversation::start(deps, config);
         self.screen = Screen::Live(Box::new(live::LiveView::new(session, spec, handle, guard)));
+    }
+
+    /// Starts a lesson with the tutor: the terms of a topic, the introduction, or a quiet chat.
+    fn start_tutor(&mut self, mode: Mode, topic: Option<usize>) {
+        let core = &mut self.core;
+        let mut spec = InterviewerSpec::tutoring(core.track, mode, core.ui_lang(), 20);
+        match mode {
+            Mode::Terms => {
+                let Some(plan) = &core.syllabus else {
+                    self.screen = Screen::Plan(Box::default());
+                    return;
+                };
+                let Some(index) = topic.or_else(|| plan.next_topic(&core.progress)) else { return };
+                let chosen = &plan.topics[index];
+                let mut terms: Vec<_> = chosen
+                    .terms
+                    .iter()
+                    .filter(|term| core.progress.get(&chosen.name, &term.name).mastery() < 0.99)
+                    .cloned()
+                    .collect();
+                if terms.is_empty() {
+                    terms = chosen.terms.clone();
+                }
+                terms.truncate(6);
+                if terms.is_empty() {
+                    core.notify(core.tr.get(K::PlanWriteTerms).to_owned());
+                    self.screen = Screen::Plan(Box::default());
+                    return;
+                }
+                spec.minutes = (terms.len() as u32 * 4).clamp(10, 40);
+                spec.native = plan.native;
+                spec.focus = chosen.name.clone();
+                spec.lesson = Some(Lesson { topic: chosen.name.clone(), terms });
+            }
+            Mode::Intro => {
+                if core.brief.is_none() {
+                    core.notify(core.tr.get(K::NoProfile).to_owned());
+                    return;
+                }
+                spec.minutes = 15;
+            }
+            Mode::Chat => spec.minutes = 90,
+            Mode::Interview => {}
+        }
+        // a lesson is a focus block: the timer starts with it unless it is already going
+        let now = Instant::now();
+        if mode != Mode::Chat
+            && !core.pomodoro.in_progress(now)
+            && core.pomodoro.phase() == crate::pomodoro::Phase::Focus
+        {
+            core.pomodoro.start(now);
+        }
+        let headphones = core.settings.audio.headphones;
+        self.start_call(spec, headphones);
     }
 
     fn end_call(&mut self) {

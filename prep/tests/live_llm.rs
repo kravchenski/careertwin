@@ -75,6 +75,7 @@ async fn a_real_model_interviews_like_a_person() {
         model,
         headphones: false,
         voice: Voice { name: "alloy".into(), speed: 1.0, instructions: String::new(), language: Lang::En },
+        voice_alt: None,
         stt_hint: SttHint::default(),
     };
     let deps = Deps {

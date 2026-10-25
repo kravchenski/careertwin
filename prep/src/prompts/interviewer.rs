@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::tutor::{self, Lesson, Mode};
 use super::{HONESTY, Lang};
 use crate::brief::Brief;
 use crate::llm::Message;
@@ -20,6 +21,8 @@ pub enum Persona {
     HiringManager,
     Recruiter,
     Tutor,
+    /// Teaches rather than interviews: the terms lesson, the introduction coach, the quiet chat.
+    Mentor,
 }
 
 impl Persona {
@@ -43,6 +46,7 @@ impl Persona {
             Self::HiringManager => "Sarah",
             Self::Recruiter => "Emma",
             Self::Tutor => "Olivia",
+            Self::Mentor => "Maya",
         }
     }
 
@@ -53,6 +57,7 @@ impl Persona {
             Self::HiringManager => "the hiring manager",
             Self::Recruiter => "a recruiter",
             Self::Tutor => "a friendly English conversation partner from an international tech company",
+            Self::Mentor => "a patient senior engineer who coaches people for job interviews",
         }
     }
 
@@ -78,6 +83,7 @@ impl Persona {
                 "Encouraging and natural, like a colleague chatting before a meeting. You keep the talk going about \
                  work, projects and plans, ask short follow-ups and let the candidate do most of the talking."
             }
+            Self::Mentor => "Patient and clear. You explain, check that it landed and let the person do the talking.",
         }
     }
 }
@@ -132,6 +138,15 @@ pub struct InterviewerSpec {
     pub minutes: u32,
     /// What to concentrate on ("PostgreSQL and async", "a stand-up update"). May be empty.
     pub focus: String,
+    /// Whether the call interviews or teaches, and how.
+    #[serde(default)]
+    pub mode: Mode,
+    /// The language the person thinks in: where plain explanations are given.
+    #[serde(default)]
+    pub native: Lang,
+    /// The terms a terms lesson goes through.
+    #[serde(default)]
+    pub lesson: Option<Lesson>,
 }
 
 impl InterviewerSpec {
@@ -146,7 +161,20 @@ impl InterviewerSpec {
                 _ => 20,
             },
             focus: String::new(),
+            mode: Mode::Interview,
+            native: Lang::En,
+            lesson: None,
         }
+    }
+
+    /// A tutoring call: the mentor, the language being practised and the one the person thinks in.
+    pub fn tutoring(track: Track, mode: Mode, native: Lang, minutes: u32) -> Self {
+        let mut spec = Self::new(track);
+        spec.persona = Persona::Mentor;
+        spec.mode = mode;
+        spec.native = native;
+        spec.minutes = minutes;
+        spec
     }
 
     pub fn total_seconds(&self) -> u32 {
@@ -205,6 +233,9 @@ fn english_track_rules(level: Level) -> String {
 
 /// The instructions the interviewer lives by.
 pub fn system(spec: &InterviewerSpec, brief: &Brief) -> String {
+    if spec.mode.teaches() {
+        return tutor::system(spec, brief);
+    }
     let persona = spec.persona;
     let language = spec.language.name();
     let mut text = format!(
@@ -334,6 +365,9 @@ pub fn state_note(spec: &InterviewerSpec, elapsed: u32, questions_answered: usiz
 
 /// The first request of a call: the interviewer greets and asks the first question.
 pub fn opening(spec: &InterviewerSpec, brief: &Brief) -> Vec<Message> {
+    if spec.mode.teaches() {
+        return tutor::opening(spec, brief);
+    }
     let who = brief.first_name().map_or_else(|| "The candidate".to_owned(), |n| format!("The candidate, {n},"));
     vec![
         Message::system(system(spec, brief)),

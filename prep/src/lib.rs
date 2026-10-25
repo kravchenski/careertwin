@@ -27,6 +27,7 @@ pub mod speech;
 pub mod srs;
 pub mod stats;
 pub mod syllabus;
+pub mod tags;
 pub mod testing;
 pub mod textdiff;
 #[cfg(feature = "gui")]
