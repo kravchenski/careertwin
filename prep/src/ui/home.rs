@@ -41,6 +41,7 @@ fn cards(track: Track) -> Vec<Card> {
         Track::Technical => vec![
             Card { tag: "live", title: K::CardMock, text: K::CardMockTechnicalText, go: Nav::SetupCall },
             Card { tag: "cards", title: K::CardConcepts, text: K::CardConceptsText, go: Nav::Concepts },
+            Card { tag: "code", title: K::CardCode, text: K::CardCodeText, go: Nav::Code },
             Card { tag: "plan", title: K::CardPlan, text: K::CardPlanText, go: Nav::Plan },
             Card { tag: "prepare", title: K::CardPrepare, text: K::CardPrepareText, go: Nav::Prepare },
             show,

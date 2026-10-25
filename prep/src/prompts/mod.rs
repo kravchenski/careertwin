@@ -5,6 +5,7 @@
 //! passed off as something the candidate did.
 
 pub mod cards;
+pub mod coding;
 pub mod explain;
 pub mod feedback;
 pub mod interviewer;

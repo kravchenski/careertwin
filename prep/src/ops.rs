@@ -9,9 +9,11 @@ use thiserror::Error;
 
 use crate::audio::vad::{self, Segmenter};
 use crate::brief::Brief;
+use crate::coding::{Observation, Task};
 use crate::explain::Storyboard;
 use crate::llm::{ChatOptions, Llm, LlmError, Message};
 use crate::prompts::cards::{self, ConceptCard};
+use crate::prompts::coding as coding_prompts;
 use crate::prompts::explain as explaining;
 use crate::prompts::feedback::{self, Feedback};
 use crate::prompts::interviewer::InterviewerSpec;
@@ -288,6 +290,61 @@ pub async fn storyboard(
     ask_json(llm, model, &explaining::system(native, simpler), &explaining::prompt(topic, context), 4500, |reply| {
         explaining::parse(reply, native)
     })
+    .await
+}
+
+/// What kind of task to set.
+pub struct TaskRequest<'a> {
+    pub language: &'a str,
+    pub level: coding_prompts::Level,
+    pub topic: &'a str,
+    /// Titles of tasks set lately, so this one is different.
+    pub avoid: &'a [String],
+}
+
+/// A live-coding task for the vacancy.
+pub async fn coding_task(
+    llm: &dyn Llm,
+    model: &str,
+    brief: &Brief,
+    native: Lang,
+    request: TaskRequest<'_>,
+) -> Result<Task, OpError> {
+    ask_json(
+        llm,
+        model,
+        &coding_prompts::task_system(native, request.language, request.level),
+        &coding_prompts::task_prompt(brief, request.topic, request.avoid),
+        2500,
+        |reply| coding_prompts::parse_task(reply, request.language),
+    )
+    .await
+}
+
+/// What the tutor looks at: the code, what it said before, and what the editor saw.
+pub struct Look<'a> {
+    pub code: &'a str,
+    pub said: &'a [String],
+    pub signals: &'a str,
+    pub last_words: &'a [String],
+}
+
+/// The tutor looks at the code: should it say anything, and what?
+pub async fn observe(
+    llm: &dyn Llm,
+    model: &str,
+    task: &Task,
+    look: Look<'_>,
+    native: Lang,
+) -> Result<Observation, OpError> {
+    ask_json(
+        llm,
+        model,
+        &coding_prompts::observe_system(native),
+        &coding_prompts::observe_prompt(task, look.code, look.said, look.signals, look.last_words),
+        500,
+        coding_prompts::parse_observation,
+    )
     .await
 }
 

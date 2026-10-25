@@ -131,6 +131,11 @@ impl LlmSettings {
     pub fn interviewer_model(&self) -> &str {
         if self.fast_model.trim().is_empty() { &self.model } else { &self.fast_model }
     }
+
+    /// The fast model when there is one, for quick looks; `main` otherwise.
+    pub fn fast_model_or(&self, main: &str) -> String {
+        if self.fast_model.trim().is_empty() { main.to_owned() } else { self.fast_model.clone() }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

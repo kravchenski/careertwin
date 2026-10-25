@@ -134,7 +134,14 @@ pub fn prompt(session: &Session, brief: &Brief) -> String {
             }
         }
     }
-    format!("{}\n\nTRANSCRIPT\n{}\n\nReview this call.", brief.render(), lines.join("\n"))
+    let mut extra = String::new();
+    if let Some(code) = session.payload.get("code").and_then(|c| c.as_str()).filter(|c| !c.trim().is_empty()) {
+        extra.push_str(&format!("\n\nTHE CODE AT THE END\n```\n{}\n```", crate::brief::truncate_chars(code, 5000)));
+        if let Some(signals) = session.payload.get("signals").and_then(|s| s.as_str()) {
+            extra.push_str(&format!("\nWHAT THE EDITOR SAW: {signals}."));
+        }
+    }
+    format!("{}\n\nTRANSCRIPT\n{}{extra}\n\nReview this call.", brief.render(), lines.join("\n"))
 }
 
 /// Reads the model's review and checks it against the transcript.

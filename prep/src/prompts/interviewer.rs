@@ -147,6 +147,9 @@ pub struct InterviewerSpec {
     /// The terms a terms lesson goes through.
     #[serde(default)]
     pub lesson: Option<Lesson>,
+    /// The task of a live-coding call.
+    #[serde(default)]
+    pub task: Option<crate::coding::Task>,
 }
 
 impl InterviewerSpec {
@@ -164,6 +167,7 @@ impl InterviewerSpec {
             mode: Mode::Interview,
             native: Lang::En,
             lesson: None,
+            task: None,
         }
     }
 

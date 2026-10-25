@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::interviewer::{Clock, InterviewerSpec};
 use super::{HONESTY, Lang};
 use crate::brief::Brief;
+use crate::coding::Task;
 use crate::llm::Message;
 use crate::syllabus::Term;
 
@@ -26,6 +27,8 @@ pub enum Mode {
     Intro,
     /// Typing quietly to the tutor, for instance in a lecture. Nothing is spoken.
     Chat,
+    /// Writing code while the tutor watches, helps without giving the answer, and talks it through.
+    Coding,
 }
 
 impl Mode {
@@ -238,6 +241,36 @@ fn intro_rules(spec: &InterviewerSpec) -> String {
     )
 }
 
+fn coding_rules(spec: &InterviewerSpec) -> String {
+    let task = spec.task.as_ref().map(Task::for_tutor).unwrap_or_default();
+    format!(
+        "THE LESSON\n\
+         A live-coding interview, practised. The person writes code in an editor and you can see it: the latest \
+         version comes with their messages, marked CODE. You watch like an interviewer who wants to see them think, \
+         and you speak like a person.\n\n{task}\n\
+         HOW YOU BEHAVE\n\
+         - Mostly you listen. They may think aloud: react in a few words and let them go on. Never read code out \
+         loud and never write code for them.\n\
+         - At the start, in one or two sentences, tell them the task in your own words, ask if it is clear, and ask \
+         what approach they have in mind. Do not suggest one.\n\
+         - If the code looks right so far, say nothing about it, or ask about their reasoning. If it looks wrong, do \
+         NOT point at the line or say what is wrong: say something like \"check that everything works the way you \
+         expect\", or ask them to follow a small input through the code by hand. Only if they stay stuck, point at \
+         the area, never at the fix.\n\
+         - Never say \"you forgot to\", \"you should\" or \"the bug is\".\n\
+         - If they say they do not know, or ask for help, that is fine: solve it together. Ask a small question that \
+         leads one step, let them type that step, and if they are lost give one nudge from your private list. Repeat. \
+         Never hand over the whole solution.\n\
+         - The program also watches the editor and may tell you in a STATE note that a block came in all at once or \
+         that the window was left for a while. Calmly ask them to explain that part in their own words, line by line. \
+         Never accuse.\n\
+         - When they say they are done: ask them to try a tricky input by hand, then the time complexity, then one \
+         improvement. Then wrap up in two sentences and add [[end]].\n\
+         - Keep every turn to one or two short sentences.\n\n{tags}",
+        tags = tag_rules("[[note: ...]] for one thing worth remembering from this task, and [[end]] as above.\n"),
+    )
+}
+
 fn chat_rules() -> String {
     format!(
         "THE SETTING\n\
@@ -250,6 +283,26 @@ fn chat_rules() -> String {
          - If they say \"save\", \"note\", \"запиши\" or the like, or you give a definition worth remembering, end \
          with [[note: the one thing to remember, under 25 words]]. Not on every message.\n\n{tags}",
         tags = tag_rules("[[note: ...]] as above.\n"),
+    )
+}
+
+/// Which language the tutor uses, and when it switches.
+fn language_rules(spec: &InterviewerSpec) -> String {
+    let (native, target) = (spec.native.name(), spec.language.name());
+    if spec.mode == Mode::Coding {
+        return format!(
+            "\nLANGUAGE\nSpeak {target} by default, because the real interview is in {target}. If they speak or write \
+             in {native}, answer in {native}, briefly, and let them choose. Keep terms and code in English.\n"
+        );
+    }
+    let informal = if spec.native == Lang::Ru {
+        "In Russian, speak to them informally (на «ты»), as a colleague would.\n"
+    } else {
+        ""
+    };
+    format!(
+        "\nLANGUAGE\nThe person thinks in {native} and is practising {target}. Follow the stage you are in; if they \
+         answer in the other language, accept it and gently steer back. Keep terms and code in English.\n{informal}"
     )
 }
 
@@ -269,19 +322,10 @@ pub fn system(spec: &InterviewerSpec, brief: &Brief) -> String {
         (Mode::Terms, Some(lesson)) => terms_rules(spec, lesson),
         (Mode::Intro, _) => intro_rules(spec),
         (Mode::Chat, _) => chat_rules(),
+        (Mode::Coding, _) => coding_rules(spec),
         _ => String::new(),
     });
-    text.push_str(&format!(
-        "\nLANGUAGE\nThe person thinks in {native} and is practising {target}. Follow the stage you are in; if they \
-         answer in the other language, accept it and gently steer back. Keep terms and code in English.\n{informal}",
-        native = spec.native.name(),
-        target = spec.language.name(),
-        informal = if spec.native == Lang::Ru {
-            "In Russian, speak to them informally (на «ты»), as a colleague would.\n"
-        } else {
-            ""
-        },
-    ));
+    text.push_str(&language_rules(spec));
     if !spec.focus.trim().is_empty() {
         text.push_str(&format!("\nFOCUS: concentrate on {}.\n", spec.focus.trim()));
     }
@@ -320,6 +364,9 @@ pub fn opening(spec: &InterviewerSpec, brief: &Brief) -> Vec<Message> {
         }
         (Mode::Intro, _) => "Greet them by first name in one short sentence and ask, as the interviewer would, \
                              for the introduction: \"tell me about yourself\"."
+            .to_owned(),
+        (Mode::Coding, _) => "Greet them by first name in one short sentence, tell them the task in your own \
+                              words in one or two more, and ask what approach they have in mind. Do not hint."
             .to_owned(),
         _ => "Greet them by first name in one short sentence and ask what they would like to work on.".to_owned(),
     };
@@ -461,6 +508,37 @@ mod tests {
         assert!(chat.contains("Nothing is read aloud") && chat.contains("запиши"));
         assert!(chat.contains("This is a chat") && !chat.contains("read aloud, so"));
         assert!(!chat.contains("planned for"), "a chat has no clock");
+    }
+
+    #[test]
+    fn a_coding_call_speaks_the_practised_language_and_follows_you_into_yours() {
+        let mut spec = spec(Mode::Coding);
+        spec.task = Some(crate::coding::Task {
+            title: "Two sum".into(),
+            statement: "Find two numbers.".into(),
+            language: "python".into(),
+            outline: "A dictionary.".into(),
+            hints: vec!["What do you need to remember?".into()],
+            ..crate::coding::Task::default()
+        });
+        let text = system(&spec, &brief());
+        for must in [
+            "A live-coding interview, practised",
+            "TASK: Two sum",
+            "PRIVATE NOTES FOR YOU",
+            "Solution idea: A dictionary.",
+            "check that everything works the way you expect",
+            "Never say \"you forgot to\"",
+            "solve it together",
+            "Never accuse",
+            "Speak English by default",
+            "answer in Russian, briefly",
+        ] {
+            assert!(text.contains(must), "missing: {must}");
+        }
+        assert!(!text.contains("HOW EACH TERM GOES"));
+        assert!(opening(&spec, &brief())[1].content.contains("what approach they have in mind"));
+        assert!(Mode::Coding.teaches() && Mode::Coding.spoken());
     }
 
     #[test]

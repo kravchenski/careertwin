@@ -914,3 +914,39 @@ async fn the_mentor_has_her_own_name_in_the_prompt() {
     assert!(system.contains("You are Maya"));
     assert_eq!(lesson_spec(Mode::Intro).persona, Persona::Mentor);
 }
+
+#[tokio::test(start_paused = true)]
+async fn while_code_is_written_the_tutor_waits_and_sees_the_latest_version_with_your_words() {
+    let mut spec = lesson_spec(Mode::Coding);
+    spec.task = Some(careertwin_prep::coding::Task {
+        title: "Two sum".into(),
+        statement: "Find two numbers.".into(),
+        language: "python".into(),
+        ..careertwin_prep::coding::Task::default()
+    });
+    let mut call = start(Setup {
+        spec: Some(spec),
+        replies: vec![
+            Reply::text("Hi Alex. Here is the task. What approach do you have in mind?"),
+            Reply::text("Okay. Try it by hand."),
+        ],
+        stt: vec!["I will use a dictionary."],
+        ..Setup::default()
+    });
+    call.listening().await;
+    // a long quiet while typing is not a reason to speak
+    call.talker.silence(240_000).await;
+    call.drain();
+    assert_eq!(call.llm.calls(), 1, "no nudges while code is written");
+    assert!(!call.captions().iter().any(|c| c == "Take your time."), "{:?}", call.captions());
+    call.send(Command::Code("def f():\n    pass\n".into()));
+    call.send(Command::Code("def f(nums):\n    seen = {}\n".into()));
+    call.talker.silence(100).await;
+    call.say_aloud(1500).await;
+    call.listening().await;
+    let note = call.llm.last_request().last().unwrap().content.clone();
+    assert!(note.contains("[CODE the person has written so far"), "{note}");
+    assert!(note.contains("seen = {}") && !note.contains("pass\n"), "only the latest version: {note}");
+    let system = call.llm.requests.lock().unwrap()[0][0].content.clone();
+    assert!(system.contains("PRIVATE NOTES FOR YOU") && system.contains("live-coding interview"));
+}

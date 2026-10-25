@@ -155,6 +155,8 @@ pub enum Command {
     Hold(bool),
     /// Turns the tutor's voice on or off; off, it writes only.
     Voice(bool),
+    /// The code in the editor now; the tutor sees the latest one with your next words.
+    Code(String),
 }
 
 enum Internal {
@@ -242,6 +244,8 @@ struct Call {
     context: Vec<String>,
     holding: bool,
     voice_on: bool,
+    /// The code in the editor now, for a live-coding call.
+    code: Option<String>,
     /// Set once a sentence in the other language could not be spoken, so it is said once and not again.
     alt_failed: Arc<AtomicBool>,
 }
@@ -356,6 +360,7 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
         context: Vec::new(),
         holding: false,
         voice_on: true,
+        code: None,
         alt_failed: Arc::new(AtomicBool::new(false)),
     };
     call.emit(Event::State(State::Starting));
@@ -748,6 +753,12 @@ impl Call {
             note.push('\n');
             note.push_str(&extra);
         }
+        if let Some(code) = &self.code {
+            note.push_str(&format!(
+                "\n[CODE the person has written so far, live; never read it aloud:\n```\n{}\n```]",
+                crate::brief::truncate_chars(code, 6000)
+            ));
+        }
         note
     }
 
@@ -810,6 +821,7 @@ impl Call {
                     self.nudges = 0;
                 }
             }
+            Command::Code(code) => self.code = Some(code),
             Command::Voice(on) => {
                 self.voice_on = on;
                 if !on {
@@ -883,6 +895,8 @@ impl Call {
     }
 
     fn check_silence(&mut self, now: Instant) {
+        // a chat has no clock, and while code is being written a quiet person is a thinking one
+        let quiet_mode = matches!(self.config.spec.mode, Mode::Chat | Mode::Coding);
         if self.holding || self.config.spec.mode == Mode::Chat {
             return;
         }
@@ -907,6 +921,9 @@ impl Call {
             let note = self.make_note(Clock::Final);
             let messages = interviewer::turn(&self.config.spec, &self.config.brief, &self.history, Some(note));
             self.begin_turn(messages, None);
+            return;
+        }
+        if quiet_mode {
             return;
         }
         match self.nudges {

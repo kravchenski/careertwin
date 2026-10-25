@@ -2,6 +2,7 @@
 //! the middle of it. History and settings slide over it when asked for.
 
 pub mod account;
+pub mod code;
 pub mod concepts;
 pub mod focus;
 pub mod help;
@@ -19,6 +20,7 @@ pub mod settings;
 pub mod setup;
 pub mod show;
 pub mod stage;
+pub mod syntax;
 pub mod theme;
 pub mod translate;
 pub mod usage;
@@ -30,6 +32,7 @@ use std::time::Instant;
 use egui::{Align, Frame, Layout, Margin, Rect, ScrollArea, Ui, UiBuilder, pos2, vec2};
 
 use crate::brief::Brief;
+use crate::coding::Task;
 use crate::config::{Paths, Settings};
 use crate::explain::Storyboard;
 use crate::i18n::{K, Tr};
@@ -69,6 +72,7 @@ pub enum Screen {
     Plan(Box<plan::PlanView>),
     Notes(Box<notebook::NotebookView>),
     Show(Box<show::ShowView>),
+    Code(Box<code::SetupView>),
 }
 
 /// What a screen asks the window to do next.
@@ -82,6 +86,8 @@ pub enum Nav {
     Prepare,
     Plan,
     Notes,
+    /// The page to choose a live-coding task.
+    Code,
     /// Explain a topic with pictures; with no topic, ask for one.
     Show {
         topic: Option<String>,
@@ -121,6 +127,8 @@ pub enum Outcome {
     Terms { topic: String, result: Result<Vec<Term>, OpError> },
     Digested { session_id: String, result: Result<Digest, OpError> },
     Storyboard { stage: u64, result: Result<Storyboard, OpError> },
+    Task(Result<crate::coding::Task, OpError>),
+    Observed(Result<crate::coding::Observation, OpError>),
     SceneVoice { stage: u64, index: usize, result: Result<Speech, String> },
 }
 
@@ -382,6 +390,47 @@ impl Core {
             Outcome::Storyboard { stage: id, result }
         });
         stage::Picture::making(id, topic, context, simpler)
+    }
+
+    /// Asks for a live-coding task in `language` for the vacancy.
+    pub fn make_task(&mut self, language: &'static str, level: crate::prompts::coding::Level, topic: &str) {
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.model;
+        let brief = self.working_brief();
+        let native = self.ui_lang();
+        let topic = topic.trim().to_owned();
+        let avoid = self.recent_task_titles();
+        let label = self.tr.get(K::CodePreparing).to_owned();
+        self.jobs.spawn(label, async move {
+            let request = crate::ops::TaskRequest { language, level, topic: &topic, avoid: &avoid };
+            let result = crate::ops::coding_task(llm.as_ref(), &model, &brief, native, request).await;
+            Outcome::Task(result)
+        });
+    }
+
+    /// Titles of the tasks set lately, so the next one is a different one.
+    fn recent_task_titles(&self) -> Vec<String> {
+        self.store
+            .list()
+            .into_iter()
+            .take(30)
+            .filter_map(|s| serde_json::from_value::<InterviewerSpec>(s.setup).ok()?.task.map(|t| t.title))
+            .take(8)
+            .collect()
+    }
+
+    /// The tutor looks at the code: if it has something to say, it comes back as [`Outcome::Observed`].
+    pub fn observe_code(&mut self, task: &Task, code: &str, said: &[String], signals: &str, last_words: &[String]) {
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.fast_model_or(&self.settings.effective().llm.model);
+        let (task, code, said, signals, last) =
+            (task.clone(), code.to_owned(), said.to_vec(), signals.to_owned(), last_words.to_vec());
+        let label = self.tr.get(K::CodeWatching).to_owned();
+        self.jobs.spawn(label, async move {
+            let look = crate::ops::Look { code: &code, said: &said, signals: &signals, last_words: &last };
+            let result = crate::ops::observe(llm.as_ref(), &model, &task, look, crate::prompts::Lang::En).await;
+            Outcome::Observed(result)
+        });
     }
 
     /// Makes the voice of one scene of a story, in the language it is told in.
@@ -737,6 +786,7 @@ impl PrepApp {
                     Screen::Plan(view) => plan::ui(&mut self.core, view, ui),
                     Screen::Notes(view) => notebook::ui(&mut self.core, view, ui),
                     Screen::Show(view) => show::ui(&mut self.core, view, ui),
+                    Screen::Code(view) => code::setup(&mut self.core, view, ui),
                 };
                 next = next.take().or(screen_nav);
             });
@@ -793,6 +843,7 @@ impl PrepApp {
                 };
                 self.screen = Screen::Show(Box::new(view));
             }
+            Nav::Code => self.screen = Screen::Code(Box::new(code::SetupView::new(&self.core))),
             Nav::Plan => self.screen = Screen::Plan(Box::default()),
             Nav::Notes => self.screen = Screen::Notes(Box::default()),
             Nav::PracticeQuestion(question) => {
@@ -821,6 +872,7 @@ impl PrepApp {
             Mode::Terms => format!("{} · {}", core.tr.get(K::CardTerms), spec.focus),
             Mode::Intro => core.tr.get(K::CardIntro).to_owned(),
             Mode::Chat => core.tr.get(K::CardChat).to_owned(),
+            Mode::Coding => format!("{} · {}", core.tr.get(K::CardCode), spec.focus),
         };
         let mut session = Session::new(core.track, crate::session::Kind::Live, &title);
         session.setup = serde_json::to_value(&spec).unwrap_or_default();
@@ -893,6 +945,10 @@ impl PrepApp {
                 spec.minutes = 15;
             }
             Mode::Chat => spec.minutes = 90,
+            Mode::Coding => {
+                self.screen = Screen::Code(Box::new(code::SetupView::new(core)));
+                return;
+            }
             Mode::Interview => {}
         }
         // a lesson is a focus block: the timer starts with it unless it is already going
@@ -907,6 +963,23 @@ impl PrepApp {
         self.start_call(spec, headphones);
     }
 
+    /// Starts the call for a live-coding task that has just been written.
+    fn start_coding(&mut self, task: Task) {
+        let core = &mut self.core;
+        let mut spec = InterviewerSpec::tutoring(core.track, Mode::Coding, core.ui_lang(), 30);
+        spec.focus = task.title.clone();
+        spec.task = Some(task.clone());
+        let now = Instant::now();
+        if !core.pomodoro.in_progress(now) && core.pomodoro.phase() == crate::pomodoro::Phase::Focus {
+            core.pomodoro.start(now);
+        }
+        let headphones = core.settings.audio.headphones;
+        self.start_call(spec, headphones);
+        if let Screen::Live(view) = &mut self.screen {
+            view.coding = Some(code::CodeSession::new(task));
+        }
+    }
+
     fn end_call(&mut self) {
         if let Screen::Live(view) = std::mem::replace(&mut self.screen, Screen::Home) {
             let mut session = view.session.clone();
@@ -915,6 +988,9 @@ impl PrepApp {
                 return;
             }
             session.finish();
+            if let Some(coding) = &view.coding {
+                session.payload = serde_json::json!({ "code": coding.text, "signals": coding.watcher.summary() });
+            }
             let _ = self.core.store.save(&session);
             let words = session
                 .turns
@@ -1032,7 +1108,10 @@ impl PrepApp {
                     self.core.add_note(NoteKind::Mistake, &topic, line);
                 }
                 if let Some(mut session) = session {
-                    session.payload = serde_json::json!({ "digest": digest });
+                    if !session.payload.is_object() {
+                        session.payload = serde_json::json!({});
+                    }
+                    session.payload["digest"] = serde_json::json!(digest);
                     let _ = self.core.store.save(&session);
                     if let Screen::Review(view) = &mut self.screen
                         && view.session.id == session_id
@@ -1061,6 +1140,32 @@ impl PrepApp {
                     }
                     if let Some(player) = found.player_mut() {
                         player.set_voice(index, result.ok());
+                    }
+                }
+            }
+            Outcome::Task(result) => {
+                if let Screen::Code(view) = &mut self.screen {
+                    match result {
+                        Ok(task) => self.start_coding(task),
+                        Err(error) => {
+                            view.working = false;
+                            view.error = Some(error.to_string());
+                        }
+                    }
+                }
+            }
+            Outcome::Observed(result) => {
+                if let Screen::Live(view) = &mut self.screen
+                    && let Some(coding) = view.coding.as_mut()
+                {
+                    coding.watcher.looked();
+                    if let Ok(observation) = result
+                        && !observation.say.is_empty()
+                        && view.state == crate::conversation::State::Listening
+                        && view.stage.is_none()
+                    {
+                        coding.said.push(observation.say.clone());
+                        view.send(crate::conversation::Command::Speak(observation.say));
                     }
                 }
             }

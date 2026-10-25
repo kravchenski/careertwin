@@ -35,7 +35,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
                 });
             });
             ui.add_space(8.0);
-            for text in [K::HelpTalk, K::HelpShow, K::HelpFocus] {
+            for text in [K::HelpTalk, K::HelpShow, K::HelpCode, K::HelpFocus] {
                 ui.label(RichText::new(tr.get(text)).font(theme::sans(15.0)).color(MUTED));
                 ui.add_space(6.0);
             }

@@ -8,6 +8,7 @@
 
 pub mod audio;
 pub mod brief;
+pub mod coding;
 pub mod config;
 pub mod conversation;
 pub mod doctor;
@@ -33,3 +34,4 @@ pub mod testing;
 pub mod textdiff;
 #[cfg(feature = "gui")]
 pub mod ui;
+pub mod watch;

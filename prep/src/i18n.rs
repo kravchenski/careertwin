@@ -498,6 +498,41 @@ strings! {
     StagePause => ("Pause", "Пауза"),
     StagePlay => ("Play", "Играть"),
     StageCaptionsOnly => ("No voice for this one: captions only.", "Голоса для этого нет: только подписи."),
+    // live coding
+    CardCode => ("Live coding", "Живое кодирование"),
+    CardCodeText => (
+        "A task from your vacancy. Think aloud and write code: the tutor watches and asks, and never gives the answer.",
+        "Задача из вашей вакансии. Думайте вслух и пишите код: репетитор следит и спрашивает, но не даёт ответ."
+    ),
+    CodeTitle => ("Live coding", "Живое кодирование"),
+    CodeIntro => (
+        "You get a task like the one in a real interview and write the solution while the tutor watches. If you go the right way it stays quiet; if something is off it asks you to check, and it will not tell you where. Say \"I don't know\" and you work it out together.",
+        "Вы получаете задачу как на настоящем собеседовании и пишете решение, пока репетитор следит. Если вы идёте верно, он молчит; если что-то не так, он просит проверить и не говорит где. Скажите «не знаю», и вы разберёте вместе."
+    ),
+    CodeLanguage => ("Language", "Язык программирования"),
+    CodeLevel => ("Size", "Размер"),
+    CodeWarmUp => ("Warm-up", "Разминка"),
+    CodeInterview => ("Interview task", "Задача как на собеседовании"),
+    CodeTopic => ("Topic (optional)", "Тема (необязательно)"),
+    CodeTopicHint => ("for example: dictionaries, SQL joins, async", "например: словари, JOIN в SQL, async"),
+    CodeStart => ("Get a task", "Получить задачу"),
+    CodePreparing => ("Preparing a task…", "Готовлю задачу…"),
+    CodeLimits => (
+        "The tutor sees only this window. It notices a block pasted in all at once or a long absence, not other screens; thinking it through yourself is the point.",
+        "Репетитор видит только это окно. Он замечает блок, вставленный целиком, или долгое отсутствие, но не другие экраны: суть в том, чтобы додуматься самому."
+    ),
+    CodeTask => ("Task", "Задача"),
+    CodeExamples => ("Examples", "Примеры"),
+    CodeDone => ("I'm done", "Я закончил"),
+    CodeStuck => ("I don't know", "Не знаю"),
+    CodeDoneSay => ("I think I'm done. Can you check it?", "Кажется, я закончил. Проверишь?"),
+    CodeStuckSay => ("I don't know how to continue.", "Не знаю, как продолжить."),
+    CodeWatching => ("Looking at your code", "Смотрю ваш код"),
+    CodeEditor => ("Code editor", "Редактор кода"),
+    HelpCode => (
+        "Live coding: write the solution aloud and in the editor. The tutor stays quiet while you are on the right track and asks you to check when something is off.",
+        "Живое кодирование: пишите решение вслух и в редакторе. Пока вы на верном пути, репетитор молчит, а когда что-то не так, просит проверить."
+    ),
     HelpShow => (
         "Ask the tutor to show or draw something and it plays as a short animated story you can pause, skip and replay.",
         "Попросите репетитора показать или нарисовать что-нибудь, и это сыграет как короткая анимация: её можно ставить на паузу, листать и пересматривать."

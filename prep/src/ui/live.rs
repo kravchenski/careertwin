@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Align, Frame, Key, Margin, Rect, RichText, Sense, TextEdit, Ui, Vec2, vec2};
 
+use super::code::{self, CodeSession, Narrator};
 use super::orb;
 use super::stage::{self, Outcome, Picture};
 use super::theme::{self, BERRY, BLUSH, FAINT, LINE, MUTED, SNOW, SURFACE};
@@ -72,6 +73,8 @@ pub struct LiveView {
     pub effects: Vec<Effect>,
     /// The picture being shown instead of the sphere, when the tutor drew something.
     pub stage: Option<Picture>,
+    /// The editor and the watcher, in a live-coding call.
+    pub coding: Option<CodeSession>,
     started: Instant,
     orb_level: f32,
 }
@@ -107,6 +110,7 @@ impl LiveView {
             voice_on,
             effects: Vec::new(),
             stage: None,
+            coding: None,
             started: Instant::now(),
             orb_level: 0.0,
         }
@@ -358,6 +362,9 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
         }
         return None;
     }
+    if view.coding.is_some() {
+        return coding_ui(core, view, ui);
+    }
     let chat = view.is_chat();
     let orb_size = if chat {
         (ui.available_height() * 0.26).clamp(120.0, 190.0)
@@ -499,6 +506,81 @@ pub fn ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
             ui.add_space(30.0);
         });
     });
+    None
+}
+
+/// A call with an editor: the tutor at the left, the code at the right.
+fn coding_ui(core: &mut Core, view: &mut LiveView, ui: &mut Ui) -> Option<Nav> {
+    let now = Instant::now();
+    let area = ui.available_rect_before_wrap().shrink2(vec2(20.0, 8.0));
+    let left_width = (area.width() * 0.34).clamp(300.0, 430.0);
+    let left = Rect::from_min_max(area.min, egui::pos2(area.left() + left_width, area.bottom()));
+    let right = Rect::from_min_max(egui::pos2(area.left() + left_width + 18.0, area.top()), area.max);
+    let target = match view.state {
+        State::Speaking => view.speaker_level,
+        State::Listening => view.mic_level,
+        State::Thinking => 0.16,
+        _ => 0.0,
+    };
+    view.orb_level += (target - view.orb_level) * 0.22;
+    let (status, level) = (status_text(core, view), view.orb_level);
+    let speaking = view.state == State::Speaking;
+    let job = if view.captions.is_empty() {
+        view.last_of(Who::Interviewer).map(|text| {
+            let mut job = LayoutJob::default();
+            job.wrap.max_width = left_width - 12.0;
+            job.halign = Align::Center;
+            job.append(
+                text,
+                0.0,
+                TextFormat { font_id: theme::serif(19.0), color: theme::mix(MUTED, SNOW, 0.25), ..Default::default() },
+            );
+            job
+        })
+    } else {
+        Some(view.caption_job(now, left_width - 12.0, 20.0))
+    };
+    let words: Vec<String> = view
+        .items
+        .iter()
+        .rev()
+        .take(4)
+        .rev()
+        .map(|item| format!("{}: {}", if item.who == Who::You { "PERSON" } else { "TUTOR" }, item.text))
+        .collect();
+    let (state, stage_open) = (view.state, view.stage.is_some());
+    let mut commands = Vec::new();
+    if let Some(coding) = view.coding.as_mut() {
+        let narrator = Narrator {
+            status: &status,
+            text: job,
+            level,
+            spin: if speaking { 1.0 + level } else { 0.7 },
+            fps: if speaking { 24.0 } else { 14.0 },
+        };
+        code::tutor_side(core, ui, left, coding, narrator);
+        commands = code::editor(core, coding, ui, right, state, stage_open, &words);
+    }
+    for command in commands {
+        view.send(command);
+    }
+    if let Some(error) = view.error.clone() {
+        let at = Rect::from_min_size(egui::pos2(right.left(), right.bottom() - 70.0), vec2(right.width(), 60.0));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+            Frame::new()
+                .fill(theme::alpha(BERRY, 0.14))
+                .stroke(egui::Stroke::new(1.0, theme::mix(LINE, BERRY, 0.7)))
+                .corner_radius(12)
+                .inner_margin(Margin::same(10))
+                .show(ui, |ui| {
+                    ui.label(RichText::new(error).font(theme::sans(13.5)).color(SNOW));
+                    if ghost_button(ui, core.tr.get(K::Retry)).clicked() {
+                        view.send(Command::Retry);
+                        view.error = None;
+                    }
+                });
+        });
+    }
     None
 }
 

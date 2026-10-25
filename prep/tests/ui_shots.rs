@@ -1498,3 +1498,195 @@ fn closing_a_picture_early_releases_the_tutor_and_says_so() {
     );
     assert!(!commands.iter().any(|c| matches!(c, Command::Speak(_))), "no question after a closed picture");
 }
+
+// ---- live coding ----
+
+const TASK: &str = r#"{"title": "Two sum", "statement": "Find two numbers in the list that add up to the target and return their positions.",
+ "starter": "def two_sum(nums, target):\n    # return the two positions", "examples": [{"input": "[2, 7, 11], 9", "output": "[0, 1]"}],
+ "outline": "One pass with a dictionary of numbers seen so far.", "pitfalls": ["the same element used twice"],
+ "hints": ["What do you need to remember about the numbers you have already seen?"], "complexity": "O(n) time"}"#;
+
+fn task() -> careertwin_prep::coding::Task {
+    careertwin_prep::prompts::coding::parse_task(TASK, "python").unwrap()
+}
+
+/// A live-coding call wired to the test.
+fn coding(harness: &mut Harness<'_, PrepApp>) -> Wired {
+    use careertwin_prep::prompts::interviewer::InterviewerSpec;
+    let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+    let handle = Handle::from_parts(command_tx, event_rx);
+    let app = harness.state_mut();
+    let mut spec = InterviewerSpec::tutoring(Track::Technical, Mode::Coding, Lang::En, 30);
+    spec.task = Some(task());
+    spec.focus = "Two sum".into();
+    let session = Session::new(Track::Technical, Kind::Live, "Live coding · Two sum");
+    let mut view = LiveView::new(session, spec, handle, None);
+    view.coding = Some(careertwin_prep::ui::code::CodeSession::new(task()));
+    app.screen = Screen::Live(Box::new(view));
+    Wired { events: event_tx, commands: command_rx }
+}
+
+#[test]
+fn the_coding_page_chooses_a_language_and_starts_a_call_with_the_task() {
+    use careertwin_prep::testing::Reply;
+    let (mut harness, _d, _r) = harness(
+        fixture_with("en", vec![Reply::text(TASK), Reply::text("Hi Alex. Here is a small task.")]),
+        1280.0,
+        900.0,
+    );
+    harness.state_mut().core.vacancy.description = "We use TypeScript and React.".into();
+    harness.run();
+    click_card(&mut harness, "Live coding");
+    harness.run_steps(3);
+    harness.get_by_label("LANGUAGE");
+    harness.get_by_label_contains("The tutor sees only this window");
+    // the vacancy names TypeScript, so that is the choice
+    let Screen::Code(view) = &harness.state().screen else { panic!("the page should be open") };
+    assert_eq!(view.language, "typescript");
+    harness.get_by_label("Rust").click();
+    harness.run_steps(2);
+    harness.get_by_label("Get a task").click();
+    wait_until(&mut harness, "the call starts", |h| matches!(h.state().screen, Screen::Live(_)));
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    assert_eq!(view.spec.mode, Mode::Coding);
+    assert_eq!(view.spec.task.as_ref().unwrap().language, "rust", "the language that was picked");
+    assert!(view.coding.is_some());
+    harness.get_by_label("Two sum");
+    harness.get_by_label_contains("Find two numbers in the list");
+    harness.get_by_label("I'm done");
+    harness.get_by_label("I don't know");
+    shot(&mut harness, "coding-en");
+}
+
+#[test]
+fn code_is_written_in_the_editor_and_the_tutor_is_given_it() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1280.0, 900.0);
+    let mut wired = coding(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(2);
+    harness.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+    harness.run();
+    harness.get_by_role(egui::accesskit::Role::MultilineTextInput).type_text("\n    seen = {}");
+    harness.run();
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    assert!(view.coding.as_ref().unwrap().text.contains("seen = {}"));
+    // once it has been still for a moment the tutor is sent the code
+    let mut sent = None;
+    for _ in 0..80 {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        harness.run_steps(2);
+        while let Ok(command) = wired.commands.try_recv() {
+            if let Command::Code(code) = command {
+                sent = Some(code);
+            }
+        }
+        if sent.is_some() {
+            break;
+        }
+    }
+    assert!(sent.expect("the code was sent").contains("seen = {}"));
+}
+
+#[test]
+fn the_buttons_say_what_a_person_would_say() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1280.0, 900.0);
+    let mut wired = coding(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(2);
+    harness.get_by_label("I don't know").click();
+    harness.run_steps(2);
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Say(text)) if text == "I don't know how to continue."));
+    harness.get_by_label("I'm done").click();
+    harness.run_steps(2);
+    assert!(matches!(wired.commands.try_recv(), Ok(Command::Say(text)) if text.contains("I think I'm done")));
+}
+
+#[test]
+fn a_block_that_comes_in_all_at_once_is_noticed_and_the_tutor_asks_about_it_without_accusing() {
+    use careertwin_prep::testing::Reply;
+    const EXPLAIN: &str = r#"{"status": "explain", "say": "That block came in all at once. Can you walk me through it line by line?", "level": 1}"#;
+    let (mut harness, _d, _r) = harness(fixture_with("en", vec![Reply::text(EXPLAIN)]), 1280.0, 900.0);
+    let mut wired = coding(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(2);
+    harness.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+    harness.run_steps(2);
+    let block = "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        if target - n in seen:\n            return [seen[target - n], i]\n        seen[n] = i\n";
+    harness.event(egui::Event::Paste(block.into()));
+    harness.run_steps(3);
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    let pastes = &view.coding.as_ref().unwrap().watcher.pastes;
+    assert_eq!(pastes.len(), 1, "the paste was seen");
+    assert!(pastes[0].chars >= 100);
+    let mut said = None;
+    for _ in 0..200 {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        harness.run_steps(2);
+        while let Ok(command) = wired.commands.try_recv() {
+            if let Command::Speak(text) = command {
+                said = Some(text);
+            }
+        }
+        if said.is_some() {
+            break;
+        }
+    }
+    let said = said.expect("the tutor said something");
+    assert!(said.contains("walk me through it"), "{said}");
+    assert!(!said.to_lowercase().contains("cheat"), "no accusation");
+}
+
+#[test]
+fn a_quiet_look_at_good_code_says_nothing() {
+    use careertwin_prep::testing::Reply;
+    const QUIET: &str = r#"{"status": "on_track", "say": "", "level": 0}"#;
+    let (mut harness, _d, _r) = harness(fixture_with("en", vec![Reply::text(QUIET)]), 1280.0, 900.0);
+    let mut wired = coding(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    harness.run_steps(2);
+    // pretend the person is stuck for a minute
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        let coding = view.coding.as_mut().unwrap();
+        coding.watcher = careertwin_prep::watch::Watcher::new(
+            &coding.text,
+            std::time::Instant::now() - std::time::Duration::from_secs(120),
+        );
+    }
+    for _ in 0..60 {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        harness.run_steps(2);
+    }
+    let mut spoke = false;
+    while let Ok(command) = wired.commands.try_recv() {
+        spoke |= matches!(command, Command::Speak(_));
+    }
+    assert!(!spoke, "an on-track person is left alone");
+    let Screen::Live(view) = &harness.state().screen else { panic!() };
+    assert!(!view.coding.as_ref().unwrap().watcher.looking, "the look is over");
+}
+
+#[test]
+fn the_finished_code_and_what_the_editor_saw_go_into_the_review() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1280.0, 900.0);
+    let wired = coding(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    wired
+        .events
+        .send(Event::Turn { who: Who::You, text: "I will use a dictionary.".into(), language: None, append: false })
+        .unwrap();
+    harness.run_steps(2);
+    if let Screen::Live(view) = &mut harness.state_mut().screen {
+        view.coding.as_mut().unwrap().text = "def two_sum(nums, target):\n    return [0, 1]\n".into();
+    }
+    harness.get_by_label("End call").click();
+    harness.run_steps(3);
+    let Screen::Review(review) = &harness.state().screen else { panic!("the review should open") };
+    let session = harness.state().core.store.load(&review.session.id).unwrap();
+    assert!(session.payload["code"].as_str().unwrap().contains("return [0, 1]"));
+    assert_eq!(session.payload["signals"], "nothing unusual");
+    let prompt = careertwin_prep::prompts::feedback::prompt(&session, &careertwin_prep::brief::Brief::default());
+    assert!(prompt.contains("THE CODE AT THE END") && prompt.contains("return [0, 1]"), "{prompt}");
+    assert!(prompt.contains("WHAT THE EDITOR SAW: nothing unusual."));
+}
