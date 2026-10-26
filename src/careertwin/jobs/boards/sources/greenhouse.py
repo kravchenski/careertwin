@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title, to_iso_date
 
 
 class GreenhouseSource(BaseSourceAdapter):
@@ -43,6 +43,7 @@ class GreenhouseSource(BaseSourceAdapter):
                 title=title,
                 url=f"https://boards.greenhouse.io/{board_id}/jobs/{j['id']}",
                 location=location_name,
+                posted_at=to_iso_date(j.get("first_published") or j.get("updated_at")),
                 description=j.get("content", ""),
                 employment_type=", ".join(departments) if departments else "",
                 is_intern=is_intern,

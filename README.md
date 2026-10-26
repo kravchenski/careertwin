@@ -39,7 +39,7 @@ The language model is scripted so the recording is repeatable; the API, tools, s
 |---|---|---|
 | **Five job-search agents** | A monitor that watches company career sites, a résumé builder, a form filler that works in your signed-in Chrome, a mail agent that reads replies and sends approved applications, and an Excel agent with a dashboard. You control them from a terminal and approve every send; secrets never reach a model. | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Interview assistant** | A compact window that transcribes the call and writes what to say, in first person, from your real experience. Solves a task from a screenshot, defends a project from its code, speaks seven languages. | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
-| **MCP server and HTTP API** | 29 typed tools and a documented REST API that any agent or script can drive. | [docs/AGENTS.md](docs/AGENTS.md) |
+| **MCP server and HTTP API** | 31 typed tools and a documented REST API that any agent or script can drive. | [docs/AGENTS.md](docs/AGENTS.md) |
 | **Document library** | A career knowledge graph, nine PDF templates, an ATS checker, a vision-based quality check and a repair loop. | [docs/DOCUMENTS.md](docs/DOCUMENTS.md) |
 
 ## Quick start

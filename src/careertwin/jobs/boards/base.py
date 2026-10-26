@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 _INTERNSHIP_RE = re.compile(r"\bintern(s|ship)?\b|\bco-?op\b", re.IGNORECASE)
@@ -12,6 +13,36 @@ _ENTRY_LEVEL_RE = re.compile(
     r"\bentry[\s-]?level\b|\bno experience\b|\bjunior\b|\bgraduate\b|\bnew grad\b|\bearly career\b",
     re.IGNORECASE,
 )
+
+
+_AGO = re.compile(r"(\d+)\+?\s*(day|week|month|hour|minute)s?\s+ago", re.I)
+
+
+def to_iso_date(value: Any, today: date | None = None) -> str:
+    """A posting date from whatever a source gives (ISO text, epoch seconds or milliseconds, "Posted 3 Days
+    Ago", "Posted Today") as YYYY-MM-DD; "" when it is not a date."""
+    today = today or datetime.now(timezone.utc).date()
+    if value in (None, "", 0):
+        return ""
+    if isinstance(value, (int, float)):
+        seconds = value / 1000 if value > 10**11 else value
+        try:
+            return datetime.fromtimestamp(seconds, timezone.utc).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return ""
+    text = str(value).strip()
+    if match := re.match(r"(\d{4})-(\d{2})-(\d{2})", text):
+        return match.group(0)
+    lowered = text.lower()
+    if "today" in lowered or "just posted" in lowered:
+        return today.isoformat()
+    if "yesterday" in lowered:
+        return (today - timedelta(days=1)).isoformat()
+    if ago := _AGO.search(text):
+        number, unit = int(ago[1]), ago[2].lower()
+        days = {"day": 1, "week": 7, "month": 30, "hour": 0, "minute": 0}[unit] * number
+        return (today - timedelta(days=days)).isoformat()
+    return ""
 
 
 def is_internship_title(text: str) -> bool:

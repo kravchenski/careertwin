@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title, to_iso_date
 
 
 class LeverSource(BaseSourceAdapter):
@@ -42,6 +42,7 @@ class LeverSource(BaseSourceAdapter):
                 title=title,
                 url=p.get("hostedUrl", ""),
                 location=location,
+                posted_at=to_iso_date(p.get("createdAt")),
                 description=p.get("descriptionPlain", "")[:2000],
                 employment_type=department or team,
                 is_intern=is_intern,

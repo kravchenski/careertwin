@@ -66,6 +66,25 @@ The HTTP transport binds to localhost; keep it there.
 OpenAI function-calling specs and `get_tool(name).call(args)` runs one tool,
 so any OpenAI-compatible client can use the same tools.
 
+## Searching the web like a web search
+
+CareerTwin does not search the web itself: an agent that has a web search (Claude Code, Codex, ChatGPT through
+Switchyard) does, and files what it finds. That gives the quality of a real search, with the pipeline doing the
+rest. A good loop for a candidate in one city:
+
+1. Search for fresh postings, one query per site: `site:myworkdayjobs.com python intern poland`,
+   `linkedin.com/jobs junior python developer gdansk`, and the local boards (Just Join IT, Bulldog Job, Pracuj.pl).
+2. For every Workday tenant the search turns up, call `discover_workday` with any link of it: it reads the
+   newest vacancies of the country or the city from the site's own JSON, each with the exact day it was published.
+3. For every other posting, open the page, take the title, company, location, the text and the date, and call
+   `import_vacancy` with `posted_at` (`YYYY-MM-DD`; leave it empty when the page shows only an expiry date).
+4. Call `process_vacancy` with `rank` on the ones that fit the level and the place, a few at a time.
+5. `newest_vacancies` or the `/dashboard` page shows them newest first with the site and the fit; the XLSX
+   (`/v1/automation/export.xlsx`, the "Newest" sheet) holds the same list.
+
+LinkedIn and Glassdoor offer no API, so the agent reads their public result pages like a person would; a page that
+asks for a login is left out.
+
 ## Tools
 
 | Tool | Changes state | What it does |
@@ -78,6 +97,8 @@ so any OpenAI-compatible client can use the same tools.
 | `list_vacancies`, `get_vacancy`, `recent_events` | no | Read the pipeline and its history |
 | `wait_for_vacancy` | no | Wait for a queued step to finish |
 | `import_vacancy` | local | Add a vacancy to the pipeline |
+| `discover_workday` | local | Read the newest vacancies of a Workday career site (any `*.myworkdayjobs.com` link, for example from a web search for `site:myworkdayjobs.com python intern poland`) in a country or city, each with the day it was published |
+| `newest_vacancies` | no | The vacancies in the pipeline, newest first, with the site each is on (LinkedIn, Workday, Pracuj.pl...), the day it was published and its fit |
 | `update_search_settings` | local | Queries, sources, threshold, limits |
 | `start_search_cycle`, `stop_agents` | local | Run or cancel the search agent |
 | `process_vacancy` | local | Queue `rank`, `prepare`, `fill` or `verify` |

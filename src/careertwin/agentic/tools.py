@@ -121,9 +121,11 @@ async def import_vacancy(
     description: str = "",
     location: str = "",
     salary: str = "",
+    posted_at: str = "",
 ) -> dict[str, Any]:
     """Add a vacancy to the pipeline (state `new`). Duplicates are merged by URL. Pass the
-    full description when you have it, then run process_vacancy with `rank`."""
+    full description when you have it, and `posted_at` (YYYY-MM-DD) when the page says when it
+    was published: the newest list is ordered by it. Then run process_vacancy with `rank`."""
     job = await _client().post(
         "/v1/automation/jobs",
         {
@@ -133,10 +135,39 @@ async def import_vacancy(
             "description": description,
             "location": location,
             "salary": salary,
+            "posted_at": posted_at,
             "source": "agent",
         },
     )
     return _brief(job)
+
+
+@tool("Newest vacancies of a Workday career site", mutating=True)
+async def discover_workday(
+    url: str,
+    query: str = "",
+    place: str = "Poland",
+    limit: Annotated[int, Field(ge=1, le=60)] = 20,
+    days: Annotated[int, Field(ge=0, le=365)] = 0,
+) -> dict[str, Any]:
+    """Read the newest vacancies of a Workday career site (any link on *.myworkdayjobs.com, for
+    example one found by a web search for `site:myworkdayjobs.com python intern poland`) in a
+    country or city, each with the day it was published, and file them in the pipeline."""
+    return await _client().post(
+        "/v1/automation/workday",
+        {"url": url, "query": query, "place": place, "limit": limit, "days": days},
+        timeout=300,
+    )
+
+
+@tool("The newest vacancies first, from every site")
+async def newest_vacancies(
+    days: Annotated[int, Field(ge=0, le=365)] = 14,
+    limit: Annotated[int, Field(ge=1, le=200)] = 30,
+) -> list[dict[str, Any]]:
+    """The newest vacancies in the pipeline, newest first, with the site each is on (LinkedIn,
+    Workday, Pracuj.pl...), the day it was published and its fit score."""
+    return await _client().get("/v1/automation/newest", days=days, limit=limit)
 
 
 @tool("Vacancies in the pipeline, by state")
