@@ -675,3 +675,99 @@ fn without_a_profile_the_technical_tab_says_so_and_will_not_start() {
     harness.run_steps(2);
     assert!(matches!(harness.state().screen, Screen::Setup(_)), "the call does not start without a profile");
 }
+
+#[test]
+fn settings_say_which_models_fit_this_computer_and_can_apply_the_interviewer_suggestion() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
+    harness.run();
+    harness.get_by_label("Settings").click();
+    harness.run_steps(3);
+    harness.get_by_label("Offline on this computer");
+    harness.get_by_label_contains("GB of memory");
+    harness.get_by_label_contains("Hearing: Whisper");
+    harness.get_by_label_contains("ollama pull");
+    if !cfg!(feature = "local-stt") && !cfg!(feature = "local-tts") {
+        harness.get_by_label_contains("This build has no offline engines");
+    }
+    let plan = careertwin_prep::models::recommend(&careertwin_prep::models::Hardware::detect());
+    // the section is far down the scrolling list of settings
+    harness.get_by_label(&format!("Use {}", plan.llm.tag)).scroll_to_me();
+    harness.run_steps(3);
+    harness.get_by_label(&format!("Use {}", plan.llm.tag)).click();
+    harness.run_steps(2);
+    let draft = harness_draft(&mut harness);
+    assert_eq!(draft.settings.llm.model, plan.llm.tag);
+    assert_eq!(draft.settings.llm.url, "http://127.0.0.1:11434");
+    shot(&mut harness, "settings-offline-en");
+}
+
+#[test]
+fn a_model_being_downloaded_is_shown_and_the_call_waits_for_it() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 900.0);
+    let progress = std::sync::Arc::new(careertwin_prep::speech::download::Progress::default());
+    progress.total.store(200, std::sync::atomic::Ordering::Relaxed);
+    progress.done.store(84, std::sync::atomic::Ordering::Relaxed);
+    harness.state_mut().core.downloads.push(careertwin_prep::ui::Download {
+        name: "Whisper small".into(),
+        progress,
+        failed: None,
+        finished: false,
+    });
+    harness.run();
+    harness.get_by_label("Downloading Whisper small… 42%");
+    harness.get_by_label("Mock interview").click();
+    harness.run_steps(2);
+    harness.get_by_label("The offline models are still downloading.");
+    harness.get_by_label("Start call").click();
+    harness.run_steps(2);
+    assert!(
+        matches!(harness.state().screen, Screen::Setup(_)),
+        "the call does not start while its models are on the way"
+    );
+    // once the download is done the call can start
+    harness.state_mut().core.downloads[0].finished = true;
+    harness.run_steps(2);
+    harness.get_by_label("Start call").click();
+    harness.run_steps(2);
+    assert!(matches!(harness.state().screen, Screen::Live(_)));
+}
+
+#[test]
+fn a_failed_download_is_explained_in_settings() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 1000.0);
+    let progress = std::sync::Arc::new(careertwin_prep::speech::download::Progress::default());
+    harness.state_mut().core.downloads.push(careertwin_prep::ui::Download {
+        name: "Kokoro".into(),
+        progress,
+        failed: Some("could not reach huggingface.co".into()),
+        finished: false,
+    });
+    harness.run();
+    harness.get_by_label("Settings").click();
+    harness.run_steps(3);
+    harness.get_by_label_contains("Could not download Kokoro: could not reach huggingface.co");
+}
+
+#[test]
+fn the_sphere_is_not_redrawn_on_every_frame() {
+    // a sphere that only breathes must be cheap: thirty frames in a row make one picture, not thirty
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    for _ in 0..30 {
+        harness.step();
+    }
+    let renders = harness.state().core.orb_renders;
+    assert!(renders >= 1, "the sphere is on the home page");
+    assert!(renders <= 3, "{renders} pictures for thirty frames: the processor would be doing the work for nothing");
+}
+
+#[test]
+fn a_call_redraws_the_sphere_a_few_times_a_second_not_every_frame() {
+    let (mut harness, _d, _r) = harness(fixture("en"), 1120.0, 780.0);
+    let wired = live(&mut harness);
+    wired.events.send(Event::State(State::Listening)).unwrap();
+    for _ in 0..40 {
+        harness.step();
+    }
+    let renders = harness.state().core.orb_renders;
+    assert!((1..=4).contains(&renders), "{renders} pictures for forty frames");
+}

@@ -14,6 +14,7 @@ pub mod doctor;
 pub mod i18n;
 pub mod jobs;
 pub mod llm;
+pub mod models;
 pub mod ops;
 pub mod prompts;
 pub mod secrets;

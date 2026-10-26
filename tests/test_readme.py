@@ -68,7 +68,7 @@ def test_the_commands_in_the_readme_exist():
         assert command in README or command == "careertwin-mcp"
     for target in re.findall(r"\bmake ([a-z-]+)", README):
         assert re.search(rf"^{target}:", (ROOT / "Makefile").read_text(), re.M), f"make {target}"
-    for script in re.findall(r"(?:\./)?scripts/([\w.]+)", README):
+    for script in re.findall(r"(?:\./)?scripts/([\w.-]+)", README):
         assert (ROOT / "scripts" / script).exists(), script
 
 

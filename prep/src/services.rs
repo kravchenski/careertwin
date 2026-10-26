@@ -65,7 +65,7 @@ pub fn build(settings: &Settings, paths: &Paths) -> (Services, Problems) {
             Arc::new(Unavailable(error.to_string()))
         }
     };
-    let stt = match speech::build_stt(&effective) {
+    let stt = match speech::build_stt(&effective, paths) {
         Ok(stt) => Some(stt),
         Err(error) => {
             problems.recognition = Some(error.to_string());

@@ -20,7 +20,7 @@ pub enum Icon {
     Close,
     Plus,
     List,
-    Gear,
+    Sliders,
     Refresh,
     Play,
     Check,
@@ -80,13 +80,11 @@ pub fn paint_icon(painter: &egui::Painter, icon: Icon, center: Pos2, size: f32, 
                 line(at(x, -h / 2.0), at(x, h / 2.0));
             }
         }
-        Icon::Gear => {
-            painter.circle_stroke(center, 0.16 * s, stroke);
-            for i in 0..8 {
-                let a = i as f32 * std::f32::consts::TAU / 8.0;
-                line(at(0.26 * a.cos(), 0.26 * a.sin()), at(0.36 * a.cos(), 0.36 * a.sin()));
+        Icon::Sliders => {
+            for (y, knob) in [(-0.22, -0.12), (0.0, 0.14), (0.22, -0.02)] {
+                line(at(-0.32, y), at(0.32, y));
+                painter.circle_filled(at(knob, y), 0.075 * s, color);
             }
-            painter.circle_stroke(center, 0.27 * s, stroke);
         }
         Icon::Refresh => {
             path(arc(center, 0.30 * s, -2.2, 3.4, 18));

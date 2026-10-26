@@ -21,6 +21,19 @@ make lint      # ruff
 make docker    # backend + SearXNG in containers
 ```
 
+## CareerTwin Prep (Rust)
+
+```bash
+cd prep
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cargo test                          # none of it needs a sound card or the network
+cargo test --features local         # also builds whisper.cpp and the candle voices (needs cmake)
+UI_SHOTS=/tmp/shots cargo test --test ui_shots   # writes a picture of every screen to look at
+```
+
+Every pinned model file has its size and SHA-256 in `prep/src/models.rs`; when one changes, check the new values
+against the repository listing before committing them. The `Prep` workflow runs the same commands in CI.
+
 ## Code Style
 
 - Python: PEP 8, type hints required, formatted by Ruff

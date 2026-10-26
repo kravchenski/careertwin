@@ -135,7 +135,8 @@ pub struct SttSettings {
     pub model: String,
     /// `auto` lets the recogniser pick, which is what a learner who slips into Russian needs.
     pub language: String,
-    /// A ggml model file for the local engine; empty means the default one in the data folder.
+    /// Which Whisper model the offline engine uses (`tiny`, `base`, `small`, `turbo`); empty means
+    /// the one that suits this computer.
     pub local_model: String,
 }
 
@@ -161,6 +162,8 @@ pub enum TtsEngine {
     #[default]
     Openai,
     Elevenlabs,
+    /// Kokoro inside this program, offline; needs the `local-tts` build. English only.
+    Local,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,8 +304,17 @@ impl Settings {
         if self.stt.engine == SttEngine::Http {
             validate_service_url(&self.stt.url, "the speech recognition address")?;
         }
-        if self.tts.engine != TtsEngine::Off {
+        if matches!(self.tts.engine, TtsEngine::Openai | TtsEngine::Elevenlabs) {
             validate_service_url(&self.tts.url, "the voice address")?;
+        }
+        if self.tts.engine == TtsEngine::Local && !crate::models::kokoro_voice_known(&self.tts.voice_en) {
+            bail!("the offline voice {:?} is not one of the voices that come with the program", self.tts.voice_en);
+        }
+        if self.stt.engine == SttEngine::Local
+            && !self.stt.local_model.is_empty()
+            && crate::models::stt_model(&self.stt.local_model).is_none()
+        {
+            bail!("the offline recognition model {:?} is not one of tiny, base, small or turbo", self.stt.local_model);
         }
         if !(0.5..=2.0).contains(&self.tts.speed) {
             bail!("the speaking speed must be between 0.5 and 2.0");

@@ -82,6 +82,15 @@ pub enum Outcome {
     Analysis(Result<Analysis, OpError>),
     Questions(Result<Vec<BankQuestion>, OpError>),
     Models(Result<Vec<String>, String>),
+    Downloaded { name: String, result: Result<(), String> },
+}
+
+/// A model being fetched for the offline engines.
+pub struct Download {
+    pub name: String,
+    pub progress: Arc<crate::speech::download::Progress>,
+    pub failed: Option<String>,
+    pub finished: bool,
 }
 
 /// The vacancy you are preparing for. It is kept between runs and the interviewer uses it.
@@ -133,11 +142,82 @@ pub struct Core {
     pub vacancy: Vacancy,
     /// Models the gateway offered when last asked, for the picker in Settings.
     pub models: Vec<String>,
+    /// The offline models being fetched or fetched already.
+    pub downloads: Vec<Download>,
+    /// The sphere's picture, drawn again every frame it is on screen.
+    orb: Option<egui::TextureHandle>,
+    orb_made: Option<(Instant, usize)>,
+    /// How many times the sphere's picture was made; the tests check that it is not every frame.
+    pub orb_renders: usize,
 }
 
 impl Core {
     pub fn now(&self) -> u64 {
         crate::session::now()
+    }
+
+    /// Paints the sphere in `rect`. The picture is made fresh from `params` at most `fps` times a
+    /// second (a few times a second when the window is in the background); in between, the last
+    /// one is painted again, so a sphere that only breathes costs the processor almost nothing.
+    pub fn paint_orb(&mut self, ui: &Ui, rect: Rect, params: &orb::Params, fps: f32) {
+        let context = ui.ctx();
+        let focused = context.input(|i| i.viewport().focused.unwrap_or(true));
+        let interval = std::time::Duration::from_secs_f32(1.0 / if focused { fps.max(1.0) } else { 2.0 });
+        let size = (rect.width() * 0.85).round().clamp(128.0, 256.0) as usize;
+        let now = Instant::now();
+        let stale = self.orb_made.is_none_or(|(at, made)| made != size || now.duration_since(at) >= interval);
+        if stale {
+            let image = orb::render_at(params, size);
+            match &mut self.orb {
+                Some(texture) => texture.set(image, egui::TextureOptions::LINEAR),
+                None => self.orb = Some(context.load_texture("orb", image, egui::TextureOptions::LINEAR)),
+            }
+            self.orb_made = Some((now, size));
+            self.orb_renders += 1;
+        }
+        if let Some(texture) = &self.orb {
+            let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(texture.id(), rect, uv, egui::Color32::WHITE);
+        }
+        let wait = self.orb_made.map_or(interval, |(at, _)| interval.saturating_sub(now.duration_since(at)));
+        context.request_repaint_after(wait.max(std::time::Duration::from_millis(1)));
+    }
+
+    /// Fetches the models the offline engines need, if they are chosen and not on disk yet.
+    pub fn prefetch_local(&mut self) {
+        let settings = self.settings.effective();
+        if cfg!(feature = "local-stt") && settings.stt.engine == crate::config::SttEngine::Local {
+            let model = crate::speech::local_stt_model(&settings);
+            self.download(model.label, vec![crate::models::stt_asset(model)], self.paths.models_dir());
+        }
+        if cfg!(feature = "local-tts")
+            && settings.tts.engine == crate::config::TtsEngine::Local
+            && let Some(assets) = crate::models::kokoro_assets(&settings.tts.voice_en)
+        {
+            self.download("Kokoro", assets, crate::speech::local_tts_folder(&self.paths));
+        }
+    }
+
+    fn download(&mut self, name: &str, assets: Vec<crate::speech::download::Asset>, folder: std::path::PathBuf) {
+        let progress = Arc::new(crate::speech::download::Progress::default());
+        self.downloads.retain(|d| d.name != name);
+        self.downloads.push(Download {
+            name: name.to_owned(),
+            progress: Arc::clone(&progress),
+            failed: None,
+            finished: false,
+        });
+        let label = self.tr.fill(K::Downloading, &[("name", name), ("percent", "0")]);
+        let name = name.to_owned();
+        self.jobs.spawn(label, async move {
+            let result = crate::speech::download::ensure(&assets, &folder, &progress).await.map_err(|e| e.to_string());
+            Outcome::Downloaded { name, result }
+        });
+    }
+
+    /// The offline models that are still being fetched.
+    pub fn downloading(&self) -> Vec<&Download> {
+        self.downloads.iter().filter(|d| !d.finished && d.failed.is_none()).collect()
     }
 
     /// Saves new settings and rebuilds everything that depends on them.
@@ -158,6 +238,7 @@ impl Core {
             }
         }
         self.settings = settings;
+        self.prefetch_local();
         Ok(())
     }
 
@@ -355,7 +436,7 @@ impl PrepApp {
         let store = Store::new(paths.sessions_dir());
         let deck = Deck::load(&paths.deck_file());
         let tr = Tr::new(settings.ui_language);
-        Self {
+        let mut app = Self {
             core: Core {
                 paths,
                 settings,
@@ -375,11 +456,17 @@ impl PrepApp {
                 notice: None,
                 vacancy,
                 models: Vec::new(),
+                downloads: Vec::new(),
+                orb: None,
+                orb_made: None,
+                orb_renders: 0,
             },
             screen: Screen::Home,
             history: history::HistoryState::default(),
             draft: None,
-        }
+        };
+        app.core.prefetch_local();
+        app
     }
 
     /// Draws one frame of the whole window.
@@ -530,6 +617,14 @@ impl PrepApp {
                     }
                 }
             }
+            Outcome::Downloaded { name, result } => {
+                if let Some(download) = self.core.downloads.iter_mut().find(|d| d.name == name) {
+                    match result {
+                        Ok(()) => download.finished = true,
+                        Err(why) => download.failed = Some(why),
+                    }
+                }
+            }
             Outcome::Models(Ok(models)) => self.core.models = models,
             Outcome::Models(Err(error)) => {
                 if let Some(draft) = &mut self.draft {
@@ -677,7 +772,7 @@ impl PrepApp {
                 });
                 let right = Rect::from_min_size(pos2(bar.right() - 40.0, bar.center().y - 20.0), vec2(40.0, 40.0));
                 ui.scope_builder(UiBuilder::new().max_rect(right).layout(Layout::right_to_left(Align::Center)), |ui| {
-                    if icon_button(ui, Icon::Gear, tr.get(K::SettingsTitle), 38.0, None).clicked() {
+                    if icon_button(ui, Icon::Sliders, tr.get(K::SettingsTitle), 38.0, None).clicked() {
                         self.core.settings_open = !self.core.settings_open;
                     }
                 });
