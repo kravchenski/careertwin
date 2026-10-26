@@ -156,6 +156,15 @@ impl Brief {
         self.candidate_name().and_then(|name| name.split_whitespace().next().map(str::to_owned))
     }
 
+    /// The first e-mail address written in the candidate's own notes, for the panel at the bottom.
+    pub fn email(&self) -> Option<String> {
+        static PATTERN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let pattern = PATTERN.get_or_init(|| {
+            regex::Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+").expect("a fixed pattern")
+        });
+        pattern.find(&self.candidate).map(|found| found.as_str().to_owned())
+    }
+
     /// Technologies from the `## Skills` section, for choosing topics and biasing recognition.
     pub fn skill_terms(&self) -> Vec<String> {
         let mut terms = skill_terms(&self.candidate);
@@ -393,6 +402,18 @@ mod tests {
         assert_eq!(brief.candidate_name().as_deref(), Some("Alex Demo"));
         assert_eq!(brief.first_name().as_deref(), Some("Alex"));
         assert_eq!(Brief::default().candidate_name(), None);
+    }
+
+    #[test]
+    fn the_first_email_in_the_notes_is_found() {
+        let brief = Brief {
+            candidate: "| Contact | Write to <alex.demo+jobs@example.com>, or a@b.org |".into(),
+            ..Brief::default()
+        };
+        assert_eq!(brief.email().as_deref(), Some("alex.demo+jobs@example.com"));
+        assert_eq!(Brief::default().email(), None);
+        let none = Brief { candidate: "no address here, only at-signs @ and words".into(), ..Brief::default() };
+        assert_eq!(none.email(), None);
     }
 
     #[test]

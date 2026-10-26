@@ -11,6 +11,7 @@ use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+use crate::pomodoro::PomodoroSettings;
 use crate::secrets::Secret;
 
 pub const APP_DIR: &str = "careertwin-prep";
@@ -59,6 +60,10 @@ impl Paths {
 
     pub fn models_dir(&self) -> PathBuf {
         self.data.join("models")
+    }
+
+    pub fn stats_file(&self) -> PathBuf {
+        self.data.join("stats.json")
     }
 }
 
@@ -209,10 +214,24 @@ pub struct AudioSettings {
     pub headphones: bool,
 }
 
+/// Who you are, for the panel at the bottom of the window. Both may stay empty: the name and the
+/// e-mail in your ABOUT.md are used then.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProfileSettings {
+    pub name: String,
+    pub email: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub ui_language: UiLanguage,
+    pub profile: ProfileSettings,
+    /// The focus timer: block, breaks and how often the long one comes.
+    pub pomodoro: PomodoroSettings,
+    /// Minutes of practice a day that fill the ring on the home page.
+    pub daily_goal_minutes: u32,
     /// Your ABOUT.md. Empty falls back to `CAREERTWIN_ABOUT_PATH`, then `./ABOUT.md`.
     pub about_path: String,
     pub cv_paths: Vec<String>,
@@ -226,6 +245,9 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             ui_language: UiLanguage::Auto,
+            profile: ProfileSettings::default(),
+            pomodoro: PomodoroSettings::default(),
+            daily_goal_minutes: 25,
             about_path: String::new(),
             cv_paths: Vec::new(),
             llm: LlmSettings::default(),
@@ -319,8 +341,22 @@ impl Settings {
         if !(0.5..=2.0).contains(&self.tts.speed) {
             bail!("the speaking speed must be between 0.5 and 2.0");
         }
+        if !self.profile.email.trim().is_empty() && !looks_like_email(&self.profile.email) {
+            bail!("the e-mail address does not look right");
+        }
         Ok(())
     }
+}
+
+/// Something@something.something, without spaces: enough to catch a typo, not to verify anyone.
+pub fn looks_like_email(text: &str) -> bool {
+    let text = text.trim();
+    let Some((name, host)) = text.split_once('@') else { return false };
+    !name.is_empty()
+        && !text.contains(char::is_whitespace)
+        && !host.contains('@')
+        && host.split('.').count() >= 2
+        && host.split('.').all(|part| !part.is_empty())
 }
 
 pub fn expand_home(path: &str) -> PathBuf {
@@ -478,6 +514,32 @@ mod tests {
         assert!(validate_service_url("ftp://example.com", "x").is_err());
         assert!(validate_service_url("example.com", "x").is_err());
         assert!(validate_service_url("https://", "x").is_err());
+    }
+
+    #[test]
+    fn an_email_is_checked_for_its_shape_only() {
+        for good in ["a@b.co", " name.surname@mail.example.org "] {
+            assert!(looks_like_email(good), "{good}");
+        }
+        for bad in ["", "a", "a@b", "@b.co", "a@b.", "a b@c.de", "a@@b.co", "a@b..co"] {
+            assert!(!looks_like_email(bad), "{bad}");
+        }
+        let mut settings = Settings::default();
+        settings.profile.email = "nonsense".into();
+        assert!(settings.validate().is_err());
+        settings.profile.email = String::new();
+        assert!(settings.validate().is_ok(), "no e-mail is fine");
+    }
+
+    #[test]
+    fn the_new_settings_have_sensible_defaults_and_old_files_still_load() {
+        let (_dir, paths) = temp_paths();
+        fs::create_dir_all(&paths.config).unwrap();
+        fs::write(paths.settings_file(), "[llm]\nmodel = \"m\"\n").unwrap();
+        let loaded = Settings::load(&paths);
+        assert_eq!(loaded.pomodoro, PomodoroSettings::default());
+        assert_eq!(loaded.daily_goal_minutes, 25);
+        assert!(loaded.profile.email.is_empty());
     }
 
     #[test]

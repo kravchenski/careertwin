@@ -204,6 +204,32 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
         }
     });
 
+    section(ui, tr.get(K::SecAccount));
+    field(ui, tr.get(K::YourName), &mut edit.settings.profile.name, tr.get(K::YourName), false);
+    field(ui, tr.get(K::YourEmail), &mut edit.settings.profile.email, "name@example.com", false);
+
+    section(ui, tr.get(K::SecFocus));
+    ui.horizontal_wrapped(|ui| {
+        let timer = &mut edit.settings.pomodoro;
+        for (label, value, range) in [
+            (tr.get(K::FocusMinutes), &mut timer.focus_minutes, 1..=120u32),
+            (tr.get(K::ShortMinutes), &mut timer.short_minutes, 1..=60),
+            (tr.get(K::LongMinutes), &mut timer.long_minutes, 1..=90),
+            (tr.get(K::LongEvery), &mut timer.long_every, 2..=10),
+        ] {
+            ui.vertical(|ui| {
+                let caption = widgets::caps(ui, label);
+                ui.add(egui::DragValue::new(value).range(range).speed(0.2)).labelled_by(caption.id);
+            });
+            ui.add_space(10.0);
+        }
+        ui.vertical(|ui| {
+            let caption = widgets::caps(ui, tr.get(K::GoalMinutes));
+            ui.add(egui::DragValue::new(&mut edit.settings.daily_goal_minutes).range(5..=480u32).speed(0.5))
+                .labelled_by(caption.id);
+        });
+    });
+
     section(ui, tr.get(K::SecProfile));
     field(ui, tr.get(K::AboutFile), &mut edit.settings.about_path, "~/Documents/job-search/ABOUT.md", false);
     let cv_label = widgets::caps(ui, tr.get(K::CvFiles));
