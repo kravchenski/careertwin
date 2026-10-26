@@ -73,7 +73,7 @@ COPY src/ src/
 COPY docker/supervisord.conf /etc/supervisor/careertwin.conf
 
 RUN mkdir -p data /tmp/.X11-unix /tmp/runtime-root \
-    && chmod 700 /tmp/runtime-root
+    && chmod 700 data /tmp/runtime-root  # the data volume starts with this mode
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app/src" \
