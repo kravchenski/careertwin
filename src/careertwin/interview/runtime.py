@@ -42,7 +42,15 @@ from careertwin.interview.stt_deepgram import DeepgramTranscriber
 
 AUDIO_KEYS = {"listen", "call_source", "use_mic", "mic_source"}
 SPEECH_KEYS = {"stt_engine", "whisper_model", "whisper_device", "deepgram_key", "deepgram_model"}
-COACH_KEYS = {"gateway_url", "gateway_key", "model", "vision_model", "answer_style", "answer_layout"}
+COACH_KEYS = {
+    "gateway_url",
+    "gateway_key",
+    "model",
+    "vision_model",
+    "fallback_models",
+    "answer_style",
+    "answer_layout",
+}
 WINDOW_KEYS = {"pinned", "frameless", "opacity", "font_scale", "show_full_answer", "ui_language"}
 
 
@@ -108,6 +116,8 @@ class Runtime:
         self.coach.api_key = self.settings.gateway_key or None
         self.coach.model = self.settings.model or None
         self.coach.vision_model = self.settings.vision_model or None
+        names = (name.strip() for name in self.settings.fallback_models.split(","))
+        self.coach.fallback_models = [name for name in names if name] or None
         self.coach.style = self.settings.answer_style
         self.coach.layout = self.settings.answer_layout
 

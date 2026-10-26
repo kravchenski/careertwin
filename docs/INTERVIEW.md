@@ -317,9 +317,19 @@ In an agent session use `prepare_interview_questions` and `suggest_interview_ans
 - **Answers are slow:** the model matters most. Settings → AI → *Load models*; in a test with a
   realistic prompt `groq/openai/gpt-oss-120b` finished in about 1–4 s and `kilo/poolside/laguna-s-2.1:free` showed
   its first words in about 2 s, while `auto` varied from 1 s to 40 s. If the chosen model fails before saying
-  anything (rate limit, outage), the request is repeated once on `auto`. Answers also get faster with the
-  *Concise* style and a smaller `ABOUT.md`; sections that never help answer (the applications log, CV file
-  names, job-ad matching rules, the project catalogue) are already left out of every request.
+  anything (rate limit, outage), the request goes on to the models in `fallback_models` and last to `auto`.
+  Answers also get faster with the *Concise* style and a smaller `ABOUT.md`; sections that never help answer
+  (the applications log, CV file names, job-ad matching rules, the project catalogue) are already left out of
+  every request, and a question about a technology also leaves out your contact details, form answers,
+  interview stories and the CV (ABOUT.md already has the skills and projects).
+- **Some questions get no answer, or a late one:** look at the request log of the gateway. A free key of a
+  provider allows only so many tokens a minute, and every request carries your whole background, so a
+  few questions in a row use it up (Switchyard then says "all 4 Groq keys are rate limited"). Put a second
+  provider after it with `fallback_models` in `data/interview/settings.json`, comma separated and asked in
+  order, for example `"ollama-cloud/gpt-oss:120b, xkiro/mistralai/ministral-14b, auto"`: the same model on
+  another provider answers in 1.5 to 3 s, where `auto` may choose a slow reasoning model. A model that said
+  how long to wait is left alone until then, and the status line names the model that answered. The
+  fallbacks are not used for screenshots, which need a model that can see.
 - **First start is slow:** Whisper downloads its model once and loads it before listening starts;
   the status pill says so.
 - **`libcublas` errors:** the app already falls back to CPU. For a GPU, install the CUDA 12 runtime
