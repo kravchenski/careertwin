@@ -21,7 +21,7 @@ reach it through an SSH tunnel.
 | Mail (read replies, drafts) | yes | IMAP and SMTP with an app password |
 | Resume builder, Excel export | yes | files in the data volume |
 | Search, ranking, preparing CVs | yes | needs a model: Switchyard on the same server |
-| Form filler | **no** | it drives your signed-in Chrome through Switchyard's extension; a server has neither |
+| Form filler | yes, with the headless browser of step 8 | it drives a Chrome through Switchyard's extension; on a server that Chrome is headless and holds no sign-in of yours |
 | Desktop notifications | on your laptop | `careertwin watch` sends them where it runs |
 
 Switchyard's browser-session providers (the signed-in web chats) cannot sign in on a server. Give the server a
@@ -110,6 +110,39 @@ curl -s -H "$H" $U | jq '.monitor_scheduled=true | .monitor_interval_minutes=360
 
 The monitor visits the companies you added with `watch_company` (or `monitor_known_companies: true` for the bundled
 list). The mail agent checks the inbox every `mail_check_minutes` once a mailbox is configured.
+
+## 8. A browser on the server (the form filler)
+
+The form filler drives a Chrome through Switchyard's browser extension. A server has no screen and nobody to click the
+extension's "Allow Switchyard to act on this site?" prompt, so the server runs a **headless build** of the extension
+that acts without asking. Build it next to the gateway and start Chromium with it:
+
+```bash
+git clone https://github.com/kravchenski/switchyard-extension.git ~/switchyard-extension
+cd ~/switchyard-extension && bun install
+SWITCHYARD_GATEWAY_URL=http://127.0.0.1:3260 bun run build --headless    # writes dist-headless/
+cd ~/careertwin && scripts/headless-browser.sh ~/switchyard-extension/dist-headless &
+```
+
+`SWITCHYARD_MCP_URL` already points at `http://127.0.0.1:3260/mcp`, so the form filler needs nothing else. If the
+gateway has an API key, build with `SWITCHYARD_API_KEY=...` too. **That build carries the key: it stays on the server.**
+
+What this changes and what it does not:
+
+* The extension no longer asks before it clicks or types on a site. A page that talks a model into clicking has nothing
+  between it and whatever the browser profile holds, so the profile is empty: no sign-in of yours, no saved password.
+  CareerTwin's own limits stay: a form is filled only on the employer's site and the application systems, a password is
+  typed only on the domains in `CAREERTWIN_LOGIN_DOMAINS`, and nothing is sent without your yes.
+* There is no signed-in browser of yours. Sites that need an account (Workday asks for one per employer) work when you
+  created the account yourself and set `ACCOUNT_EMAIL`, `ACCOUNT_PASSWORD` and `CAREERTWIN_LOGIN_DOMAINS`; a CAPTCHA or a
+  code sent by mail pauses the application for you.
+* Only one browser is the gateway's browser at a time: a second extension connection replaces the first. A laptop Chrome
+  with the extension and the server's browser cannot share one gateway.
+* Checked: the form filler in a headless Chromium with this build typed a name, a phone and an e-mail into a public form
+  with no prompt and asked for the answers it had no facts for. It was not run against an employer's site on a server.
+
+In a container running as root, Chromium needs `CHROMIUM_FLAGS=--no-sandbox`, which turns off its sandbox: do that only
+in a container that holds nothing else.
 
 ## Keeping it
 
