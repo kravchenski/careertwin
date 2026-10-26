@@ -32,6 +32,7 @@ pub fn persona_label(core: &Core, persona: Persona) -> String {
         Persona::HiringManager => K::RoleHiringManager,
         Persona::Recruiter => K::RoleRecruiter,
         Persona::Tutor => K::RoleTutor,
+        Persona::Mentor => K::RoleMentor,
     };
     format!("{} · {}", persona.first_name(), tr.get(role))
 }

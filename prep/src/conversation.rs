@@ -5,6 +5,7 @@
 //! needs a moment, nudges you when you go quiet, stops when you talk over it (with headphones),
 //! and watches the clock. The window only shows the [`Event`]s and sends [`Command`]s.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -20,8 +21,11 @@ use crate::brief::Brief;
 use crate::llm::{ChatOptions, Llm, LlmError, Message};
 use crate::prompts::Lang;
 use crate::prompts::interviewer::{self, Clock, InterviewerSpec};
+use crate::prompts::tutor::{self, LessonState, LessonView, Mode};
 use crate::session::Speaker as Who;
 use crate::speech::{self, SpeechError, Stt, SttHint, Transcript, Tts, Voice};
+use crate::syllabus::Half;
+use crate::tags::{Tag, TagFilter};
 
 /// How the call is paced. The defaults feel like a person; the tests shrink them.
 #[derive(Debug, Clone)]
@@ -67,6 +71,8 @@ pub struct Config {
     pub model: String,
     pub headphones: bool,
     pub voice: Voice,
+    /// The voice for sentences in the other language, for lessons that switch between two.
+    pub voice_alt: Option<Voice>,
     pub stt_hint: SttHint,
 }
 
@@ -116,6 +122,17 @@ pub enum Event {
         speaker: f32,
     },
     Error(String),
+    /// The tutor wrote a tag that the window should act on: a note, a picture to show.
+    Tag(Tag),
+    /// Where the terms lesson is.
+    Lesson(LessonView),
+    /// A term, or half of it, was finished with this score from 0 to 3.
+    TermProgress {
+        index: usize,
+        name: String,
+        half: Half,
+        score: u8,
+    },
     Finished,
 }
 
@@ -130,6 +147,14 @@ pub enum Command {
     Retry,
     /// End the call now.
     Finish,
+    /// Something the tutor should know at its next turn (a focus block ended, a picture was shown).
+    Context(String),
+    /// The tutor says exactly this, if it is not busy.
+    Speak(String),
+    /// While held, the tutor does not nudge you for being quiet: a picture is playing.
+    Hold(bool),
+    /// Turns the tutor's voice on or off; off, it writes only.
+    Voice(bool),
 }
 
 enum Internal {
@@ -141,6 +166,7 @@ struct TurnResult {
     id: u64,
     full_text: String,
     error: Option<String>,
+    tags: Vec<Tag>,
 }
 
 /// Decides who enqueues first, so a filler never lands after the real sentence.
@@ -211,6 +237,13 @@ struct Call {
     last_error: Option<(String, Instant)>,
     barged: bool,
     cancel_all: CancellationToken,
+    lesson: Option<LessonState>,
+    /// What the call wants the tutor to know at its next turn.
+    context: Vec<String>,
+    holding: bool,
+    voice_on: bool,
+    /// Set once a sentence in the other language could not be spoken, so it is said once and not again.
+    alt_failed: Arc<AtomicBool>,
 }
 
 /// A handle to a running call.
@@ -319,11 +352,23 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
         last_error: None,
         barged: false,
         cancel_all: CancellationToken::new(),
+        lesson: None,
+        context: Vec::new(),
+        holding: false,
+        voice_on: true,
+        alt_failed: Arc::new(AtomicBool::new(false)),
     };
     call.emit(Event::State(State::Starting));
+    call.start_lesson();
     call.prepare_fillers();
-    let opening = interviewer::opening(&call.config.spec, &call.config.brief);
-    call.begin_turn(opening, None);
+    if call.config.spec.mode == Mode::Chat {
+        // nobody waits for a model to say hello in a chat
+        let greeting = tutor::greeting(call.config.spec.native).to_owned();
+        call.begin_turn(Vec::new(), Some(greeting));
+    } else {
+        let opening = interviewer::opening(&call.config.spec, &call.config.brief);
+        call.begin_turn(opening, None);
+    }
 
     let mut ticker = tokio::time::interval(Duration::from_millis(u64::from(FRAME_MS)));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -383,6 +428,11 @@ impl Call {
 
     /// Makes the short acknowledgements ready in the background.
     fn prepare_fillers(&self) {
+        let spec = &self.config.spec;
+        // an acknowledgement in the wrong language of a mixed lesson would be odd
+        if !self.voice_on || spec.native != spec.language && spec.mode.teaches() {
+            return;
+        }
         let Some(tts) = self.deps.tts.clone() else { return };
         let voice = self.config.voice.clone();
         let phrases = filler_phrases(self.config.spec.language);
@@ -434,9 +484,11 @@ impl Call {
         let job = TurnJob {
             id,
             llm: Arc::clone(&self.deps.llm),
-            tts: self.deps.tts.clone(),
+            tts: if self.voice_on { self.deps.tts.clone() } else { None },
             speaker: Arc::clone(&self.deps.speaker),
             voice: self.config.voice.clone(),
+            voice_alt: self.config.voice_alt.clone(),
+            alt_failed: Arc::clone(&self.alt_failed),
             model: self.config.model.clone(),
             messages,
             canned: canned_text,
@@ -505,11 +557,52 @@ impl Call {
         if let Some(error) = result.error {
             self.report(error);
         }
+        self.apply_tags(result.tags);
         if nothing_said && !self.turn.as_ref().is_some_and(|t| t.canned) {
             // nothing came back: let the person try again
             self.turn = None;
             self.set_state(State::Listening);
             self.silent_since = Some(Instant::now());
+        }
+    }
+
+    fn start_lesson(&mut self) {
+        let spec = &self.config.spec;
+        if spec.mode != Mode::Terms {
+            return;
+        }
+        let Some(lesson) = spec.lesson.clone().filter(|l| !l.terms.is_empty()) else { return };
+        let state = LessonState::new(lesson.terms.len());
+        if let Some(view) = state.view(&lesson) {
+            self.emit(Event::Lesson(view));
+        }
+        self.lesson = Some(state);
+    }
+
+    /// Acts on the tags the tutor wrote at the end of a message.
+    fn apply_tags(&mut self, tags: Vec<Tag>) {
+        for tag in tags {
+            let lesson = self.config.spec.lesson.clone();
+            match &tag {
+                Tag::Native(score) | Tag::English(score) => {
+                    let half = if matches!(tag, Tag::Native(_)) { Half::Native } else { Half::English };
+                    if let (Some(state), Some(lesson)) = (self.lesson.as_mut(), lesson) {
+                        let index = state.index;
+                        let moved = if half == Half::Native { state.native_done() } else { state.english_done() };
+                        if moved {
+                            let name = lesson.terms.get(index).map(|t| t.name.clone()).unwrap_or_default();
+                            let view = state.view(&lesson);
+                            self.emit(Event::TermProgress { index, name, half, score: *score });
+                            if let Some(view) = view {
+                                self.emit(Event::Lesson(view));
+                            }
+                        }
+                    }
+                }
+                Tag::End => self.final_sent = true,
+                Tag::Note(_) | Tag::Show(_) => {}
+            }
+            self.emit(Event::Tag(tag));
         }
     }
 
@@ -634,9 +727,28 @@ impl Call {
         if clock == Clock::Final {
             self.final_sent = true;
         }
-        let note = interviewer::state_note(&self.config.spec, self.elapsed(), self.answered, clock);
+        if let Some(state) = self.lesson.as_mut() {
+            state.answered();
+        }
+        let note = self.make_note(clock);
         let messages = interviewer::turn(&self.config.spec, &self.config.brief, &self.history, Some(note));
         self.begin_turn(messages, None);
+    }
+
+    /// What the call tells the interviewer or tutor along with your words: the clock, the lesson
+    /// and whatever the window asked it to pass on.
+    fn make_note(&mut self, clock: Clock) -> String {
+        let spec = &self.config.spec;
+        let mut note = if spec.mode.teaches() {
+            tutor::state_note(spec, self.elapsed(), self.answered, clock, self.lesson.as_ref())
+        } else {
+            interviewer::state_note(spec, self.elapsed(), self.answered, clock)
+        };
+        for extra in self.context.drain(..) {
+            note.push('\n');
+            note.push_str(&extra);
+        }
+        note
     }
 
     fn on_command(&mut self, command: Command) -> bool {
@@ -674,6 +786,38 @@ impl Call {
             Command::Retry => {
                 if let (None, Some(messages)) = (&self.turn, self.last_request.clone()) {
                     self.begin_turn(messages, None);
+                }
+            }
+            Command::Context(text) => {
+                let text = text.trim();
+                if !text.is_empty() {
+                    self.context.push(format!("[STATE: {text}]"));
+                    let extra = self.context.len().saturating_sub(4);
+                    self.context.drain(..extra);
+                }
+            }
+            Command::Speak(text) => {
+                let text = text.trim().to_owned();
+                let idle = self.turn.is_none() && self.pending.is_none() && !self.segmenter.active();
+                if idle && !text.is_empty() && self.state != State::Finished {
+                    self.begin_turn(Vec::new(), Some(text));
+                }
+            }
+            Command::Hold(on) => {
+                self.holding = on;
+                if !on {
+                    self.silent_since = Some(Instant::now());
+                    self.nudges = 0;
+                }
+            }
+            Command::Voice(on) => {
+                self.voice_on = on;
+                if !on {
+                    self.deps.speaker.stop();
+                    if self.turn.as_ref().is_some_and(|t| t.gate.started()) {
+                        self.interrupt_interviewer();
+                        self.set_state(State::Listening);
+                    }
                 }
             }
         }
@@ -739,6 +883,9 @@ impl Call {
     }
 
     fn check_silence(&mut self, now: Instant) {
+        if self.holding || self.config.spec.mode == Mode::Chat {
+            return;
+        }
         if self.state != State::Listening
             || self.turn.is_some()
             || self.pending.is_some()
@@ -757,7 +904,7 @@ impl Call {
         let total = u64::from(self.config.spec.total_seconds());
         if !self.final_sent && u64::from(self.elapsed()) >= total + knobs.overtime_s {
             self.final_sent = true;
-            let note = interviewer::state_note(&self.config.spec, self.elapsed(), self.answered, Clock::Final);
+            let note = self.make_note(Clock::Final);
             let messages = interviewer::turn(&self.config.spec, &self.config.brief, &self.history, Some(note));
             self.begin_turn(messages, None);
             return;
@@ -802,6 +949,8 @@ struct TurnJob {
     tts: Option<Arc<dyn Tts>>,
     speaker: Arc<dyn Speaker>,
     voice: Voice,
+    voice_alt: Option<Voice>,
+    alt_failed: Arc<AtomicBool>,
     model: String,
     messages: Vec<Message>,
     canned: Option<String>,
@@ -815,17 +964,34 @@ struct TurnJob {
 
 type Synthesis = futures_util::future::BoxFuture<'static, (String, Option<Result<crate::speech::Speech, SpeechError>>)>;
 
+/// Which of the two languages a sentence is written in: mostly Cyrillic letters is Russian.
+fn language_of(sentence: &str) -> Lang {
+    let letters = sentence.chars().filter(|c| c.is_alphabetic()).count();
+    let cyrillic = sentence.chars().filter(|c| ('\u{400}'..='\u{4FF}').contains(c)).count();
+    if letters > 0 && cyrillic * 2 > letters { Lang::Ru } else { Lang::En }
+}
+
 impl TurnJob {
+    /// The voice for a sentence, and whether it is the voice of the other language.
+    fn voice_for(&self, sentence: &str) -> (Voice, bool) {
+        match &self.voice_alt {
+            Some(alt) if language_of(sentence) != self.voice.language => (alt.clone(), true),
+            _ => (self.voice.clone(), false),
+        }
+    }
+
     fn synth(&self, sentence: String) -> Synthesis {
+        let (voice, alternative) = self.voice_for(&sentence);
+        // once the other language has failed to be spoken, it is only written
+        if alternative && self.alt_failed.load(Ordering::Relaxed) {
+            return async move { (sentence, None) }.boxed();
+        }
         match self.tts.clone() {
-            Some(tts) => {
-                let voice = self.voice.clone();
-                async move {
-                    let made = tts.synthesize(sentence.clone(), voice).await;
-                    (sentence, Some(made))
-                }
-                .boxed()
+            Some(tts) => async move {
+                let made = tts.synthesize(sentence.clone(), voice).await;
+                (sentence, Some(made))
             }
+            .boxed(),
             None => async move { (sentence, None) }.boxed(),
         }
     }
@@ -860,14 +1026,16 @@ impl TurnJob {
             None => self.open(allowances[0]),
         };
         let mut stream_done = self.canned.is_some();
+        let mut tags = TagFilter::default();
         loop {
             tokio::select! {
                 biased;
                 _ = self.cancel.cancelled() => return,
                 piece = stream.next(), if !stream_done => match piece {
                     Some(Ok(piece)) => {
-                        full.push_str(&piece);
-                        for sentence in splitter.push(&piece) {
+                        let words = tags.push(&piece);
+                        full.push_str(&words);
+                        for sentence in splitter.push(&words) {
                             pending.push_back(self.synth(sentence));
                         }
                     }
@@ -878,12 +1046,18 @@ impl TurnJob {
                     Some(Err(failure)) => {
                         error = Some(describe(&failure));
                         stream_done = true;
+                        full.push_str(&tags.finish());
                         if let Some(rest) = splitter.finish() {
                             pending.push_back(self.synth(rest));
                         }
                     }
                     None => {
                         stream_done = true;
+                        let held = tags.finish();
+                        full.push_str(&held);
+                        for sentence in splitter.push(&held) {
+                            pending.push_back(self.synth(sentence));
+                        }
                         if let Some(rest) = splitter.finish() {
                             pending.push_back(self.synth(rest));
                         }
@@ -897,7 +1071,13 @@ impl TurnJob {
                             seconds
                         }
                         Some(Err(failure)) => {
-                            if !voice_failed {
+                            let other = self.voice_for(&sentence).1;
+                            if other {
+                                // said once for the whole call, not at every turn
+                                if !self.alt_failed.swap(true, Ordering::Relaxed) {
+                                    error.get_or_insert(format!("{failure} The rest of that language is written only."));
+                                }
+                            } else if !voice_failed {
                                 voice_failed = true;
                                 error.get_or_insert(format!("{failure} The interviewer continues in writing."));
                             }
@@ -917,7 +1097,8 @@ impl TurnJob {
                 break;
             }
         }
-        let _ = self.internal.send(Internal::Done(TurnResult { id: self.id, full_text: full, error }));
+        let _ =
+            self.internal.send(Internal::Done(TurnResult { id: self.id, full_text: full, error, tags: tags.take() }));
     }
 }
 
