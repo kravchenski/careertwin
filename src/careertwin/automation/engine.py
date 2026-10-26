@@ -114,6 +114,21 @@ class Engine:
             raise ValueError("Verify the previous submission before any further actions")
         self.tasks[job_id] = asyncio.create_task(self._operation(job_id, operation))
 
+    def resume_waiting(self, only: str = "") -> list[str]:
+        """Carry on the applications that stopped on a question, once there is an answer. Only while the
+        candidate has autopilot on: otherwise "resume" stays their click."""
+        if not self.store.settings().auto_submit:
+            return []
+        resumed = []
+        for job in self.store.jobs():
+            if job["state"] == "awaiting_answers" and (not only or job["id"] == only):
+                try:
+                    self.enqueue(job["id"], "resume")
+                    resumed.append(job["id"])
+                except ValueError:  # already running, or finished meanwhile
+                    pass
+        return resumed
+
     async def _operation(self, job_id: str, operation: str) -> None:
         try:
             settings, job = self.store.settings(), self.store.job(job_id)

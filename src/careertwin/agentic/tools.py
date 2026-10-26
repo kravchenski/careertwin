@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from typing import Annotated, Any, Literal
 
@@ -140,6 +141,49 @@ async def import_vacancy(
         },
     )
     return _brief(job)
+
+
+def _shingles(text: str, size: int = 5) -> set[str]:
+    words = re.findall(r"[\w+#./-]+", text.casefold())
+    return {" ".join(words[i : i + size]) for i in range(max(len(words) - size + 1, 0))}
+
+
+def posting_similarity(pasted: str, known: str) -> float:
+    """How much of the pasted text is in a known posting (0 to 1): five-word runs they share."""
+    mine = _shingles(pasted)
+    return len(mine & _shingles(known)) / len(mine) if mine else 0.0
+
+
+@tool("File a vacancy from pasted text", mutating=True)
+async def import_posting_text(
+    text: Annotated[str, Field(min_length=200)],
+    url: str = "",
+    title: str = "",
+    company: str = "",
+) -> dict[str, Any]:
+    """The candidate pasted the text of a vacancy. Look for it among the vacancies already in the pipeline and
+    return that one (`matched`), so the CV and the form are built for the real posting. When it is not there, give
+    the posting's link in `url` and a `title`: it is filed with the pasted text as its description. Without a link
+    the answer is `needs_url`: ask the candidate for the link, never guess one."""
+    client = _client()
+    best, score = None, 0.0
+    for job in await client.get("/v1/automation/jobs"):
+        value = posting_similarity(text, (job.get("vacancy") or {}).get("description", ""))
+        if value > score:
+            best, score = job, value
+    if best is not None and score >= 0.4:
+        return {"status": "matched", "similarity": round(score, 2), **_brief(best)}
+    if not url or not title:
+        return {
+            "status": "needs_url",
+            "message": "This text is not in the pipeline. Give the link of the posting and its title.",
+            "closest": {**_brief(best), "similarity": round(score, 2)} if best is not None and score >= 0.15 else None,
+        }
+    job = await client.post(
+        "/v1/automation/jobs",
+        {"url": url, "title": title, "company": company, "description": text, "source": "agent"},
+    )
+    return {"status": "filed", **_brief(job)}
 
 
 @tool("Newest vacancies of a Workday career site", mutating=True)
