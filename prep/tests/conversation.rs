@@ -247,6 +247,64 @@ async fn an_unfinished_thought_waits_and_the_rest_is_merged_into_one_turn() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_long_answer_with_pauses_to_think_is_one_turn() {
+    let mut call = start(Setup {
+        replies: vec![greeting(), Reply::text("Good, that is a clear story.")],
+        stt: vec![
+            "First I looked at the slow queries in the dashboard.",
+            "Then I found the missing index.",
+            "And I fixed it.",
+        ],
+        ..Setup::default()
+    });
+    call.listening().await;
+    // three pieces of twelve seconds with two seconds of thinking between them: about a minute and a half
+    call.talker.speak(12_000).await;
+    call.talker.silence(2_000).await;
+    call.talker.speak(12_000).await;
+    call.talker.silence(2_000).await;
+    call.talker.speak(12_000).await;
+    call.talker.silence(900).await;
+    call.listening().await;
+    let you: Vec<_> = call.turns().into_iter().filter(|t| t.0 == Who::You).collect();
+    assert_eq!(you.len(), 1, "{you:?}");
+    assert_eq!(
+        you[0].1,
+        "First I looked at the slow queries in the dashboard. Then I found the missing index. And I fixed it."
+    );
+    assert_eq!(call.llm.calls(), 2, "the model answered once, after the whole story");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_short_answer_is_still_answered_straight_away() {
+    let mut call = start(Setup {
+        replies: vec![greeting(), Reply::text("Right.")],
+        stt: vec!["Yes, a queue."],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.say_aloud(1_500).await;
+    // the pause that ends the turn is 0.7 s, so a reply well inside two seconds proves there was no extra wait
+    assert!(call.until(1_500, |log| log.iter().any(|e| matches!(e, Event::Turn { who: Who::You, .. }))).await);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_thought_waiting_to_be_sent_is_not_answered_during_a_break() {
+    let mut call = start(Setup {
+        replies: vec![greeting(), Reply::text("Go on, I am answering you during the break.")],
+        stt: vec!["So we decided to"],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.say_aloud(1200).await; // an unfinished thought: it waits a little before it is sent
+    call.send(Command::Interrupt);
+    call.send(Command::Mute(true));
+    call.send(Command::Hold(true));
+    assert!(!call.until(30_000, |log| log.iter().any(|e| matches!(e, Event::Turn { who: Who::You, .. }))).await);
+    assert_eq!(call.llm.calls(), 1, "only the greeting: nothing was answered while the call was on hold");
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_unfinished_thought_with_nothing_after_it_is_sent_after_the_wait() {
     let mut call = start(Setup {
         replies: vec![greeting(), Reply::text("Go on.")],
@@ -379,6 +437,16 @@ async fn with_headphones_talking_over_the_interviewer_stops_it_and_keeps_what_wa
     assert!(spoken.1.starts_with("Welcome."), "{spoken:?}");
     assert!(!spoken.1.contains("technical part"), "what was never said is not in the history: {spoken:?}");
     assert!(turns.iter().any(|t| t.0 == Who::You && t.1.contains("how long")), "{turns:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn speech_that_gives_no_words_is_reported_as_not_understood() {
+    let mut call = start(Setup { replies: vec![greeting()], stt: vec![""], ..Setup::default() });
+    call.listening().await;
+    call.say_aloud(1500).await;
+    assert!(call.until(10_000, |log| log.iter().any(|e| matches!(e, Event::Unclear))).await, "{:?}", call.states());
+    assert_eq!(*call.states().last().unwrap(), State::Listening, "and the call goes on listening");
+    assert_eq!(call.llm.calls(), 1, "nothing was answered");
 }
 
 #[tokio::test(start_paused = true)]
@@ -679,38 +747,117 @@ impl Harness {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_terms_lesson_goes_from_your_words_to_english_and_on_to_the_next_term() {
+async fn a_terms_lesson_stays_in_your_words_until_you_ask_for_english() {
     let mut call = start(Setup {
         spec: Some(lesson_spec(Mode::Terms)),
         replies: vec![
             Reply::text("Привет, Алекс. Сегодня ООП. Что такое инкапсуляция, своими словами?"),
-            Reply::text("Да, верно. Теперь скажи то же по-английски, как на собеседовании. [[native: 3]]"),
-            Reply::text("Good. Now, what is polymorphism, in your own words? [[english: 2]]"),
+            Reply::text("Да, верно. А что такое полиморфизм? [[native: 3]]"),
+            Reply::text("Хорошо, всё по-русски разобрали. Пройдём то же по-английски? [[native: 2]]"),
+            Reply::text("Хорошо, тогда скажи, когда захочешь перейти на английский."),
+            Reply::text("Ладно, переходим. What does encapsulation protect? [[practice]]"),
+            Reply::text("Say it like this: an object hides its state. Next, what is polymorphism? [[english: 3]]"),
         ],
-        stt: vec!["Объект прячет внутри своё состояние.", "Encapsulation means an object hides its state."],
+        stt: vec![
+            "Объект прячет внутри своё состояние.",
+            "Один интерфейс, разные реализации.",
+            "Да, пока всё понятно.",
+            "Давай попрактикуемся на английском.",
+            "It protect the state of an object.",
+        ],
+        ..Setup::default()
+    });
+    call.listening().await;
+    for _ in 0..5 {
+        call.say_aloud(1500).await;
+        call.listening().await;
+    }
+    // the words that were said and shown are free of tags
+    assert!(call.captions().iter().all(|c| !c.contains("[[")), "{:?}", call.captions());
+    assert!(call.turns().iter().all(|t| !t.1.contains("[[")), "{:?}", call.turns());
+    // both terms were gone through in Russian, and English began only after the person asked for it
+    assert_eq!(
+        call.progress(),
+        vec![
+            ("Encapsulation".to_owned(), Half::Native, 3),
+            ("Polymorphism".to_owned(), Half::Native, 2),
+            ("Encapsulation".to_owned(), Half::English, 3),
+        ]
+    );
+    let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
+    assert_eq!(
+        places,
+        vec![(0, Stage::Native), (1, Stage::Native), (2, Stage::Native), (0, Stage::English), (1, Stage::English)]
+    );
+    // each request told the tutor where the lesson was
+    let requests = call.llm.requests.lock().unwrap().clone();
+    let note = |n: usize| requests[n].last().unwrap().content.clone();
+    assert!(note(1).contains("term 1 of 2, \"Encapsulation\", stage one, in Russian"), "{}", note(1));
+    assert!(note(2).contains("term 2 of 2, \"Polymorphism\", stage one, in Russian"), "{}", note(2));
+    assert!(note(3).contains("every term has been gone through in Russian"), "{}", note(3));
+    assert!(note(3).contains("Do not begin English on your own"), "{}", note(3));
+    assert!(
+        note(4).contains("term 1 of 2, \"Encapsulation\", stage two, in English"),
+        "your request switched it: {}",
+        note(4)
+    );
+    assert!(note(5).contains("stage two, in English"), "{}", note(5));
+    assert!(requests[0][0].content.contains("1. Encapsulation") && requests[0][0].content.contains("2. Polymorphism"));
+    assert!(requests[0][0].content.contains("keep speaking Russian until they ask to practise English"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn when_you_go_quiet_in_the_russian_part_of_a_lesson_the_nudge_is_in_russian() {
+    let mut call = start(Setup {
+        spec: Some(lesson_spec(Mode::Terms)),
+        replies: vec![Reply::text("Привет, Алекс. Что такое инкапсуляция, своими словами?")],
+        ..Setup::default()
+    });
+    call.listening().await;
+    call.talker.silence(15_000).await;
+    call.drain();
+    assert!(call.captions().iter().any(|c| c == "Не торопись."), "{:?}", call.captions());
+    assert!(!call.captions().iter().any(|c| c == "Take your time."), "{:?}", call.captions());
+}
+
+#[tokio::test(start_paused = true)]
+async fn your_request_for_english_switches_the_lesson_even_when_the_tutor_forgets_its_tag() {
+    let mut call = start(Setup {
+        spec: Some(lesson_spec(Mode::Terms)),
+        replies: vec![
+            Reply::text("Привет, Алекс. Что такое инкапсуляция, своими словами?"),
+            Reply::text("Okay, English it is. What does encapsulation protect?"),
+        ],
+        stt: vec!["Давай попрактикуемся на английском."],
         ..Setup::default()
     });
     call.listening().await;
     call.say_aloud(1500).await;
     call.listening().await;
+    let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
+    assert_eq!(places, vec![(0, Stage::Native), (0, Stage::English)], "the program switched, the tag was not needed");
+    let requests = call.llm.requests.lock().unwrap().clone();
+    let note = requests[1].last().unwrap().content.clone();
+    assert!(note.contains("term 1 of 2, \"Encapsulation\", stage two, in English"), "{note}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn asking_for_english_in_the_middle_switches_at_once_and_starts_from_the_first_term() {
+    let mut call = start(Setup {
+        spec: Some(lesson_spec(Mode::Terms)),
+        replies: vec![
+            Reply::text("Привет, Алекс. Что такое инкапсуляция, своими словами?"),
+            Reply::text("Хорошо, давай на английском. What is encapsulation? [[practice]]"),
+        ],
+        stt: vec!["Давай уже на английском."],
+        ..Setup::default()
+    });
+    call.listening().await;
     call.say_aloud(1500).await;
     call.listening().await;
-    // the words that were said and shown are free of tags
-    assert!(call.captions().iter().all(|c| !c.contains("[[")), "{:?}", call.captions());
-    assert!(call.turns().iter().all(|t| !t.1.contains("[[")), "{:?}", call.turns());
-    // and the call understood them
-    assert_eq!(
-        call.progress(),
-        vec![("Encapsulation".to_owned(), Half::Native, 3), ("Encapsulation".to_owned(), Half::English, 2)]
-    );
+    assert!(call.progress().is_empty(), "no term was finished by switching");
     let places: Vec<(usize, Stage)> = call.lessons().iter().map(|v| (v.index, v.stage)).collect();
-    assert_eq!(places, vec![(0, Stage::Native), (0, Stage::English), (1, Stage::Native)]);
-    // each request told the tutor where the lesson was
-    let requests = call.llm.requests.lock().unwrap().clone();
-    let note = |n: usize| requests[n].last().unwrap().content.clone();
-    assert!(note(1).contains("term 1 of 2, \"Encapsulation\", stage one, in Russian"), "{}", note(1));
-    assert!(note(2).contains("term 1 of 2, \"Encapsulation\", stage two, in English"), "{}", note(2));
-    assert!(requests[0][0].content.contains("1. Encapsulation") && requests[0][0].content.contains("2. Polymorphism"));
+    assert_eq!(places, vec![(0, Stage::Native), (0, Stage::English)]);
 }
 
 #[tokio::test(start_paused = true)]
@@ -913,4 +1060,40 @@ async fn the_mentor_has_her_own_name_in_the_prompt() {
     let system = call.llm.requests.lock().unwrap()[0][0].content.clone();
     assert!(system.contains("You are Maya"));
     assert_eq!(lesson_spec(Mode::Intro).persona, Persona::Mentor);
+}
+
+#[tokio::test(start_paused = true)]
+async fn while_code_is_written_the_tutor_waits_and_sees_the_latest_version_with_your_words() {
+    let mut spec = lesson_spec(Mode::Coding);
+    spec.task = Some(careertwin_prep::coding::Task {
+        title: "Two sum".into(),
+        statement: "Find two numbers.".into(),
+        language: "python".into(),
+        ..careertwin_prep::coding::Task::default()
+    });
+    let mut call = start(Setup {
+        spec: Some(spec),
+        replies: vec![
+            Reply::text("Hi Alex. Here is the task. What approach do you have in mind?"),
+            Reply::text("Okay. Try it by hand."),
+        ],
+        stt: vec!["I will use a dictionary."],
+        ..Setup::default()
+    });
+    call.listening().await;
+    // a long quiet while typing is not a reason to speak
+    call.talker.silence(240_000).await;
+    call.drain();
+    assert_eq!(call.llm.calls(), 1, "no nudges while code is written");
+    assert!(!call.captions().iter().any(|c| c == "Take your time."), "{:?}", call.captions());
+    call.send(Command::Code("def f():\n    pass\n".into()));
+    call.send(Command::Code("def f(nums):\n    seen = {}\n".into()));
+    call.talker.silence(100).await;
+    call.say_aloud(1500).await;
+    call.listening().await;
+    let note = call.llm.last_request().last().unwrap().content.clone();
+    assert!(note.contains("[CODE the person has written so far"), "{note}");
+    assert!(note.contains("seen = {}") && !note.contains("pass\n"), "only the latest version: {note}");
+    let system = call.llm.requests.lock().unwrap()[0][0].content.clone();
+    assert!(system.contains("PRIVATE NOTES FOR YOU") && system.contains("live-coding interview"));
 }

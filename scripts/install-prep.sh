@@ -2,8 +2,10 @@
 # Build and install CareerTwin Prep for the current user: the careertwin-prep program, its icon and a
 # launcher entry. Needs Rust (https://rustup.rs) and, on Linux, the ALSA headers (alsa-lib).
 #
-#   ./scripts/install-prep.sh            the program with offline hearing and voice
+#   ./scripts/install-prep.sh            the program with offline hearing and voice (the voice on the graphics
+#                                        card when an NVIDIA card and the CUDA toolkit are found)
 #   LIGHT=1 ./scripts/install-prep.sh    without them: a smaller build that uses cloud or server engines
+#   NO_GPU=1 ./scripts/install-prep.sh   the offline voice on the processor only
 #
 # Undo with ./scripts/install-prep.sh --uninstall
 set -Eeuo pipefail
@@ -29,13 +31,39 @@ fi
 FEATURES="local"
 if [[ -n "${LIGHT:-}" ]]; then
   FEATURES="gui"
-elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && command -v nvcc >/dev/null 2>&1; then
-  FEATURES="local,cuda"
-  echo "NVIDIA GPU and CUDA found: building the offline engines with CUDA (much faster voice and hearing)."
 fi
 
-echo "Building CareerTwin Prep (features: $FEATURES). The first build takes a while."
-cargo install --path "$ROOT/prep" --locked --root "$PREFIX" --features "$FEATURES" --force
+# The offline voice is about ten times faster on an NVIDIA card. It needs the CUDA toolkit to build, and
+# nvcc accepts only a host compiler it knows: a newer gcc is replaced by an older one that is installed.
+NVCC="$(command -v nvcc || true)"
+[[ -z "$NVCC" && -x /opt/cuda/bin/nvcc ]] && NVCC=/opt/cuda/bin/nvcc
+GPU_ENV=()
+if [[ "$FEATURES" == "local" && -z "${NO_GPU:-}" && -n "$NVCC" ]] && command -v nvidia-smi >/dev/null 2>&1; then
+  CAP="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '. ' || true)"
+  if [[ -n "$CAP" ]]; then
+    GPU_ENV=(PATH="$(dirname "$NVCC"):$PATH" CUDA_PATH="$(dirname "$(dirname "$NVCC")")" CUDA_COMPUTE_CAP="$CAP")
+    GCC_MAJOR="$(gcc -dumpversion 2>/dev/null | cut -d. -f1 || echo 0)"
+    if (( GCC_MAJOR > 15 )); then
+      for older in gcc-15 gcc-14 gcc-13; do
+        if command -v "$older" >/dev/null 2>&1; then GPU_ENV+=(NVCC_CCBIN="$(command -v "$older")"); break; fi
+      done
+    fi
+  fi
+fi
+
+install_with() {
+  env "${@:2}" cargo install --path "$ROOT/prep" --locked --root "$PREFIX" --features "$1" --force
+}
+if (( ${#GPU_ENV[@]} )); then
+  echo "Building CareerTwin Prep (features: gpu). The first build takes a while; the voice will run on the graphics card."
+  if ! install_with gpu "${GPU_ENV[@]}"; then
+    echo "The graphics card build did not work; building for the processor instead." >&2
+    install_with "$FEATURES"
+  fi
+else
+  echo "Building CareerTwin Prep (features: $FEATURES). The first build takes a while."
+  install_with "$FEATURES"
+fi
 
 install -Dm644 "$ROOT/packaging/careertwin-prep.png" "$ICONS/careertwin-prep.png"
 mkdir -p "$APPS"

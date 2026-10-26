@@ -169,6 +169,65 @@ pub fn kokoro_assets(voice: &str) -> Option<Vec<crate::speech::download::Asset>>
     Some(assets)
 }
 
+/// Piper, the engine of the offline Russian voice: the release of the project itself, whose archive
+/// holds the program, its libraries and the phoneme data.
+pub const PIPER_ARCHIVE: &str = "piper_linux_x86_64.tar.gz";
+const PIPER_URL: &str = "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz";
+const PIPER_BYTES: u64 = 26_460_462;
+const PIPER_SHA256: &str = "a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992";
+
+/// The Russian voices, pinned to one commit of the repository that holds them:
+/// `(name, onnx bytes, onnx sha256, config bytes, config sha256, description)`.
+pub const PIPER_REVISION: &str = "5041a7a49ae5b3a0f30e6837769eb03fdbb231bd";
+const PIPER_VOICE_URL: &str = "https://huggingface.co/rhasspy/piper-voices/resolve";
+pub const PIPER_VOICES: [(&str, u64, &str, u64, &str, &str); 2] = [
+    (
+        "ru_RU-irina-medium",
+        63_201_294,
+        "8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa",
+        4_765,
+        "c2ec28bb38e2b59e93b959b3e40348c1afebbd272f30fed5d41205d08e98a9d7",
+        "female, even",
+    ),
+    (
+        "ru_RU-denis-medium",
+        63_201_294,
+        "15fab56e11a097858ee115545d0f697fc2a316c41a291a5362349fb870411b0a",
+        4_823,
+        "831c860dac0b5073eaa81610a0a638ec23d90a6cf8e5f871b4485c2cec3767c8",
+        "male, calm",
+    ),
+];
+
+/// The Russian voice used when none is chosen.
+pub const PIPER_DEFAULT_VOICE: &str = "ru_RU-irina-medium";
+
+pub fn piper_voice_known(name: &str) -> bool {
+    PIPER_VOICES.iter().any(|(voice, ..)| *voice == name)
+}
+
+/// The voice to use for `name`, which may be a voice of another engine (the settings keep one name
+/// for the cloud and one for the offline voice): the default when it is not one of ours.
+pub fn piper_voice_or_default(name: &str) -> &str {
+    if piper_voice_known(name) { name } else { PIPER_DEFAULT_VOICE }
+}
+
+/// Whether this computer can run the offline Russian voice: the engine is built for Linux on x86-64.
+pub const PIPER_HERE: bool = cfg!(all(target_os = "linux", target_arch = "x86_64"));
+
+/// The files the Russian voice needs: the engine and one voice.
+pub fn piper_assets(voice: &str) -> Option<Vec<crate::speech::download::Asset>> {
+    use crate::speech::download::Asset;
+    let (name, onnx_bytes, onnx_sha, json_bytes, json_sha, _) = PIPER_VOICES.iter().find(|(n, ..)| *n == voice)?;
+    let path = voice.strip_prefix("ru_RU-").and_then(|rest| rest.strip_suffix("-medium"))?;
+    let base = format!("{PIPER_VOICE_URL}/{PIPER_REVISION}/ru/ru_RU/{path}/medium/{name}");
+    Some(vec![
+        Asset::new(PIPER_URL, PIPER_ARCHIVE, PIPER_BYTES, PIPER_SHA256),
+        Asset::new(format!("{base}.onnx"), &format!("{name}.onnx"), *onnx_bytes, onnx_sha),
+        Asset::new(format!("{base}.onnx.json"), &format!("{name}.onnx.json"), *json_bytes, json_sha),
+    ])
+}
+
 /// The Whisper model as a download.
 pub fn stt_asset(model: &SttModel) -> crate::speech::download::Asset {
     crate::speech::download::Asset::new(model.url(), model.file, model.bytes, model.sha256)

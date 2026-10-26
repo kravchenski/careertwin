@@ -68,6 +68,7 @@ impl Stt for LocalStt {
         let threads = self.threads;
         async move {
             tokio::task::spawn_blocking(move || {
+                crate::polite::lower_this_thread();
                 let context = Self::load(&slot, &model)?;
                 let audio = i16_to_f32(&pcm);
                 let mut state = context

@@ -89,6 +89,14 @@ strings! {
     StatusThinking => ("{name} is thinking…", "{name} думает…"),
     StatusSpeaking => ("{name} is speaking", "{name} говорит"),
     StatusListening => ("Your turn. I'm listening.", "Ваша очередь. Я слушаю."),
+    StatusUnclear => (
+        "I heard you, but no words came out. Say it again, a little closer to the microphone.",
+        "Я слышу, но слов не разобрать. Скажите ещё раз, чуть ближе к микрофону."
+    ),
+    NoMicrophone => (
+        "The microphone could not be opened: {error}. Choose another input in Settings, or type your answers.",
+        "Микрофон не открылся: {error}. Выберите другой вход в настройках или пишите ответы текстом."
+    ),
     StatusMuted => ("Microphone is off", "Микрофон выключен"),
     StatusFinished => ("The call has ended", "Звонок завершён"),
     Live => ("LIVE", "ЭФИР"),
@@ -286,15 +294,15 @@ strings! {
     // the panel at the bottom of the window
     AccountMenu => ("Account menu", "Меню профиля"),
     AppName => ("CareerTwin Prep", "CareerTwin Prep"),
-    MenuUsage => ("Usage", "Использование"),
+    MenuUsage => ("Your activity", "Ваша активность"),
     MenuLanguage => ("Language", "Язык"),
     MenuHelp => ("Help", "Помощь"),
     MenuQuit => ("Quit", "Выйти"),
-    BarToday => ("Today {done} of {goal} min", "Сегодня {done} из {goal} мин"),
+    BarToday => ("{done} of {goal} min today", "{done} из {goal} мин сегодня"),
     BarStreak => ("{n}-day streak", "Серия: {n} дн."),
 
     // usage
-    UsageTitle => ("Usage", "Использование"),
+    UsageTitle => ("Your activity", "Ваша активность"),
     UsageToday => ("Today", "Сегодня"),
     UsageWeek => ("Last 7 days", "Последние 7 дней"),
     UsageTotal => ("In total", "Всего"),
@@ -350,6 +358,33 @@ strings! {
     LongMinutes => ("Long break, min", "Долгий перерыв, мин"),
     LongEvery => ("Long break after", "Долгий после"),
     GoalMinutes => ("Goal per day, min", "Цель на день, мин"),
+    HeatLabel => ("Practice calendar", "Календарь занятий"),
+    HeatCaption => (
+        "Practice days in the last {weeks} weeks: {days}",
+        "Дней с практикой за последние {weeks} нед.: {days}"
+    ),
+    HeatLess => ("Less", "Меньше"),
+    HeatMore => ("More", "Больше"),
+    HeatNone => ("{date}: no practice", "{date}: занятий не было"),
+    BreakTitle => ("Break", "Перерыв"),
+    BreakHint => (
+        "Stand up, walk around, drink some water. The call is paused.",
+        "Встаньте, пройдитесь, попейте воды. Звонок на паузе."
+    ),
+    BreakSpeech => (
+        "Time for a break. Stand up, walk around, drink some water. I'll be here in {n} minutes.",
+        "Пора сделать перерыв. Встань, пройдись, попей воды. Я подожду {n} мин."
+    ),
+    BreakBackSpeech => ("Welcome back. Ready to go on?", "С возвращением. Продолжим?"),
+    BreakReturn => ("Back to the call", "Вернуться к звонку"),
+    TimerAutoStart => (
+        "Start the timer when the program opens, and again after each break",
+        "Запускать таймер при входе в программу и снова после каждого перерыва"
+    ),
+    TimerExplain => (
+        "Focus timer (Pomodoro): {focus} min of work, then {rest} min of rest. Click to pause or start.",
+        "Таймер фокуса (помодоро): {focus} мин работы, потом {rest} мин отдыха. Нажмите, чтобы остановить или запустить."
+    ),
 
     // the plan: the vacancy ranked by the 80/20 rule
     CardPlan => ("Your plan", "Ваш план"),
@@ -384,6 +419,11 @@ strings! {
     PlanEffort => ("effort {n}/10", "усилия {n}/10"),
     PlanWriteTerms => ("Write the terms", "Составить термины"),
     PlanTermsCount => ("Terms: {n}", "Терминов: {n}"),
+    TopicConcept => ("concept", "идея"),
+    TopicFramework => ("framework", "фреймворк"),
+    TopicLanguage => ("language", "язык"),
+    TopicPractice => ("practice", "практика"),
+    TopicBehaviour => ("behaviour", "поведение"),
     PlanPlain => ("In plain words", "Простыми словами"),
     PlanAnalogy => ("Think of it like this", "Как это понять"),
     PlanSayIt => ("Say it in English", "Скажите по-английски"),
@@ -399,12 +439,10 @@ strings! {
     // notes
     NotesTitle => ("Notes", "Заметки"),
     NotesIntro => (
-        "Short, one idea each. After a lesson the tutor keeps the 20% worth remembering; you can add your own.",
-        "Коротко, по одной мысли. После занятия репетитор сохраняет те самые 20%, которые стоит помнить; свои можно добавить."
+        "The tutor writes these after each call: the 20% worth remembering, one idea each.",
+        "Эти заметки репетитор пишет после каждого звонка: те самые 20%, которые стоит помнить, по одной мысли."
     ),
-    NotesWrite => ("Write a note…", "Напишите заметку…"),
-    NotesAdd => ("Add", "Добавить"),
-    NotesEmpty => ("No notes yet. The first lesson fills this page.", "Заметок пока нет. Первое же занятие наполнит эту страницу."),
+    NotesEmpty => ("No notes yet. The tutor writes them after a call.", "Заметок пока нет. Репетитор пишет их после звонка."),
     NotesCopy => ("Copy as Markdown", "Скопировать как Markdown"),
     NotesCopied => ("Copied", "Скопировано"),
     NoteStar => ("Star this note", "Отметить заметку"),
@@ -414,7 +452,6 @@ strings! {
     KindLecture => ("Lecture", "Лекция"),
     KindMistake => ("Slip", "Ошибка"),
     KindIdea => ("Idea", "Идея"),
-    FilterAll => ("All", "Все"),
 
     // after a lesson
     DigestTitle => ("The 20% to keep", "Те самые 20%"),
@@ -426,7 +463,6 @@ strings! {
     StatusChat => ("Write to me. I'm here.", "Пишите мне, я здесь."),
     LessonTerm => ("Term {n} of {total}", "Термин {n} из {total}"),
     StageNative => ("In your words", "Своими словами"),
-    StageEnglish => ("In English", "По-английски"),
     WriteToTutor => ("Write to the tutor…", "Напишите репетитору…"),
     CloseChat => ("Finish chat", "Закрыть чат"),
     VoiceOff => ("Mute the tutor", "Отключить голос"),
@@ -436,23 +472,58 @@ strings! {
     // the home of each tab
     HomeStart => ("Start talking", "Начать разговор"),
     HomeStartTopic => ("Start: {topic}", "Начать: {topic}"),
-    HomeWrite => ("Write instead", "Написать вместо этого"),
+    HomeStartRun => ("Start the interview", "Начать собеседование"),
+    HomeVacancy => ("Vacancy and plan", "Вакансия и план"),
+    HomeStudy => ("Study something together", "Учить что-то вместе"),
+    HomeLineStudy => (
+        "Bring a text, your notes, new words or a topic. We go through it in your words first, then in English, and I fix your grammar.",
+        "Принесите текст, конспект, новые слова или тему. Сначала разберём своими словами, потом по-английски, и я поправлю грамматику."
+    ),
+    StudyTitle => ("Study together", "Учим вместе"),
+    StudyHint => (
+        "Paste a text, your notes, a list of new words, or write a topic…",
+        "Вставьте текст, конспект, список новых слов или напишите тему…"
+    ),
+    StudyDrop => (
+        "You can also drop a text file on this window.",
+        "Можно также бросить на это окно текстовый файл."
+    ),
+    StudyOnlyText => (
+        "Only text files can be read for now (.txt, .md, .csv, .json, .srt). Paste the text instead.",
+        "Пока читаются только текстовые файлы (.txt, .md, .csv, .json, .srt). Вставьте текст сюда."
+    ),
+    StudyStart => ("Start the lesson", "Начать урок"),
+    StudyTalk => ("Just talk, no material", "Просто поговорить, без материала"),
+    StudyBusy => ("Preparing the lesson…", "Готовлю урок…"),
+    HomeLineRun => (
+        "About an hour and a half: the terms first in your words, then again {lang} with your grammar, then code. We begin with {topic}.",
+        "Около полутора часов: сначала термины своими словами, потом ещё раз {lang}, с разбором грамматики, потом код. Начнём с темы «{topic}»."
+    ),
     HomeIntroStart => ("Practise my introduction", "Потренировать самопрезентацию"),
     HomeLineEnglish => (
         "Ten minutes of real conversation. Mistakes are fine: I answer like a person would.",
         "Десять минут живого разговора. Ошибки не страшны: я отвечаю как человек."
     ),
     HomeLineTechnical => (
-        "Today: {topic}, {n} terms. First in your words, then in English.",
-        "Сегодня: {topic}, терминов: {n}. Сначала своими словами, потом по-английски."
+        "Today: {topic}, {n} terms. First in your words, then {lang}.",
+        "Сегодня: {topic}, терминов: {n}. Сначала своими словами, потом {lang}."
+    ),
+    PracticeLanguage => ("I practise in", "Я тренируюсь на языке"),
+    PracticeLanguageHint => (
+        "Terms lessons, the introduction, live coding and the chat use it. The English tab stays English. The tutor's voice has to speak that language: cloud voices do, the offline one speaks English only.",
+        "Его используют уроки по терминам, самопрезентация, живое кодирование и чат. Вкладка «Английский» остаётся английской. Голос должен уметь говорить на этом языке: облачные умеют, офлайн-голос говорит только по-английски."
     ),
     HomeLineNoPlan => (
         "Paste the vacancy and I will work out what they are likely to ask.",
         "Вставьте вакансию, и я выясню, о чём вас, скорее всего, спросят."
     ),
     HomeLineAllLearned => (
-        "Every term of the plan is learned. A mock interview is the next step.",
-        "Все термины плана выучены. Следующий шаг — пробное собеседование."
+        "Every term of the plan is learned. I will ask them again, in a different order, and then give you code.",
+        "Все термины плана выучены. Я спрошу их ещё раз, по-другому, а потом дам задачу на код."
+    ),
+    HomeLineNoTerms => (
+        "The plan has no terms yet. Open it and have them written.",
+        "В плане пока нет терминов. Откройте его и попросите составить."
     ),
     HomeLineInterview => (
         "Let's make your introduction sound like you, in about a minute.",
@@ -498,6 +569,41 @@ strings! {
     StagePause => ("Pause", "Пауза"),
     StagePlay => ("Play", "Играть"),
     StageCaptionsOnly => ("No voice for this one: captions only.", "Голоса для этого нет: только подписи."),
+    // live coding
+    CardCode => ("Live coding", "Живое кодирование"),
+    CardCodeText => (
+        "A task from your vacancy. Think aloud and write code: the tutor watches and asks, and never gives the answer.",
+        "Задача из вашей вакансии. Думайте вслух и пишите код: репетитор следит и спрашивает, но не даёт ответ."
+    ),
+    CodeTitle => ("Live coding", "Живое кодирование"),
+    CodeIntro => (
+        "You get a task like the one in a real interview and write the solution while the tutor watches. If you go the right way it stays quiet; if something is off it asks you to check, and it will not tell you where. Say \"I don't know\" and you work it out together.",
+        "Вы получаете задачу как на настоящем собеседовании и пишете решение, пока репетитор следит. Если вы идёте верно, он молчит; если что-то не так, он просит проверить и не говорит где. Скажите «не знаю», и вы разберёте вместе."
+    ),
+    CodeLanguage => ("Language", "Язык программирования"),
+    CodeLevel => ("Size", "Размер"),
+    CodeWarmUp => ("Warm-up", "Разминка"),
+    CodeInterview => ("Interview task", "Задача как на собеседовании"),
+    CodeTopic => ("Topic (optional)", "Тема (необязательно)"),
+    CodeTopicHint => ("for example: dictionaries, SQL joins, async", "например: словари, JOIN в SQL, async"),
+    CodeStart => ("Get a task", "Получить задачу"),
+    CodePreparing => ("Preparing a task…", "Готовлю задачу…"),
+    CodeLimits => (
+        "The tutor sees only this window. It notices a block pasted in all at once or a long absence, not other screens; thinking it through yourself is the point.",
+        "Репетитор видит только это окно. Он замечает блок, вставленный целиком, или долгое отсутствие, но не другие экраны: суть в том, чтобы додуматься самому."
+    ),
+    CodeTask => ("Task", "Задача"),
+    CodeExamples => ("Examples", "Примеры"),
+    CodeDone => ("I'm done", "Я закончил"),
+    CodeStuck => ("I don't know", "Не знаю"),
+    CodeDoneSay => ("I think I'm done. Can you check it?", "Кажется, я закончил. Проверишь?"),
+    CodeStuckSay => ("I don't know how to continue.", "Не знаю, как продолжить."),
+    CodeWatching => ("Looking at your code", "Смотрю ваш код"),
+    CodeEditor => ("Code editor", "Редактор кода"),
+    HelpCode => (
+        "Live coding: write the solution aloud and in the editor. The tutor stays quiet while you are on the right track and asks you to check when something is off.",
+        "Живое кодирование: пишите решение вслух и в редакторе. Пока вы на верном пути, репетитор молчит, а когда что-то не так, просит проверить."
+    ),
     HelpShow => (
         "Ask the tutor to show or draw something and it plays as a short animated story you can pause, skip and replay.",
         "Попросите репетитора показать или нарисовать что-нибудь, и это сыграет как короткая анимация: её можно ставить на паузу, листать и пересматривать."
@@ -533,9 +639,39 @@ impl Tr {
     }
 }
 
+/// "in English" or "по-английски": the language being practised, as a phrase for a sentence.
+pub fn language_phrase(tr: Tr, name: &str) -> String {
+    if tr.is_russian() {
+        let adverb = match name {
+            "English" => "по-английски",
+            "German" => "по-немецки",
+            "Spanish" => "по-испански",
+            "French" => "по-французски",
+            "Italian" => "по-итальянски",
+            "Portuguese" => "по-португальски",
+            "Polish" => "по-польски",
+            "Ukrainian" => "по-украински",
+            "Russian" => "по-русски",
+            other => return format!("на языке {other}"),
+        };
+        adverb.to_owned()
+    } else {
+        format!("in {name}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_practised_language_reads_as_a_phrase_in_both_languages() {
+        let (en, ru) = (Tr::new(UiLanguage::En), Tr::new(UiLanguage::Ru));
+        assert_eq!(language_phrase(en, "German"), "in German");
+        assert_eq!(language_phrase(ru, "German"), "по-немецки");
+        assert_eq!(language_phrase(ru, "English"), "по-английски");
+        assert_eq!(language_phrase(ru, "Klingon"), "на языке Klingon");
+    }
 
     fn places(text: &str) -> Vec<String> {
         let mut found: Vec<String> =

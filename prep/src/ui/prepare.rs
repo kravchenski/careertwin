@@ -104,7 +104,7 @@ pub fn ui(core: &mut Core, view: &mut PrepareView, ui: &mut Ui) -> Option<Nav> {
                     for item in &analysis.strengths {
                         ui.horizontal_top(|ui| {
                             ui.label(RichText::new("•").color(GOOD));
-                            ui.label(RichText::new(item).font(theme::sans(15.0)).color(SNOW));
+                            ui.add(widgets::wrapping(RichText::new(item).font(theme::sans(15.0)).color(SNOW)));
                         });
                     }
                 }
@@ -129,7 +129,7 @@ pub fn ui(core: &mut Core, view: &mut PrepareView, ui: &mut Ui) -> Option<Nav> {
                     for item in &analysis.cv_fixes {
                         ui.horizontal_top(|ui| {
                             ui.label(RichText::new("•").color(BERRY));
-                            ui.label(RichText::new(item).font(theme::sans(15.0)).color(SNOW));
+                            ui.add(widgets::wrapping(RichText::new(item).font(theme::sans(15.0)).color(SNOW)));
                         });
                     }
                 }
@@ -149,7 +149,7 @@ pub fn ui(core: &mut Core, view: &mut PrepareView, ui: &mut Ui) -> Option<Nav> {
                     for line in &question.outline {
                         ui.horizontal_top(|ui| {
                             ui.label(RichText::new("•").color(FAINT));
-                            ui.label(RichText::new(line).font(theme::sans(14.5)).color(MUTED));
+                            ui.add(widgets::wrapping(RichText::new(line).font(theme::sans(14.5)).color(MUTED)));
                         });
                     }
                     ui.add_space(6.0);

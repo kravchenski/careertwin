@@ -17,6 +17,9 @@ use crate::session::{Session, date};
 use crate::srs::{Card, CardKind};
 use crate::textdiff::{Comparison, Mark};
 
+/// The room the play button and the add button of a phrase need at the right of its words.
+const PHRASE_BUTTONS: f32 = 270.0;
+
 pub enum State {
     Working,
     Ready,
@@ -89,7 +92,7 @@ fn bullets(ui: &mut Ui, items: &[String], color: Color32) {
     for item in items {
         ui.horizontal_top(|ui| {
             ui.label(RichText::new("•").color(color));
-            ui.label(RichText::new(item).font(theme::sans(15.0)).color(SNOW));
+            ui.add(widgets::wrapping(RichText::new(item).font(theme::sans(15.0)).color(SNOW)));
         });
     }
 }
@@ -190,7 +193,7 @@ pub fn ui(core: &mut Core, view: &mut ReviewView, ui: &mut Ui) -> Option<Nav> {
                     widgets::score_bar(ui, score.value);
                     ui.label(RichText::new(format!("{}/5", score.value)).font(theme::mono(12.5)).color(MUTED));
                     if !score.note.is_empty() {
-                        ui.label(RichText::new(&score.note).font(theme::sans(14.0)).color(FAINT));
+                        ui.add(widgets::wrapping(RichText::new(&score.note).font(theme::sans(14.0)).color(FAINT)));
                     }
                 });
             }
@@ -201,7 +204,7 @@ pub fn ui(core: &mut Core, view: &mut ReviewView, ui: &mut Ui) -> Option<Nav> {
             for (index, priority) in feedback.priorities.iter().enumerate() {
                 ui.horizontal_top(|ui| {
                     ui.label(RichText::new(format!("{}", index + 1)).font(theme::mono_bold(13.0)).color(BERRY));
-                    ui.label(RichText::new(priority).font(theme::sans(16.0)).color(SNOW));
+                    ui.add(widgets::wrapping(RichText::new(priority).font(theme::sans(16.0)).color(SNOW)));
                 });
             }
         }
@@ -297,23 +300,33 @@ pub fn ui(core: &mut Core, view: &mut ReviewView, ui: &mut Ui) -> Option<Nav> {
             widgets::caps(ui, tr.get(K::PhrasesToLearn));
             for phrase in &feedback.phrases {
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(&phrase.english).font(theme::semibold(16.0)).color(SNOW));
-                        if !phrase.meaning.is_empty() {
-                            ui.label(RichText::new(&phrase.meaning).font(theme::sans(14.0)).color(MUTED));
-                        }
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if view.added.contains(&phrase.english) {
-                            ui.label(RichText::new(tr.get(K::Added)).font(theme::mono(12.5)).color(GOOD));
-                        } else if ghost_button(ui, tr.get(K::AddToDeck)).clicked() {
-                            add_phrase = Some((phrase.english.clone(), phrase.meaning.clone()));
-                        }
-                        if icon_button(ui, Icon::Play, tr.get(K::Listen), 34.0, None).clicked() {
-                            speak = Some(phrase.english.clone());
-                        }
-                    });
+                // the words take what is left of the row after the two buttons and wrap in it, so a long
+                // phrase never runs under them
+                let words = (ui.available_width() - PHRASE_BUTTONS).max(200.0);
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(words, 0.0),
+                        egui::Layout::top_down(egui::Align::LEFT),
+                        |ui| {
+                            ui.set_width(words);
+                            ui.add(widgets::wrapping(
+                                RichText::new(&phrase.english).font(theme::semibold(16.0)).color(SNOW),
+                            ));
+                            if !phrase.meaning.is_empty() {
+                                ui.add(widgets::wrapping(
+                                    RichText::new(&phrase.meaning).font(theme::sans(14.0)).color(MUTED),
+                                ));
+                            }
+                        },
+                    );
+                    if icon_button(ui, Icon::Play, tr.get(K::Listen), 34.0, None).clicked() {
+                        speak = Some(phrase.english.clone());
+                    }
+                    if view.added.contains(&phrase.english) {
+                        ui.label(RichText::new(tr.get(K::Added)).font(theme::mono(12.5)).color(GOOD));
+                    } else if ghost_button(ui, tr.get(K::AddToDeck)).clicked() {
+                        add_phrase = Some((phrase.english.clone(), phrase.meaning.clone()));
+                    }
                 });
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
                 ui.painter().rect_filled(rect, 0.0, LINE);

@@ -114,6 +114,84 @@ impl Stats {
     }
 }
 
+/// How strongly a day is lit in the calendar, 0 to 4, against the goal for the day: 0 nothing,
+/// 1 a short visit, 2 getting there, 3 the goal met, 4 twice the goal.
+pub fn level(day: &Day, goal_seconds: u32) -> u8 {
+    if !day.active() {
+        return 0;
+    }
+    let goal = goal_seconds.max(60);
+    match day.seconds {
+        s if s >= goal * 2 => 4,
+        s if s >= goal => 3,
+        s if s * 5 >= goal * 2 => 2,
+        _ => 1,
+    }
+}
+
+/// One day of the calendar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cell {
+    pub date: String,
+    pub day: Day,
+    pub level: u8,
+    pub today: bool,
+}
+
+/// The last weeks as columns of seven days, Monday at the top, like a contribution graph. Days
+/// after today are left empty.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Calendar {
+    pub columns: Vec<[Option<Cell>; 7]>,
+    /// Where a month begins: the column and the month, 1 to 12.
+    pub months: Vec<(usize, u32)>,
+    /// Days with any practice in the whole calendar.
+    pub practised: u32,
+}
+
+impl Stats {
+    /// The calendar of the last `weeks` weeks, the current one included.
+    pub fn calendar(&self, now: u64, weeks: usize, goal_minutes: u32) -> Calendar {
+        let weeks = weeks.max(1);
+        let today = now / DAY;
+        let weekday = (today + 3) % 7; // 1 January 1970 was a Thursday; Monday is 0
+        let first = (today - weekday).saturating_sub((weeks as u64 - 1) * 7);
+        let goal = goal_minutes.saturating_mul(60);
+        let mut columns = Vec::with_capacity(weeks);
+        let mut months: Vec<(usize, u32)> = Vec::new();
+        let mut practised = 0;
+        for column in 0..weeks {
+            let mut cells: [Option<Cell>; 7] = Default::default();
+            for (row, slot) in cells.iter_mut().enumerate() {
+                let days = first + column as u64 * 7 + row as u64;
+                if days > today {
+                    continue;
+                }
+                let date = date(days * DAY);
+                let day = self.days.get(&date).cloned().unwrap_or_default();
+                let level = level(&day, goal);
+                practised += u32::from(level > 0);
+                *slot = Some(Cell { date, day, level, today: days == today });
+            }
+            let monday = date((first + column as u64 * 7) * DAY);
+            let month: u32 = monday.get(5..7).and_then(|m| m.parse().ok()).unwrap_or(1);
+            if months.last().is_none_or(|(_, last)| *last != month) {
+                months.push((column, month));
+            }
+            columns.push(cells);
+        }
+        // a label needs room: when two are closer than three columns the earlier one gives way
+        let mut kept: Vec<(usize, u32)> = Vec::new();
+        for (index, (column, month)) in months.iter().enumerate() {
+            let crowded = months.get(index + 1).is_some_and(|(next, _)| next - column < 3);
+            if !crowded {
+                kept.push((*column, *month));
+            }
+        }
+        Calendar { columns, months: kept, practised }
+    }
+}
+
 /// "1 h 05 min", "12 min", "40 s": a length of time for people.
 pub fn duration_label(seconds: u32, hours: &str, minutes: &str, secs: &str) -> String {
     if seconds >= 3600 {
@@ -198,6 +276,57 @@ mod tests {
         fs::write(&path, "{ not json").unwrap();
         assert!(Stats::load(&path).days.is_empty());
         assert!(Stats::load(&dir.path().join("missing.json")).days.is_empty());
+    }
+
+    #[test]
+    fn the_levels_follow_the_goal_for_the_day() {
+        let day = |seconds, focus_blocks| Day { seconds, focus_blocks, ..Day::default() };
+        let goal = 25 * 60;
+        assert_eq!(level(&day(0, 0), goal), 0);
+        assert_eq!(level(&day(30, 0), goal), 0, "half a minute is not a visit");
+        assert_eq!(level(&day(0, 1), goal), 1, "a finished focus block is");
+        assert_eq!(level(&day(5 * 60, 0), goal), 1);
+        assert_eq!(level(&day(10 * 60, 0), goal), 2);
+        assert_eq!(level(&day(25 * 60, 0), goal), 3);
+        assert_eq!(level(&day(49 * 60, 0), goal), 3);
+        assert_eq!(level(&day(50 * 60, 0), goal), 4);
+        assert_eq!(level(&day(600, 0), 0), 4, "a goal of nothing counts as a minute and does not divide by zero");
+    }
+
+    #[test]
+    fn the_calendar_has_whole_weeks_with_monday_at_the_top_and_nothing_after_today() {
+        let mut stats = Stats::default();
+        stats.add_practice(NOW, 30 * 60, 100); // Sunday 25 October 2026
+        stats.add_practice(NOW - 6 * DAY, 10 * 60, 40); // Monday 19 October
+        stats.add_focus_block(NOW - 7 * DAY); // Sunday 18 October
+        let calendar = stats.calendar(NOW, 4, 25);
+        assert_eq!(calendar.columns.len(), 4);
+        let last = &calendar.columns[3];
+        assert_eq!(last[0].as_ref().unwrap().date, "2026-10-19", "the week of today starts on Monday");
+        assert_eq!(last[0].as_ref().unwrap().level, 2);
+        let sunday = last[6].as_ref().unwrap();
+        assert_eq!((sunday.date.as_str(), sunday.level, sunday.today), ("2026-10-25", 3, true));
+        assert_eq!(calendar.columns[2][6].as_ref().unwrap().level, 1);
+        assert_eq!(calendar.practised, 3);
+        // a Wednesday: the days after it are empty
+        let midweek = stats.calendar(NOW - 4 * DAY, 2, 25);
+        let week = &midweek.columns[1];
+        assert!(week[..3].iter().all(Option::is_some) && week[3..].iter().all(Option::is_none), "{week:?}");
+        assert_eq!(week[2].as_ref().unwrap().date, "2026-10-21");
+        assert!(week[2].as_ref().unwrap().today);
+    }
+
+    #[test]
+    fn months_are_named_where_they_begin_and_never_on_top_of_each_other() {
+        let calendar = Stats::default().calendar(NOW, 26, 25);
+        let months: Vec<u32> = calendar.months.iter().map(|(_, m)| *m).collect();
+        assert!(months.windows(2).all(|w| w[0] != w[1]), "{months:?}");
+        assert_eq!(*months.last().unwrap(), 10, "the current month is the last label");
+        for pair in calendar.months.windows(2) {
+            assert!(pair[1].0 - pair[0].0 >= 3, "{:?}", calendar.months);
+        }
+        assert_eq!(calendar.practised, 0);
+        assert_eq!(Stats::default().calendar(NOW, 0, 25).columns.len(), 1, "never an empty calendar");
     }
 
     #[test]

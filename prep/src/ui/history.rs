@@ -1,4 +1,4 @@
-//! The list of sessions that opens from the top bar, with the work running in the background.
+//! What you did last, in a list that opens from the top bar, with the work running in the background.
 
 use egui::{
     Align2, Color32, CornerRadius, Frame, Id, Margin, Order, RichText, ScrollArea, Sense, Stroke, StrokeKind, TextEdit,
@@ -39,6 +39,7 @@ pub fn ui(core: &mut Core, state: &mut HistoryState, ctx: &egui::Context) -> Opt
     let now = core.now();
     let mut nav = None;
     let mut delete: Option<String> = None;
+    let mut stop: Option<u64> = None;
     let height = (ctx.content_rect().height() - 110.0).max(240.0);
     egui::Area::new(Id::unique("history")).order(Order::Foreground).anchor(Align2::LEFT_TOP, vec2(20.0, 72.0)).show(
         ctx,
@@ -52,17 +53,17 @@ pub fn ui(core: &mut Core, state: &mut HistoryState, ctx: &egui::Context) -> Opt
                 .show(ui, |ui| {
                     ui.set_width(330.0);
                     ui.set_max_height(height);
-                    widgets::caps(ui, tr.get(K::Sessions));
-                    ui.add_space(4.0);
-                    ui.add(
-                        TextEdit::singleline(&mut state.query)
-                            .hint_text(tr.get(K::Search))
-                            .desired_width(f32::INFINITY)
-                            .margin(vec2(10.0, 8.0)),
-                    );
-                    ui.add_space(8.0);
-                    let sessions = core.store.search(&state.query);
-                    ScrollArea::vertical().auto_shrink([false, true]).max_height(height - 150.0).show(ui, |ui| {
+                    ScrollArea::vertical().auto_shrink([false, true]).max_height(height - 60.0).show(ui, |ui| {
+                        widgets::caps(ui, tr.get(K::ContinueLabel));
+                        ui.add_space(4.0);
+                        ui.add(
+                            TextEdit::singleline(&mut state.query)
+                                .hint_text(tr.get(K::Search))
+                                .desired_width(f32::INFINITY)
+                                .margin(vec2(10.0, 8.0)),
+                        );
+                        ui.add_space(8.0);
+                        let sessions = core.store.search(&state.query);
                         if sessions.is_empty() {
                             widgets::muted(ui, tr.get(K::NoSessions));
                         }
@@ -74,14 +75,22 @@ pub fn ui(core: &mut Core, state: &mut HistoryState, ctx: &egui::Context) -> Opt
                         ui.add_space(10.0);
                         widgets::caps(ui, tr.get(K::Background));
                         for job in core.jobs.running() {
+                            // a download shows how far it is, not the 0% it started with
+                            let label = match core.downloads.iter().find(|d| d.job == job.id) {
+                                Some(download) => tr.fill(
+                                    K::Downloading,
+                                    &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
+                                ),
+                                None => job.label.clone(),
+                            };
                             ui.horizontal(|ui| {
                                 ui.spinner();
-                                ui.label(RichText::new(&job.label).font(theme::sans(14.0)).color(MUTED));
-                                ui.label(
-                                    RichText::new(format!("{}s", job.started.elapsed().as_secs()))
-                                        .font(theme::mono(12.0))
-                                        .color(FAINT),
-                                );
+                                ui.label(RichText::new(label).font(theme::sans(14.0)).color(MUTED));
+                                if job.cancellable
+                                    && widgets::quiet_icon(ui, widgets::Icon::Close, tr.get(K::Cancel), 22.0).clicked()
+                                {
+                                    stop = Some(job.id);
+                                }
                             });
                         }
                     }
@@ -90,6 +99,10 @@ pub fn ui(core: &mut Core, state: &mut HistoryState, ctx: &egui::Context) -> Opt
     );
     if let Some(id) = delete {
         let _ = core.store.delete(&id);
+        ctx.request_repaint();
+    }
+    if let Some(job) = stop {
+        core.cancel_job(job);
         ctx.request_repaint();
     }
     if nav.is_some() {

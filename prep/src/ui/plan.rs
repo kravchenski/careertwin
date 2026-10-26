@@ -13,7 +13,7 @@ use super::{Core, Nav, scrolling_column};
 use crate::i18n::{K, Tr};
 use crate::prompts::Lang;
 use crate::prompts::tutor::Mode;
-use crate::syllabus::{Progress, Syllabus, Topic};
+use crate::syllabus::{Progress, Syllabus, Topic, TopicKind};
 
 #[derive(Default)]
 pub struct PlanView {
@@ -169,7 +169,7 @@ fn summary(ui: &mut Ui, tr: Tr, plan: &Syllabus, progress: &Progress) {
         let known = (plan.vital_coverage(progress) * 100.0).round() as u32;
         ui.label(
             RichText::new(tr.fill(K::PlanCoverage, &[("n", &covered.to_string())]))
-                .font(theme::serif(24.0))
+                .font(theme::heading(24.0))
                 .color(SNOW),
         );
         widgets::progress(ui, ui.available_width(), plan.coverage(progress));
@@ -224,7 +224,14 @@ fn topic_card(
             if name.clicked() {
                 *action = Some(Action::Open(index));
             }
-            ui.label(RichText::new(topic.kind.label().to_uppercase()).font(theme::mono(10.5)).color(FAINT));
+            let kind = match topic.kind {
+                TopicKind::Concept => K::TopicConcept,
+                TopicKind::Framework => K::TopicFramework,
+                TopicKind::Language => K::TopicLanguage,
+                TopicKind::Practice => K::TopicPractice,
+                TopicKind::Behaviour => K::TopicBehaviour,
+            };
+            ui.label(RichText::new(tr.get(kind).to_uppercase()).font(theme::mono(10.5)).color(FAINT));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 meter(ui, &tr.fill(K::PlanEffort, &[("n", &topic.effort.to_string())]), topic.effort, MUTED);
                 ui.add_space(8.0);
@@ -307,7 +314,7 @@ fn term_block(ui: &mut Ui, tr: Tr, topic: &Topic, index: usize, progress: &Progr
                     if icon_button(ui, Icon::Play, tr.get(K::Listen), 30.0, None).clicked() {
                         *action = Some(Action::Listen(term.english.clone()));
                     }
-                    ui.label(RichText::new(&term.english).font(theme::sans(15.0)).color(SNOW));
+                    ui.add(widgets::wrapping(RichText::new(&term.english).font(theme::sans(15.0)).color(SNOW)));
                 });
             }
             ui.add_space(6.0);

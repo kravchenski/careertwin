@@ -139,6 +139,39 @@ pub fn parse_terms(reply: &str) -> Result<Vec<Term>, PromptError> {
     if terms.is_empty() { Err(PromptError::Unusable("terms")) } else { Ok(terms) }
 }
 
+/// What to learn from the material the person brings: a text, notes, a list of words, or a topic.
+pub fn study_system(native: Lang) -> String {
+    format!(
+        "You are a tutor who prepares a lesson from the material a person brings: a text, their notes, a list of \
+         new words, or just a topic. They think in {lang} and must learn to say it well in English. Pick the 5 to 8 \
+         things in it most worth learning: ideas, terms, or new words and phrases, the most useful first. Take them \
+         from the material; if it is only a topic, choose what matters most in it. For each:\n\
+         - name: the term, word or phrase in English.\n\
+         - plain: two or three short sentences in {lang}, in plain words, saying what it means and when it is used.\n\
+         - analogy: one sentence in {lang} with a comparison from everyday life or an example that makes it stick.\n\
+         - english: a good spoken use of it in English, one or two natural sentences (B1 to B2).\n\
+         - follow_ups: two questions in English that make the person use it themselves.\n\
+         - visual: one sentence in English saying what a short animated picture should show.\n\
+         Also give \"topic\": a short title for the lesson, in English, under six words.\n\
+         Reply with JSON only: {{\"topic\": str, \"terms\": [{{\"name\": str, \"plain\": str, \"analogy\": str, \
+         \"english\": str, \"follow_ups\": [str], \"visual\": str}}]}}",
+        lang = native.name()
+    )
+}
+
+/// The material, cut to a length a request can carry.
+pub fn study_prompt(material: &str) -> String {
+    format!("MATERIAL:\n{}", crate::brief::truncate_chars(material.trim(), 12000))
+}
+
+/// The title of the lesson and its terms.
+pub fn parse_study(reply: &str) -> Result<(String, Vec<Term>), PromptError> {
+    let terms = parse_terms(reply)?;
+    let value = extract_object(reply).ok_or(PromptError::Unusable("a lesson"))?;
+    let topic = text(&value, "topic");
+    Ok((if topic.is_empty() { terms[0].name.clone() } else { topic }, terms))
+}
+
 /// What a lesson leaves behind: the lines worth keeping, the slips, and a reason to come back.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]

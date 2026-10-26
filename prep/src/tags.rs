@@ -13,6 +13,8 @@ pub enum Tag {
     Native(u8),
     /// The term was said in English; the score is 0 to 3, and the next term is up.
     English(u8),
+    /// The person asked to practise the other language: stage two begins.
+    Practice,
     /// One thing worth keeping.
     Note(String),
     /// Show a picture or an animation about this.
@@ -34,6 +36,7 @@ impl Tag {
             "english" => score().map(Self::English),
             "note" if !value.is_empty() => Some(Self::Note(value.to_owned())),
             "show" if !value.is_empty() => Some(Self::Show(value.to_owned())),
+            "practice" => Some(Self::Practice),
             "end" => Some(Self::End),
             _ => None,
         }
@@ -114,6 +117,12 @@ pub fn strip(text: &str) -> (String, Vec<Tag>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_request_for_the_other_language_is_a_tag_of_its_own() {
+        assert_eq!(Tag::parse("practice"), Some(Tag::Practice));
+        assert_eq!(strip("Ладно, переходим. What is it? [[practice]]").1, vec![Tag::Practice]);
+    }
 
     #[test]
     fn a_tag_at_the_end_is_read_and_removed() {

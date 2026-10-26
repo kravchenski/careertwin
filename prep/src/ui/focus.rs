@@ -3,32 +3,24 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    Align2, CornerRadius, Frame, Id, Margin, Order, Rect, RichText, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo,
-    pos2, vec2,
+    Align2, CornerRadius, Frame, Id, Margin, Order, Rect, RichText, Role, Sense, Stroke, Ui, WidgetInfo, pos2, vec2,
 };
 
 use super::Core;
-use super::theme::{self, BERRY, FAINT, GOOD, LINE, MUTED, RAISED, SNOW, SURFACE};
+use super::theme::{self, BERRY, GOOD, LINE, MUTED, RAISED, SNOW, SURFACE};
 use super::widgets::{self, Icon, paint_icon, pointer};
 use crate::i18n::K;
 use crate::pomodoro::{self, Phase, Signal};
 
-pub const PILL_WIDTH: f32 = 168.0;
+/// The width the timer takes at the top right.
+pub const PILL_WIDTH: f32 = 128.0;
 const PILL_HEIGHT: f32 = 44.0;
 /// How long a message stays before it goes away on its own.
 const TOAST_SECONDS: u64 = 14;
 
-fn phase_label(core: &Core) -> &'static str {
-    let tr = core.tr;
-    match core.pomodoro.phase() {
-        Phase::Focus => tr.get(K::PhaseFocus),
-        Phase::ShortBreak => tr.get(K::PhaseShortBreak),
-        Phase::LongBreak => tr.get(K::PhaseLongBreak),
-    }
-}
-
-/// The ring and the time left. A click starts or pauses; a right click resets; the small arrow
-/// skips to the next phase.
+/// A ring that fills as the block goes, and the time left beside it; nothing around them. A
+/// click starts or pauses; a right click resets; the arrow that appears under the pointer skips
+/// to the next phase.
 pub fn pill(core: &mut Core, ui: &mut Ui) {
     let tr = core.tr;
     let now = Instant::now();
@@ -37,46 +29,44 @@ pub fn pill(core: &mut Core, ui: &mut Ui) {
     let running = core.pomodoro.running();
     let label = if running { tr.get(K::TimerPause) } else { tr.get(K::TimerStart) };
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, label));
-    let response = response.on_hover_text(tr.get(K::TimerLabel));
+    let explain = tr.fill(
+        K::TimerExplain,
+        &[
+            ("focus", &core.settings.pomodoro.focus_minutes.to_string()),
+            ("rest", &core.settings.pomodoro.short_minutes.to_string()),
+        ],
+    );
+    let response = response.on_hover_text(explain);
     let focus = core.pomodoro.phase() == Phase::Focus;
     let accent = if focus { BERRY } else { GOOD };
     let hovered = response.hovered();
     let painter = ui.painter();
-    painter.rect(
-        rect,
-        CornerRadius::same((PILL_HEIGHT / 2.0) as u8),
-        if hovered { RAISED } else { SURFACE },
-        Stroke::new(1.0, if running { theme::mix(LINE, accent, 0.55) } else { LINE }),
-        StrokeKind::Inside,
-    );
+    if hovered {
+        painter.rect_filled(rect, CornerRadius::same((PILL_HEIGHT / 2.0) as u8), RAISED);
+    }
     let ring = pos2(rect.left() + 24.0, rect.center().y);
-    painter.circle_stroke(ring, 12.5, Stroke::new(2.4, LINE));
+    painter.circle_stroke(ring, 11.0, Stroke::new(2.2, LINE));
     let fraction = core.pomodoro.fraction(now);
     if fraction > 0.0 {
         let points = widgets::arc(
             ring,
-            12.5,
+            11.0,
             -std::f32::consts::FRAC_PI_2,
             -std::f32::consts::FRAC_PI_2 + fraction * std::f32::consts::TAU,
             40,
         );
-        painter.add(egui::Shape::line(points, Stroke::new(2.4, accent)));
+        painter.add(egui::Shape::line(points, Stroke::new(2.2, accent)));
     }
-    paint_icon(painter, if running { Icon::Pause } else { Icon::Play }, ring, 14.0, SNOW);
+    if hovered {
+        paint_icon(painter, if running { Icon::Pause } else { Icon::Play }, ring, 12.0, SNOW);
+    }
     let time = pomodoro::clock(core.pomodoro.remaining(now));
     painter.text(
-        pos2(rect.left() + 46.0, rect.center().y - 7.0),
+        pos2(rect.left() + 44.0, rect.center().y),
         Align2::LEFT_CENTER,
         time,
-        theme::mono_bold(15.0),
-        SNOW,
-    );
-    painter.text(
-        pos2(rect.left() + 46.0, rect.center().y + 9.0),
-        Align2::LEFT_CENTER,
-        phase_label(core).to_uppercase(),
-        theme::mono(10.0),
-        if running { accent } else { FAINT },
+        theme::mono_bold(16.0),
+        if running { SNOW } else { MUTED },
     );
     if response.clicked() {
         core.pomodoro.toggle(now);
@@ -85,11 +75,13 @@ pub fn pill(core: &mut Core, ui: &mut Ui) {
         core.pomodoro.reset();
     }
     if core.pomodoro.in_progress(now) {
-        let skip = Rect::from_center_size(pos2(rect.right() - 22.0, rect.center().y), vec2(30.0, 30.0));
+        let skip = Rect::from_center_size(pos2(rect.right() - 14.0, rect.center().y), vec2(26.0, 30.0));
         let skipped = pointer(ui.interact(skip, ui.scope_id().with("timer-skip"), Sense::click()));
         skipped.widget_info(|| WidgetInfo::labeled(Role::Button, true, tr.get(K::TimerSkip)));
         let skipped = skipped.on_hover_text(tr.get(K::TimerSkip));
-        paint_icon(ui.painter(), Icon::Skip, skip.center(), 15.0, if skipped.hovered() { SNOW } else { MUTED });
+        if hovered || skipped.hovered() {
+            paint_icon(ui.painter(), Icon::Skip, skip.center(), 14.0, if skipped.hovered() { SNOW } else { MUTED });
+        }
         if skipped.clicked() {
             core.pomodoro.skip(now);
         }

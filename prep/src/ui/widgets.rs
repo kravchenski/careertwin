@@ -37,7 +37,6 @@ pub enum Icon {
     Pause,
     Skip,
     Prev,
-    Notebook,
     Star,
     StarFilled,
 }
@@ -221,14 +220,6 @@ pub fn paint_icon(painter: &egui::Painter, icon: Icon, center: Pos2, size: f32, 
             ));
             painter.line_segment([at(-0.24, -0.24), at(-0.24, 0.24)], Stroke::new(stroke.width * 1.5, color));
         }
-        Icon::Notebook => {
-            let body = Rect::from_center_size(center, vec2(0.54 * s, 0.68 * s));
-            painter.rect_stroke(body, CornerRadius::same((0.06 * s) as u8), stroke, StrokeKind::Middle);
-            line(at(-0.1, -0.34), at(-0.1, 0.34));
-            line(at(0.02, -0.12), at(0.17, -0.12));
-            line(at(0.02, 0.04), at(0.17, 0.04));
-            line(at(0.02, 0.2), at(0.12, 0.2));
-        }
     }
 }
 
@@ -242,7 +233,7 @@ pub fn muted(ui: &mut Ui, text: &str) {
 }
 
 pub fn title(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text).font(theme::serif(34.0)).color(SNOW));
+    ui.label(RichText::new(text).font(theme::heading(34.0)).color(SNOW));
 }
 
 pub fn card_frame() -> Frame {
@@ -318,6 +309,27 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str, diameter: f32, tint: Op
     ui.painter().circle(rect.center(), diameter / 2.0, fill, stroke);
     paint_icon(ui.painter(), icon, rect.center(), diameter * 0.52, SNOW);
     response
+}
+
+/// Whether the person clicked somewhere outside `rect` in this frame.
+pub fn clicked_outside(ctx: &egui::Context, rect: Rect) -> bool {
+    ctx.input(|i| i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|at| !rect.contains(at)))
+}
+
+/// An icon with nothing behind it, for the way out beside something that matters more.
+pub fn quiet_icon(ui: &mut Ui, icon: Icon, label: &str, size: f32) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    let response = pointer(response).on_hover_text(label);
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, ui.is_enabled(), label));
+    let color = if response.hovered() { SNOW } else { MUTED };
+    paint_icon(ui.painter(), icon, rect.center(), size * 0.5, color);
+    response
+}
+
+/// A label that wraps at the room it has left. Inside a row a label is otherwise a single line, and a long
+/// one runs past the edge of its card and of the window, and drags the card's width out with it.
+pub fn wrapping(text: impl Into<egui::WidgetText>) -> egui::Label {
+    egui::Label::new(text).wrap_mode(egui::TextWrapMode::Wrap)
 }
 
 /// The main action: a berry pill.

@@ -172,7 +172,7 @@ pub fn paint(core: &mut Core, stage: &mut Picture, ui: &mut Ui, area: Rect) -> O
                 UiBuilder::new().max_rect(Rect::from_center_size(area.center(), vec2(560.0, 200.0))),
                 |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new(tr.get(K::StageFailed)).font(theme::serif(24.0)).color(SNOW));
+                        ui.label(RichText::new(tr.get(K::StageFailed)).font(theme::heading(24.0)).color(SNOW));
                         ui.label(RichText::new(message).font(theme::sans(14.5)).color(BERRY));
                         ui.add_space(8.0);
                         if ghost_button(ui, tr.get(K::StageAgain)).clicked() {
@@ -213,7 +213,7 @@ pub fn paint(core: &mut Core, stage: &mut Picture, ui: &mut Ui, area: Rect) -> O
 
     // the title and the scene dots
     ui.scope_builder(UiBuilder::new().max_rect(header).layout(Layout::left_to_right(Align::Center)), |ui| {
-        ui.label(RichText::new(&player.board.title).font(theme::serif(24.0)).color(SNOW));
+        ui.label(RichText::new(&player.board.title).font(theme::heading(24.0)).color(SNOW));
     });
 
     // the panels
@@ -265,8 +265,19 @@ pub fn paint(core: &mut Core, stage: &mut Picture, ui: &mut Ui, area: Rect) -> O
         pos2(captions.right() - 6.0, captions.bottom() - 4.0),
     );
     if let Some(scene) = player.board.scenes.get(index) {
+        // the words are as large as the room allows, and wrap: a story told in two or three sentences
+        // is longer than one line, and a line that runs off the window cannot be read
+        let size = [24.0, 21.0, 19.0, 17.0, 15.5]
+            .into_iter()
+            .find(|&size| {
+                ui.painter().layout_job(caption(&scene.say, progress, words.width(), size)).size().y <= words.height()
+            })
+            .unwrap_or(15.5);
         ui.scope_builder(UiBuilder::new().max_rect(words).layout(Layout::left_to_right(Align::Center)), |ui| {
-            ui.label(caption(&scene.say, progress, words.width(), 24.0));
+            ui.add(
+                egui::Label::new(caption(&scene.say, progress, words.width(), size))
+                    .wrap_mode(egui::TextWrapMode::Wrap),
+            );
         });
     }
 

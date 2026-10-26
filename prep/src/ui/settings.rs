@@ -85,7 +85,7 @@ fn field(ui: &mut Ui, label: &str, text: &mut String, hint: &str, password: bool
 
 fn section(ui: &mut Ui, title: &str) {
     ui.add_space(16.0);
-    ui.label(RichText::new(title).font(theme::serif(21.0)).color(SNOW));
+    ui.label(RichText::new(title).font(theme::heading(21.0)).color(SNOW));
     ui.add_space(4.0);
 }
 
@@ -143,7 +143,7 @@ pub fn show(core: &mut Core, draft: &mut Option<Draft>, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(tr.get(K::SettingsTitle)).font(theme::serif(30.0)).color(SNOW));
+                ui.label(RichText::new(tr.get(K::SettingsTitle)).font(theme::heading(30.0)).color(SNOW));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if widgets::icon_button(ui, widgets::Icon::Close, tr.get(K::Close), 34.0, None).clicked() {
                         action = Some(Action::Cancel);
@@ -208,6 +208,16 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
     field(ui, tr.get(K::YourName), &mut edit.settings.profile.name, tr.get(K::YourName), false);
     field(ui, tr.get(K::YourEmail), &mut edit.settings.profile.email, "name@example.com", false);
 
+    widgets::caps(ui, tr.get(K::PracticeLanguage));
+    ui.horizontal_wrapped(|ui| {
+        for name in ["English", "German", "Spanish", "French", "Italian", "Polish"] {
+            if chip(ui, name, edit.settings.practice_name() == name).clicked() {
+                edit.settings.practice_language = if name == "English" { String::new() } else { name.to_owned() };
+            }
+        }
+    });
+    ui.label(RichText::new(tr.get(K::PracticeLanguageHint)).font(theme::sans(13.0)).color(FAINT));
+
     section(ui, tr.get(K::SecFocus));
     ui.horizontal_wrapped(|ui| {
         let timer = &mut edit.settings.pomodoro;
@@ -229,6 +239,8 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
                 .labelled_by(caption.id);
         });
     });
+    ui.add_space(6.0);
+    ui.checkbox(&mut edit.settings.pomodoro.auto_start, RichText::new(tr.get(K::TimerAutoStart)).color(MUTED));
 
     section(ui, tr.get(K::SecProfile));
     field(ui, tr.get(K::AboutFile), &mut edit.settings.about_path, "~/Documents/job-search/ABOUT.md", false);
@@ -480,6 +492,7 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
     if !cfg!(feature = "local-stt") && !cfg!(feature = "local-tts") {
         ui.label(RichText::new(tr.get(K::OfflineNotBuilt)).font(theme::sans(13.0)).color(FAINT));
     }
+    let mut stop = None;
     for download in &core.downloads {
         if let Some(why) = &download.failed {
             ui.label(
@@ -488,15 +501,23 @@ fn body(core: &mut Core, edit: &mut Draft, ui: &mut Ui, tr: Tr, action: &mut Opt
                     .color(BERRY),
             );
         } else if !download.finished {
-            ui.label(
-                RichText::new(tr.fill(
-                    K::Downloading,
-                    &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
-                ))
-                .font(theme::mono(12.5))
-                .color(MUTED),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(tr.fill(
+                        K::Downloading,
+                        &[("name", &download.name), ("percent", &download.progress.percent().to_string())],
+                    ))
+                    .font(theme::mono(12.5))
+                    .color(MUTED),
+                );
+                if widgets::quiet_icon(ui, widgets::Icon::Close, tr.get(K::Cancel), 22.0).clicked() {
+                    stop = Some(download.job);
+                }
+            });
         }
+    }
+    if let Some(job) = stop {
+        core.cancel_job(job);
     }
 
     section(ui, tr.get(K::SecAudio));

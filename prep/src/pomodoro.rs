@@ -23,11 +23,13 @@ pub struct PomodoroSettings {
     pub long_minutes: u32,
     /// A long break comes after this many focus blocks.
     pub long_every: u32,
+    /// The timer starts by itself when the program opens, and again when a break is over.
+    pub auto_start: bool,
 }
 
 impl Default for PomodoroSettings {
     fn default() -> Self {
-        Self { focus_minutes: 25, short_minutes: 5, long_minutes: 15, long_every: 4 }
+        Self { focus_minutes: 25, short_minutes: 5, long_minutes: 15, long_every: 4, auto_start: true }
     }
 }
 
@@ -39,6 +41,7 @@ impl PomodoroSettings {
             short_minutes: self.short_minutes.clamp(1, 60),
             long_minutes: self.long_minutes.clamp(1, 90),
             long_every: self.long_every.clamp(2, 10),
+            auto_start: self.auto_start,
         }
     }
 
@@ -57,7 +60,7 @@ impl PomodoroSettings {
 pub enum Signal {
     /// A focus block was finished; the break that follows has started.
     FocusDone { next: Phase },
-    /// A break is over; the next focus block waits for you to start it.
+    /// A break is over; the next focus block waits for you to start it, unless the timer starts by itself.
     BreakDone,
 }
 
@@ -151,12 +154,13 @@ impl Pomodoro {
         self.banked = Duration::ZERO;
     }
 
-    /// Moves to the next phase without counting the one that was cut short. A skipped break
-    /// leads to a stopped focus block; a skipped focus block leads to a running break.
+    /// Moves to the next phase without counting the one that was cut short. A skipped focus
+    /// block leads to a running break; a skipped break leads to the next focus block, which starts
+    /// at once when the timer starts by itself.
     pub fn skip(&mut self, now: Instant) {
         match self.phase {
             Phase::Focus => self.enter(self.break_after(), true, now),
-            Phase::ShortBreak | Phase::LongBreak => self.enter(Phase::Focus, false, now),
+            Phase::ShortBreak | Phase::LongBreak => self.enter(Phase::Focus, self.settings.auto_start, now),
         }
     }
 
@@ -191,7 +195,7 @@ impl Pomodoro {
                 Some(Signal::FocusDone { next })
             }
             Phase::ShortBreak | Phase::LongBreak => {
-                self.enter(Phase::Focus, false, now);
+                self.enter(Phase::Focus, self.settings.auto_start, now);
                 Some(Signal::BreakDone)
             }
         }
@@ -234,7 +238,13 @@ mod tests {
     }
 
     fn quick() -> Pomodoro {
-        Pomodoro::new(PomodoroSettings { focus_minutes: 2, short_minutes: 1, long_minutes: 3, long_every: 2 })
+        Pomodoro::new(PomodoroSettings {
+            focus_minutes: 2,
+            short_minutes: 1,
+            long_minutes: 3,
+            long_every: 2,
+            auto_start: false,
+        })
     }
 
     #[test]
@@ -275,6 +285,22 @@ mod tests {
     }
 
     #[test]
+    fn with_auto_start_the_next_block_begins_by_itself_after_a_break() {
+        let t0 = Instant::now();
+        let mut timer = Pomodoro::new(PomodoroSettings { auto_start: true, ..quick_settings() });
+        timer.start(t0);
+        timer.update(at(t0, 120));
+        assert_eq!(timer.update(at(t0, 181)), Some(Signal::BreakDone));
+        assert_eq!((timer.phase(), timer.running()), (Phase::Focus, true), "no click needed");
+        assert_eq!(timer.remaining(at(t0, 181)), Duration::from_secs(120));
+        assert!(PomodoroSettings::default().auto_start, "it is on unless it is turned off");
+    }
+
+    fn quick_settings() -> PomodoroSettings {
+        PomodoroSettings { focus_minutes: 2, short_minutes: 1, long_minutes: 3, long_every: 2, auto_start: false }
+    }
+
+    #[test]
     fn every_few_blocks_the_break_is_long() {
         let t0 = Instant::now();
         let mut timer = quick();
@@ -301,7 +327,20 @@ mod tests {
         timer.skip(at(t0, 10));
         assert_eq!((timer.phase(), timer.running(), timer.blocks), (Phase::ShortBreak, true, 0));
         timer.skip(at(t0, 12));
-        assert_eq!((timer.phase(), timer.running()), (Phase::Focus, false));
+        assert_eq!(
+            (timer.phase(), timer.running()),
+            (Phase::Focus, false),
+            "it waits when it does not start by itself"
+        );
+        let mut automatic = Pomodoro::new(PomodoroSettings { auto_start: true, ..quick_settings() });
+        automatic.start(t0);
+        automatic.skip(at(t0, 10));
+        automatic.skip(at(t0, 12));
+        assert_eq!(
+            (automatic.phase(), automatic.running()),
+            (Phase::Focus, true),
+            "a skipped break goes straight back to work"
+        );
     }
 
     #[test]
@@ -318,8 +357,13 @@ mod tests {
 
     #[test]
     fn silly_lengths_are_brought_back_into_range() {
-        let timer =
-            Pomodoro::new(PomodoroSettings { focus_minutes: 0, short_minutes: 999, long_minutes: 0, long_every: 0 });
+        let timer = Pomodoro::new(PomodoroSettings {
+            focus_minutes: 0,
+            short_minutes: 999,
+            long_minutes: 0,
+            long_every: 0,
+            auto_start: false,
+        });
         assert_eq!(timer.total(), Duration::from_secs(60));
         let again = PomodoroSettings { focus_minutes: 9999, ..PomodoroSettings::default() }.clamped();
         assert_eq!(again.focus_minutes, 120);

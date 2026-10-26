@@ -31,6 +31,9 @@ pub fn system(native: Lang, simpler: bool) -> String {
          Build up: repeat a panel's \"id\" in the next scene with one more item, so it grows instead of being drawn \
          again.\n\
          - Show a tiny concrete example with real values, not only definitions.\n\
+         - What is drawn and what is said must agree. A cells panel numbers its cells from 0 in the order of its \
+         items, and an empty string is an empty cell: if the narration says the third shelf, the third cell holds it \
+         and the cells before it are empty (\"\"). Never say a number that is not on screen.\n\
          - End with a scene that sums it up in one line.\n\
          - 5 to 8 scenes. 1 to 3 panels in a scene (4 at most). Panel text is very short: at most 6 words a line, at \
          most 5 lines.\n\
@@ -81,6 +84,22 @@ fn index_list(value: &Value, key: &str, limit: usize) -> Vec<usize> {
         .collect()
 }
 
+/// The cells of a row, in order. An empty string is an empty cell and stays one: the narration says "the
+/// third shelf", and the third cell has to be the third one drawn.
+fn cell_items(value: &Value) -> Vec<String> {
+    let mut cells: Vec<String> = value
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().map(|i| i.as_str().map_or_else(String::new, |s| s.trim().to_owned())).take(MAX_ITEMS).collect()
+        })
+        .unwrap_or_default();
+    while cells.last().is_some_and(String::is_empty) {
+        cells.pop();
+    }
+    cells
+}
+
 fn panel(value: &Value, position: usize) -> Option<Panel> {
     let kind = PanelKind::parse(&text(value, "kind"));
     let title = text(value, "title");
@@ -95,6 +114,12 @@ fn panel(value: &Value, position: usize) -> Option<Panel> {
         right: value.get("right").map(side).unwrap_or_default(),
         ..Panel::default()
     };
+    if kind == PanelKind::Cells {
+        let cells = cell_items(value);
+        if cells.iter().any(|cell| !cell.is_empty()) {
+            panel.items = cells;
+        }
+    }
     // a model that put the content under the other name still gets a picture
     if matches!(kind, PanelKind::Flow | PanelKind::Cells) && panel.items.is_empty() {
         panel.items = std::mem::take(&mut panel.lines);
@@ -178,6 +203,19 @@ mod tests {
 ```"#;
 
     #[test]
+    fn an_empty_cell_stays_empty_so_a_number_in_the_narration_lands_on_the_cell_it_names() {
+        let reply = r#"{"scenes": [{"say": "Boris is on the third shelf.", "panels": [{"kind": "cells", "items": ["", "Anya", "", "Boris", ""], "highlight": [3]}]}]}"#;
+        let board = parse(reply, Lang::En).unwrap();
+        let cells = &board.scenes[0].panels[0];
+        assert_eq!(cells.items, vec!["", "Anya", "", "Boris"], "blank cells stay, and trailing ones are dropped");
+        assert_eq!(cells.highlight, vec![3]);
+        // a row of nothing is still not a picture
+        assert!(
+            parse(r#"{"scenes": [{"say": "x", "panels": [{"kind": "cells", "items": ["", ""]}]}]}"#, Lang::En).is_err()
+        );
+    }
+
+    #[test]
     fn the_prompt_describes_a_beginner_and_every_kind_of_picture() {
         let text = system(Lang::Ru, false);
         for must in [
@@ -187,6 +225,8 @@ mod tests {
             "everyday comparison",
             "repeat a panel's \"id\"",
             "5 to 8 scenes",
+            "an empty string is an empty cell",
+            "Never say a number that is not on screen",
             "text:",
             "flow:",
             "cells:",

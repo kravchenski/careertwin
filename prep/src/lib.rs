@@ -8,6 +8,7 @@
 
 pub mod audio;
 pub mod brief;
+pub mod coding;
 pub mod config;
 pub mod conversation;
 pub mod doctor;
@@ -18,6 +19,7 @@ pub mod llm;
 pub mod models;
 pub mod notes;
 pub mod ops;
+pub mod polite;
 pub mod pomodoro;
 pub mod prompts;
 pub mod secrets;
@@ -33,3 +35,4 @@ pub mod testing;
 pub mod textdiff;
 #[cfg(feature = "gui")]
 pub mod ui;
+pub mod watch;

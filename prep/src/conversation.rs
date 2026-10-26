@@ -21,7 +21,7 @@ use crate::brief::Brief;
 use crate::llm::{ChatOptions, Llm, LlmError, Message};
 use crate::prompts::Lang;
 use crate::prompts::interviewer::{self, Clock, InterviewerSpec};
-use crate::prompts::tutor::{self, LessonState, LessonView, Mode};
+use crate::prompts::tutor::{self, LessonState, LessonView, Mode, Stage};
 use crate::session::Speaker as Who;
 use crate::speech::{self, SpeechError, Stt, SttHint, Transcript, Tts, Voice};
 use crate::syllabus::Half;
@@ -34,6 +34,9 @@ pub struct Knobs {
     pub end_silence_ms: u32,
     /// How long to wait for the rest of a thought that sounds unfinished.
     pub extend_ms: u64,
+    /// The most it waits after a pause once you have been talking for a while: someone telling a story
+    /// stops to think, and gets more room the longer it has gone on. A short answer gets none.
+    pub patience_ms: u64,
     /// If the interviewer has not started speaking after this long, it acknowledges you first.
     pub filler_after_ms: u64,
     /// The microphone stays shut this long after the speakers stop, so it does not hear the tail.
@@ -53,6 +56,7 @@ impl Default for Knobs {
         Self {
             end_silence_ms: 700,
             extend_ms: 1400,
+            patience_ms: 2400,
             filler_after_ms: 1200,
             speaker_tail_ms: 350,
             barge_in_ms: 300,
@@ -122,6 +126,8 @@ pub enum Event {
         speaker: f32,
     },
     Error(String),
+    /// Something was said but no words came out of it: too quiet, too far, or only noise.
+    Unclear,
     /// The tutor wrote a tag that the window should act on: a note, a picture to show.
     Tag(Tag),
     /// Where the terms lesson is.
@@ -155,12 +161,17 @@ pub enum Command {
     Hold(bool),
     /// Turns the tutor's voice on or off; off, it writes only.
     Voice(bool),
+    /// The code in the editor now; the tutor sees the latest one with your next words.
+    Code(String),
 }
 
 enum Internal {
     Transcribed { result: Result<Transcript, SpeechError>, speech_ms: u32 },
     Done(TurnResult),
 }
+
+/// Speech at least this long that turns out to be no words is reported as not understood.
+const UNCLEAR_AFTER_MS: u32 = 1000;
 
 struct TurnResult {
     id: u64,
@@ -209,6 +220,15 @@ struct Pending {
     text: String,
     language: Option<String>,
     deadline: Instant,
+    /// How much of this turn has been said so far, across the pieces that were merged.
+    spoken_ms: u32,
+}
+
+/// How long to wait after a pause before taking it that you are done: nothing for the first few
+/// seconds, then a sixth of what has been said, up to `most`. Ten seconds earn about a second, and
+/// a story of a quarter of a minute or more the most.
+fn patience(spoken_ms: u32, most: u64) -> u64 {
+    (spoken_ms.saturating_sub(3_000) as u64 / 6).min(most)
 }
 
 struct Call {
@@ -234,6 +254,7 @@ struct Call {
     final_sent: bool,
     mic_level: f32,
     fillers: Arc<Mutex<Vec<crate::speech::Speech>>>,
+    fillers_started: bool,
     last_error: Option<(String, Instant)>,
     barged: bool,
     cancel_all: CancellationToken,
@@ -242,6 +263,8 @@ struct Call {
     context: Vec<String>,
     holding: bool,
     voice_on: bool,
+    /// The code in the editor now, for a live-coding call.
+    code: Option<String>,
     /// Set once a sentence in the other language could not be spoken, so it is said once and not again.
     alt_failed: Arc<AtomicBool>,
 }
@@ -297,7 +320,7 @@ pub fn start(deps: Deps, config: Config) -> Handle {
 
 fn canned(language: Lang, which: usize) -> &'static str {
     const EN: [&str; 3] = ["Take your time.", "Would you like me to repeat the question?", "No rush, I'm here."];
-    const RU: [&str; 3] = ["Не торопитесь.", "Повторить вопрос?", "Всё в порядке, я слушаю."];
+    const RU: [&str; 3] = ["Не торопись.", "Повторить вопрос?", "Всё в порядке, я слушаю."];
     match language {
         Lang::En => EN[which % 3],
         Lang::Ru => RU[which % 3],
@@ -326,6 +349,10 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
     let now = Instant::now();
     let mut deps = deps;
     let mut mic = deps.mic.take();
+    // the voice loads while the model thinks of its first words, not after them
+    if let Some(tts) = deps.tts.clone() {
+        tokio::spawn(tts.warm_up());
+    }
     let mut call = Call {
         deps,
         config,
@@ -349,6 +376,7 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
         final_sent: false,
         mic_level: 0.0,
         fillers: Arc::new(Mutex::new(Vec::new())),
+        fillers_started: false,
         last_error: None,
         barged: false,
         cancel_all: CancellationToken::new(),
@@ -356,11 +384,11 @@ pub async fn run(deps: Deps, config: Config, mut commands: UnboundedReceiver<Com
         context: Vec::new(),
         holding: false,
         voice_on: true,
+        code: None,
         alt_failed: Arc::new(AtomicBool::new(false)),
     };
     call.emit(Event::State(State::Starting));
     call.start_lesson();
-    call.prepare_fillers();
     if call.config.spec.mode == Mode::Chat {
         // nobody waits for a model to say hello in a chat
         let greeting = tutor::greeting(call.config.spec.native).to_owned();
@@ -407,6 +435,11 @@ impl Call {
         if self.state != state {
             self.state = state;
             self.emit(Event::State(state));
+            // the short acknowledgements are made once the first words have been said, not beside them
+            if state == State::Listening && !self.fillers_started {
+                self.fillers_started = true;
+                self.prepare_fillers();
+            }
         }
     }
 
@@ -599,6 +632,14 @@ impl Call {
                         }
                     }
                 }
+                Tag::Practice => {
+                    if let (Some(state), Some(lesson)) = (self.lesson.as_mut(), lesson)
+                        && state.practise_english()
+                        && let Some(view) = state.view(&lesson)
+                    {
+                        self.emit(Event::Lesson(view));
+                    }
+                }
                 Tag::End => self.final_sent = true,
                 Tag::Note(_) | Tag::Show(_) => {}
             }
@@ -674,22 +715,41 @@ impl Call {
 
     fn on_transcribed(&mut self, result: Result<Transcript, SpeechError>, speech_ms: u32) {
         self.stt_inflight = self.stt_inflight.saturating_sub(1);
+        // words that were still being recognised when the call was put on hold are not an answer
+        if self.holding {
+            self.back_to_listening_if_idle();
+            return;
+        }
         match result {
             Err(error) => {
                 self.report(error.to_string());
                 self.back_to_listening_if_idle();
             }
-            Ok(transcript) if speech::is_noise(&transcript.text, speech_ms) => self.back_to_listening_if_idle(),
+            Ok(transcript) if speech::is_noise(&transcript.text, speech_ms) => {
+                // a real stretch of speech that gave nothing is said aloud on the screen, not swallowed
+                if speech_ms >= UNCLEAR_AFTER_MS {
+                    self.emit(Event::Unclear);
+                }
+                self.back_to_listening_if_idle();
+            }
             Ok(transcript) => {
-                let text = match self.pending.take() {
-                    Some(previous) => format!("{} {}", previous.text, transcript.text.trim()),
+                let (previous_text, previous_ms) = match self.pending.take() {
+                    Some(previous) => (Some(previous.text), previous.spoken_ms),
+                    None => (None, 0),
+                };
+                let text = match previous_text {
+                    Some(previous) => format!("{previous} {}", transcript.text.trim()),
                     None => transcript.text.trim().to_owned(),
                 };
-                let wait = if speech::looks_unfinished(&text) { self.config.knobs.extend_ms } else { 0 };
+                let spoken_ms = previous_ms + speech_ms;
+                let patient = patience(spoken_ms, self.config.knobs.patience_ms);
+                let wait =
+                    if speech::looks_unfinished(&text) { self.config.knobs.extend_ms.max(patient) } else { patient };
                 self.pending = Some(Pending {
                     text,
                     language: transcript.language,
                     deadline: Instant::now() + Duration::from_millis(wait),
+                    spoken_ms,
                 });
             }
         }
@@ -730,9 +790,26 @@ impl Call {
         if let Some(state) = self.lesson.as_mut() {
             state.answered();
         }
+        self.switch_if_asked(&self.history.last().map(|(_, text)| text.clone()).unwrap_or_default());
         let note = self.make_note(clock);
         let messages = interviewer::turn(&self.config.spec, &self.config.brief, &self.history, Some(note));
         self.begin_turn(messages, None);
+    }
+
+    /// In a lesson that is in your own language, a request to practise the other one switches it at
+    /// once, without waiting for the tutor to notice: its next message is told it is stage two.
+    fn switch_if_asked(&mut self, said: &str) {
+        let spec = &self.config.spec;
+        let Some(lesson) = spec.lesson.clone().filter(|_| spec.mode == Mode::Terms) else { return };
+        if !tutor::asks_to_practise(said, spec.target_name()) {
+            return;
+        }
+        if let Some(state) = self.lesson.as_mut()
+            && state.practise_english()
+            && let Some(view) = state.view(&lesson)
+        {
+            self.emit(Event::Lesson(view));
+        }
     }
 
     /// What the call tells the interviewer or tutor along with your words: the clock, the lesson
@@ -747,6 +824,12 @@ impl Call {
         for extra in self.context.drain(..) {
             note.push('\n');
             note.push_str(&extra);
+        }
+        if let Some(code) = &self.code {
+            note.push_str(&format!(
+                "\n[CODE the person has written so far, live; never read it aloud:\n```\n{}\n```]",
+                crate::brief::truncate_chars(code, 6000)
+            ));
         }
         note
     }
@@ -805,11 +888,16 @@ impl Call {
             }
             Command::Hold(on) => {
                 self.holding = on;
-                if !on {
+                if on {
+                    // a half-said thought waiting to be sent would be answered during the break
+                    self.pending = None;
+                    self.barged = false;
+                } else {
                     self.silent_since = Some(Instant::now());
                     self.nudges = 0;
                 }
             }
+            Command::Code(code) => self.code = Some(code),
             Command::Voice(on) => {
                 self.voice_on = on;
                 if !on {
@@ -882,7 +970,18 @@ impl Call {
         false
     }
 
+    /// The language the tutor is speaking now: in a lesson, your own until you ask for the other one.
+    fn speaking_language(&self) -> Lang {
+        let spec = &self.config.spec;
+        match (&self.lesson, spec.mode) {
+            (Some(state), Mode::Terms) if state.stage == Stage::Native => spec.native,
+            _ => spec.language,
+        }
+    }
+
     fn check_silence(&mut self, now: Instant) {
+        // a chat has no clock, and while code is being written a quiet person is a thinking one
+        let quiet_mode = matches!(self.config.spec.mode, Mode::Chat | Mode::Coding);
         if self.holding || self.config.spec.mode == Mode::Chat {
             return;
         }
@@ -899,7 +998,7 @@ impl Call {
         let Some(since) = self.silent_since else { return };
         let quiet = now.duration_since(since).as_secs();
         let knobs = self.config.knobs.clone();
-        let language = self.config.spec.language;
+        let language = self.speaking_language();
         // time is up: close the call even if nobody is talking
         let total = u64::from(self.config.spec.total_seconds());
         if !self.final_sent && u64::from(self.elapsed()) >= total + knobs.overtime_s {
@@ -907,6 +1006,9 @@ impl Call {
             let note = self.make_note(Clock::Final);
             let messages = interviewer::turn(&self.config.spec, &self.config.brief, &self.history, Some(note));
             self.begin_turn(messages, None);
+            return;
+        }
+        if quiet_mode {
             return;
         }
         match self.nudges {

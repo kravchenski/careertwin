@@ -131,6 +131,11 @@ impl LlmSettings {
     pub fn interviewer_model(&self) -> &str {
         if self.fast_model.trim().is_empty() { &self.model } else { &self.fast_model }
     }
+
+    /// The fast model when there is one, for quick looks; `main` otherwise.
+    pub fn fast_model_or(&self, main: &str) -> String {
+        if self.fast_model.trim().is_empty() { main.to_owned() } else { self.fast_model.clone() }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -244,6 +249,9 @@ pub struct Settings {
     pub pomodoro: PomodoroSettings,
     /// Minutes of practice a day that fill the ring on the home page.
     pub daily_goal_minutes: u32,
+    /// The language the lessons, the introduction, live coding and the chat practise; empty means
+    /// English. The English tab always practises English.
+    pub practice_language: String,
     /// Your ABOUT.md. Empty falls back to `CAREERTWIN_ABOUT_PATH`, then `./ABOUT.md`.
     pub about_path: String,
     pub cv_paths: Vec<String>,
@@ -260,6 +268,7 @@ impl Default for Settings {
             profile: ProfileSettings::default(),
             pomodoro: PomodoroSettings::default(),
             daily_goal_minutes: 25,
+            practice_language: String::new(),
             about_path: String::new(),
             cv_paths: Vec::new(),
             llm: LlmSettings::default(),
@@ -320,6 +329,11 @@ impl Settings {
             .filter(|key| !key.is_empty())
             .map(|key| key.expose().to_owned())
             .collect()
+    }
+
+    /// The language the lessons practise, by name: "English" when none is chosen.
+    pub fn practice_name(&self) -> &str {
+        if self.practice_language.trim().is_empty() { "English" } else { self.practice_language.trim() }
     }
 
     /// The path of ABOUT.md that will be read.
@@ -552,6 +566,16 @@ mod tests {
         assert_eq!(loaded.pomodoro, PomodoroSettings::default());
         assert_eq!(loaded.daily_goal_minutes, 25);
         assert!(loaded.profile.email.is_empty());
+    }
+
+    #[test]
+    fn the_practised_language_is_english_unless_another_is_chosen() {
+        let mut settings = Settings::default();
+        assert_eq!(settings.practice_name(), "English");
+        settings.practice_language = "  German ".into();
+        assert_eq!(settings.practice_name(), "German");
+        settings.practice_language = "   ".into();
+        assert_eq!(settings.practice_name(), "English");
     }
 
     #[test]

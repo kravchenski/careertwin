@@ -13,11 +13,12 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
     }
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         core.help_open = false;
+        core.help_seen = false;
         return;
     }
     let tr = core.tr;
     let mut close = false;
-    egui::Window::new(tr.get(K::HelpTitle))
+    let shown = egui::Window::new(tr.get(K::HelpTitle))
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 10.0))
         .fixed_size(vec2(560.0, 0.0))
         .collapsible(false)
@@ -27,7 +28,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(tr.get(K::HelpTitle)).font(theme::serif(30.0)).color(SNOW));
+                ui.label(RichText::new(tr.get(K::HelpTitle)).font(theme::heading(30.0)).color(SNOW));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if icon_button(ui, Icon::Close, tr.get(K::Close), 34.0, None).clicked() {
                         close = true;
@@ -35,7 +36,7 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
                 });
             });
             ui.add_space(8.0);
-            for text in [K::HelpTalk, K::HelpShow, K::HelpFocus] {
+            for text in [K::HelpTalk, K::HelpShow, K::HelpCode, K::HelpFocus] {
                 ui.label(RichText::new(tr.get(text)).font(theme::sans(15.0)).color(MUTED));
                 ui.add_space(6.0);
             }
@@ -55,7 +56,15 @@ pub fn show(core: &mut Core, ctx: &egui::Context) {
                 });
             }
         });
+    // a click anywhere outside the window closes it, but not the click that opened it
+    if let Some(shown) = shown {
+        if core.help_seen && widgets::clicked_outside(ctx, shown.response.rect) {
+            close = true;
+        }
+        core.help_seen = true;
+    }
     if close {
         core.help_open = false;
+        core.help_seen = false;
     }
 }

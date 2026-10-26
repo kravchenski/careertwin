@@ -8,6 +8,7 @@ pub mod stt_local;
 pub mod tts;
 #[cfg(feature = "local-tts")]
 pub mod tts_local;
+pub mod tts_piper;
 pub mod wav;
 
 use std::sync::Arc;
@@ -76,6 +77,10 @@ pub trait Tts: Send + Sync {
     fn synthesize(&self, text: String, voice: Voice) -> BoxFuture<'static, Result<Speech, SpeechError>>;
     /// Names the engine and model, so a cache never mixes two voices up.
     fn id(&self) -> String;
+    /// Loads what the first sentence would otherwise wait for, while the model is still thinking.
+    fn warm_up(&self) -> BoxFuture<'static, ()> {
+        futures_util::FutureExt::boxed(async {})
+    }
 }
 
 /// The Whisper model the offline engine uses: the one chosen, or the one that suits this computer.
@@ -92,6 +97,11 @@ pub fn local_stt_path(settings: &Settings, paths: &Paths) -> std::path::PathBuf 
 /// Where the offline voice lives.
 pub fn local_tts_folder(paths: &Paths) -> std::path::PathBuf {
     paths.models_dir().join("kokoro")
+}
+
+/// Where the offline Russian voice lives.
+pub fn local_ru_folder(paths: &Paths) -> std::path::PathBuf {
+    paths.models_dir().join("piper")
 }
 
 /// The recogniser the settings ask for.
@@ -122,7 +132,7 @@ pub fn build_tts(settings: &Settings, paths: &Paths) -> Result<Option<Arc<dyn Tt
         TtsEngine::Openai => Arc::new(tts::OpenAiTts::new(&settings.tts, settings.secrets())?),
         TtsEngine::Elevenlabs => Arc::new(tts::ElevenTts::new(&settings.tts, settings.secrets())?),
         #[cfg(feature = "local-tts")]
-        TtsEngine::Local => Arc::new(tts_local::LocalTts::new(local_tts_folder(paths))),
+        TtsEngine::Local => Arc::new(tts_local::LocalVoices::new(local_tts_folder(paths), local_ru_folder(paths))),
         #[cfg(not(feature = "local-tts"))]
         TtsEngine::Local => bail!("the offline voice needs a build with the local-tts feature"),
     };
