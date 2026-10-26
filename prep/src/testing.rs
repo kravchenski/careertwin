@@ -72,6 +72,11 @@ impl Llm for FakeLlm {
         self.requests.lock().unwrap().push(messages);
         let reply = self.replies.lock().unwrap().pop_front();
         async move {
+            if let Some(reply) = &reply
+                && reply.delay_ms > 0
+            {
+                tokio::time::sleep(Duration::from_millis(reply.delay_ms)).await;
+            }
             match reply {
                 Some(Reply { error: Some(error), .. }) => Err(error),
                 Some(reply) => Ok(reply.pieces.concat()),

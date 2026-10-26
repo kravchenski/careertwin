@@ -221,6 +221,12 @@ pub struct Handle {
 }
 
 impl Handle {
+    /// A handle that is not tied to a running call: the caller feeds the events and reads the
+    /// commands. Used by the window under test.
+    pub fn from_parts(commands: UnboundedSender<Command>, events: UnboundedReceiver<Event>) -> Self {
+        Self { commands, events, thread: None }
+    }
+
     pub fn send(&self, command: Command) {
         let _ = self.commands.send(command);
     }
