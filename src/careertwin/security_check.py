@@ -127,6 +127,8 @@ def audit(root: Path | None = None) -> list[Finding]:
         settings = Store().settings()
         if settings.auto_submit:
             add(Finding("warn", "auto_submit is on", "Applications are sent without asking you"))
+        if settings.consent_auto:
+            add(Finding("warn", "consent_auto is on", "The terms and privacy boxes of an application are ticked for you"))
         if settings.mail_auto_send:
             add(Finding("warn", "mail_auto_send is on", "Email drafts are sent without asking you"))
         if settings.decision_backend == "typesafe":
