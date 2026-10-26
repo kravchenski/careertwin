@@ -29,6 +29,20 @@ make api                        # CareerTwin API on http://127.0.0.1:8000
 
 Fill `ABOUT.md` (see `ABOUT.example.md`) and set `SWITCHYARD_*` in `.env`.
 
+Watch them while they work:
+
+```bash
+uv run careertwin dashboard     # starts the API if it is not running, opens a read only page, already signed in
+uv run careertwin watch         # the terminal where you approve, send and stop
+```
+
+The page shows the flow (find, rank, prepare, fill, you, submit, replies, outcome) with the stage that is
+working lit up, the newest vacancies first (each with the site it came from, the day it was published and its
+fit, and buttons to rank, prepare the CV, fill the form or skip), the step each vacancy has reached, what waits
+for you, the watched company sites and a live feed, and it downloads the XLSX. Sending an application or an
+email, and stopping everything, stay in `careertwin watch`. Open it from another machine through an
+SSH tunnel, as in the terminal case; the page asks for the token when it is not given one.
+
 ## 2. Pick how the agent reaches the tools
 
 ### A. The built-in agent
@@ -66,6 +80,25 @@ The HTTP transport binds to localhost; keep it there.
 OpenAI function-calling specs and `get_tool(name).call(args)` runs one tool,
 so any OpenAI-compatible client can use the same tools.
 
+## Searching the web like a web search
+
+CareerTwin does not search the web itself: an agent that has a web search (Claude Code, Codex, ChatGPT through
+Switchyard) does, and files what it finds. That gives the quality of a real search, with the pipeline doing the
+rest. A good loop for a candidate in one city:
+
+1. Search for fresh postings, one query per site: `site:myworkdayjobs.com python intern poland`,
+   `linkedin.com/jobs junior python developer gdansk`, and the local boards (Just Join IT, Bulldog Job, Pracuj.pl).
+2. For every Workday tenant the search turns up, call `discover_workday` with any link of it: it reads the
+   newest vacancies of the country or the city from the site's own JSON, each with the exact day it was published.
+3. For every other posting, open the page, take the title, company, location, the text and the date, and call
+   `import_vacancy` with `posted_at` (`YYYY-MM-DD`; leave it empty when the page shows only an expiry date).
+4. Call `process_vacancy` with `rank` on the ones that fit the level and the place, a few at a time.
+5. `newest_vacancies` or the `/dashboard` page shows them newest first with the site and the fit; the XLSX
+   (`/v1/automation/export.xlsx`, the "Newest" sheet) holds the same list.
+
+LinkedIn and Glassdoor offer no API, so the agent reads their public result pages like a person would; a page that
+asks for a login is left out.
+
 ## Tools
 
 | Tool | Changes state | What it does |
@@ -78,6 +111,9 @@ so any OpenAI-compatible client can use the same tools.
 | `list_vacancies`, `get_vacancy`, `recent_events` | no | Read the pipeline and its history |
 | `wait_for_vacancy` | no | Wait for a queued step to finish |
 | `import_vacancy` | local | Add a vacancy to the pipeline |
+| `import_posting_text` | local | File a vacancy from pasted text: matched to the one already in the pipeline, or filed with its link |
+| `discover_workday` | local | Read the newest vacancies of a Workday career site (any `*.myworkdayjobs.com` link, for example from a web search for `site:myworkdayjobs.com python intern poland`) in a country or city, each with the day it was published |
+| `newest_vacancies` | no | The vacancies in the pipeline, newest first, with the site each is on (LinkedIn, Workday, Pracuj.pl...), the day it was published and its fit |
 | `update_search_settings` | local | Queries, sources, threshold, limits |
 | `start_search_cycle`, `stop_agents` | local | Run or cancel the search agent |
 | `process_vacancy` | local | Queue `rank`, `prepare`, `fill` or `verify` |
@@ -99,8 +135,8 @@ so any OpenAI-compatible client can use the same tools.
   and, in `careertwin agent`, your answer to a prompt.
 - **Sending an email is opt-in the same three times.** `send_email` needs `confirm=true`,
   `CAREERTWIN_AGENT_ALLOW_MAIL=1` and your yes. A draft only goes to an address the vacancy names.
-- **Auto-submit, automatic mail and scheduling cannot be switched on by an agent.**
-  `update_search_settings` does not expose them.
+- **Auto-submit, consent ticking, automatic mail and scheduling cannot be switched on by an agent.**
+  `update_search_settings` does not expose them; [Autopilot](#autopilot) is the candidate's own switch.
 - **A secret never reaches the model.** See [SECURITY.md](SECURITY.md).
 - **Facts only.** Documents and form answers come from your `ABOUT` context.
   An agent saves only the answers you give it.
@@ -108,6 +144,64 @@ so any OpenAI-compatible client can use the same tools.
   the written requirements.
 - Browser steps run in your signed-in Chrome through Switchyard's extension.
   Login and CAPTCHA pause the application for you.
+
+## Autopilot
+
+For the days you do not want to touch anything: one switch, yours, that lets the agents carry an application from
+the search to the sent form.
+
+```bash
+uv run careertwin answers add "Do you need sponsorship?" "No. Permanent resident of Poland."   # once, the usual questions
+uv run careertwin answers import answers.json        # or many at once: {"question": "answer", ...}
+uv run careertwin autopilot on --daily-limit 5       # checks first, asks once, then it runs on the timer
+uv run careertwin autopilot status                   # sent today, what waits for you, what is missing
+uv run careertwin autopilot off                      # or `touch data/STOP` to halt everything at once
+```
+
+Only the ticking, without the rest: `uv run careertwin consent on` (off, status). The filler then ticks the box that
+confirms an application's terms or privacy notice and leaves every advertising, newsletter, job alert and data
+sharing box alone, with or without autopilot.
+
+What the switch changes: the search timer (`scheduled`), `auto_prepare`, `auto_submit` and `consent_auto`. A
+vacancy at or above the fit threshold (never below 80) gets its CV, its form is filled and sent, and the terms and
+privacy boxes the form needs are ticked: only a box that confirms this application ("I agree to the Candidate
+Acknowledgement"), never a marketing, newsletter, talent community or sharing box. Every tick is an event in the
+vacancy's history.
+
+Answers kept with `careertwin answers` (or `"standing": true` on an answer, or `PUT /v1/automation/standing-answers`)
+count for every form; a salary never does, it is settled per vacancy. Saving one also carries on the applications
+that were waiting for it. A rule for a date the CV only gives as a year is such an answer too, for example
+`"Partial dates" = "When a form needs a day and the CV gives only a month or year, use the first day"`.
+
+What it never does, on or off: create an account, type the password anywhere but your login domains, solve a CAPTCHA,
+send email, answer what your profile and answers do not hold, send more than the daily limit or act while `data/STOP`
+exists. An application that needs one of those waits for you (`careertwin autopilot status`) and the next one goes on.
+Sign in once on the sites that need an account (Workday asks for one per employer) and set `ACCOUNT_EMAIL`,
+`ACCOUNT_PASSWORD` and `CAREERTWIN_LOGIN_DOMAINS`, and those need nothing from you either.
+
+The switch is not a tool: `update_search_settings` cannot reach it and no agent tool, MCP tool or chat can turn it on.
+Only the CLI on your machine and an API call with your token can.
+
+## Applying the way you would
+
+What a careful person does with an application, the agents do too:
+
+- **A vacancy you pasted.** `import_posting_text` looks for the pasted text among the vacancies already in the pipeline
+  and uses that one, so the CV and the form belong to the real posting. When it is not there it asks for the link and
+  never guesses one.
+- **A CV from your own CVs.** Keep your approved CVs as HTML next to `ABOUT.md` (`intel-qa-intern-cv.html`, any
+  `*-cv.html` with a `.headline`, a Summary paragraph and a `div.skills`; `CAREERTWIN_CV_DIR` names another folder). The
+  tailor picks the variant that fits the vacancy and rewrites only its headline, summary and skills lines with the
+  vacancy's words. Experience, projects, education and dates stay yours. Every term it adds must be in your facts or in
+  that variant: others are removed, and a headline or summary that carries one is replaced by the variant's own. The
+  vacancy's must-haves the CV cannot honestly cover are listed in the package (`missing_must_haves`), not claimed.
+  With no variants the CV is built from your facts alone.
+- **How each system behaves.** The filler gets notes for Workday and Dayforce (`automation/playbooks.py`): which start
+  option to take, how its drop-downs and country lists are operated, that a resume import overwrites fields, which
+  disclosure answers to choose. The notes are guidance, never permission.
+- **A last look before the send.** The review page is scanned for words you never want in an application. Rules come
+  from the sentences of `ABOUT.md` that say never and quote a phrase (`Never answer "by virtue of citizenship"`) and
+  from `data/redlines.txt`. A finding stops the submission and leaves the application in `needs_review` with the reason.
 
 ## Adding a tool
 

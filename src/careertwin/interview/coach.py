@@ -5,7 +5,10 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import queue
+import re
 import threading
+import time
 from collections.abc import Iterator
 
 import httpx
@@ -64,6 +67,27 @@ def failed(base: str, model: str, status: int, text: str) -> str:
 
 class CoachError(RuntimeError):
     """The language model could not be reached or returned nothing."""
+
+    def __init__(self, message: str = "", *, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after  # seconds until a rate-limited model may be asked again
+
+
+MAX_COOLDOWN = 90.0  # a model that said "wait" is left alone this long at most
+CANCEL_POLL = 0.05  # seconds between looks at the cancel flag while the model has said nothing yet
+_WAIT_HINT = re.compile(r"next one in (\d+)\s*s", re.I)
+
+
+def retry_after(response: httpx.Response) -> float | None:
+    """How long a 429 asks to wait: the Retry-After header, or "next one in 32s" in the message."""
+    if response.status_code != 429:
+        return None
+    try:
+        seconds = float(response.headers.get("retry-after", ""))
+    except ValueError:
+        hint = _WAIT_HINT.search(response.text)
+        seconds = float(hint[1]) if hint else 0.0
+    return min(max(seconds, 0.0), MAX_COOLDOWN) or None
 
 
 async def suggest(
@@ -130,11 +154,15 @@ class StreamingCoach:
         style: str = "standard",
         layout: str = "lines",
         vision_model: str | None = None,
+        fallback_models: list[str] | None = None,
     ):
         self.brief = brief
         self.model = model
         self.vision_model = vision_model
+        self.fallback_models = fallback_models  # asked in this order when the chosen model fails; None: "auto"
         self.last_finish: str | None = None  # why the last reply ended: "stop", or "length" when cut off
+        self.fell_back: str | None = None  # the model that answered when it was not the chosen one
+        self._wait_until: dict[str, float] = {}  # models that were rate limited, and until when
         self._http: httpx.Client | None = None
         self.transport = transport
         self.url = url
@@ -198,37 +226,51 @@ class StreamingCoach:
         cancel: threading.Event,
         language: str | None = None,
         image: str | None = None,
+        listening: str | None = None,
     ) -> Iterator[str]:
         """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored.
+        `listening` says the words came from the call audio and may not be a question ("heard") or
+        are not finished ("hearing"); see `prompts.LISTENING_HINTS`.
 
-        If the chosen model fails before saying anything (rate limit, outage) on a Switchyard
-        gateway, the request is repeated once on automatic routing, so one bad provider does not
-        cost a live answer. Other providers have no "auto", so their error is shown as it is."""
+        If the chosen model fails before saying anything (rate limit, outage), the next model of the
+        fallback chain is asked, so one bad provider does not cost a live answer. A model that said
+        how long to wait is not asked again until then. By default the chain is one step, "auto", on
+        a Switchyard gateway; other providers have no "auto", so their error is shown as it is."""
         model = (image and self.vision_model) or self.model or model_name()
+        chain = list(dict.fromkeys([model, *self._fallbacks(bool(image))]))
         started = False
-        try:
-            for chunk in self._stream_model(model, question, history, cancel, language, image):
-                started = True
-                yield chunk
-        except CoachError as first:
-            known = provider_for(base_url(self.url or gateway_url()))
-            if (
-                started or cancel.is_set() or model == self.FALLBACK_MODEL
-                or (known and known.id != "switchyard")  # only a gateway routes "auto"
-            ):
-                raise
+        first: CoachError | None = None
+        self.fell_back = None
+        for position, name in enumerate(chain):
+            if position < len(chain) - 1 and self._waiting(name):
+                continue
             try:
-                for chunk in self._stream_model(
-                    self.FALLBACK_MODEL, question, history, cancel, language, image
-                ):
+                for chunk in self._stream_model(name, question, history, cancel, language, image, listening):
                     started = True
+                    self.fell_back = name if name != model else None
                     yield chunk
-            except CoachError:
-                if started:
+                return
+            except CoachError as error:
+                if started or cancel.is_set():
                     raise
-                raise first from None  # the chosen model's error says more than "auto"'s
+                if error.retry_after:
+                    self._wait_until[name] = time.monotonic() + error.retry_after
+                first = first or error  # the chosen model's error says more than the fallback's
+        if first:
+            raise first
+
+    def _fallbacks(self, image: bool) -> list[str]:
+        if self.fallback_models and not image:  # a picture needs a model that can see: leave that to "auto"
+            return self.fallback_models
+        known = provider_for(base_url(self.url or gateway_url()))
+        return [] if known and known.id != "switchyard" else [self.FALLBACK_MODEL]
+
+    def _waiting(self, model: str) -> bool:
+        return time.monotonic() < self._wait_until.get(model, 0.0)
 
     FALLBACK_MODEL = "auto"
+    # The session may ask this coach to tell a question from other audio (it then replies SKIP).
+    supports_listening = True
 
     def _stream_model(
         self,
@@ -238,6 +280,7 @@ class StreamingCoach:
         cancel: threading.Event,
         language: str | None,
         image: str | None,
+        listening: str | None = None,
     ) -> Iterator[str]:
         system, temperature, max_tokens = SYSTEM, 0.3, 1800
         if image:
@@ -251,7 +294,8 @@ class StreamingCoach:
         else:
             code = self.brief.project.retrieve(question) if self.brief.project else ""
             content = user_prompt(
-                self.brief, question, classify(question), history, language, self.style, self.layout, code
+                self.brief, question, classify(question), history, language, self.style, self.layout, code,
+                listening,
             )
         body = {
             "model": model,
@@ -265,21 +309,47 @@ class StreamingCoach:
         }
         headers = {"Accept": "text/event-stream", **self._auth()}
         base = base_url(self.url or gateway_url())
+        finish: dict[str, str] = {}
+        replies: queue.Queue[str | Exception | None] = queue.Queue()
+
+        def read() -> None:
+            # A thread of its own: a provider that is slow to say anything cannot hold up the next
+            # question, which stops waiting for this one the moment it is cancelled.
+            try:
+                with self._client().stream(
+                    "POST", f"{base}/v1/chat/completions", json=body, headers=headers
+                ) as response:
+                    if response.status_code >= 400:
+                        response.read()
+                        raise CoachError(
+                            failed(base, model, response.status_code, response.text),
+                            retry_after=retry_after(response),
+                        )
+                    for chunk in _chunks(response, cancel, finish):
+                        replies.put(chunk)
+                replies.put(None)
+            except httpx.HTTPError as exc:
+                replies.put(CoachError(unreachable(base, exc)))
+            except Exception as exc:  # handed to the caller, which raises it
+                replies.put(exc)
+
+        threading.Thread(target=read, name="coach-read", daemon=True).start()
+        self.last_finish = None
         try:
-            with self._client().stream(
-                "POST", f"{base}/v1/chat/completions", json=body, headers=headers
-            ) as response:
-                if response.status_code >= 400:
-                    response.read()
-                    raise CoachError(failed(base, model, response.status_code, response.text))
-                self.last_finish = None
-                finish: dict[str, str] = {}
+            while True:
                 try:
-                    yield from _chunks(response, cancel, finish)
-                finally:
-                    self.last_finish = finish.get("reason")
-        except httpx.HTTPError as exc:
-            raise CoachError(unreachable(base, exc)) from exc
+                    reply = replies.get(timeout=CANCEL_POLL)
+                except queue.Empty:
+                    if cancel.is_set():
+                        return
+                    continue
+                if reply is None:
+                    return
+                if isinstance(reply, Exception):
+                    raise reply
+                yield reply
+        finally:
+            self.last_finish = finish.get("reason")
 
 
 def _chunks(

@@ -183,6 +183,16 @@ class Store:
             )
             db.commit()
 
+    def standing(self) -> dict[str, str]:
+        """Answers kept for every form (address, work permit, relatives...). They live under no vacancy."""
+        return self.answers("")
+
+    def forget(self, question: str, job_id: str = "") -> bool:
+        with db_conn() as db:
+            cursor = db.execute("DELETE FROM automation_answers WHERE job_id=? AND question=?", (job_id, question))
+            db.commit()
+            return cursor.rowcount > 0
+
     def file(self, job_id: str, kind: str, path: Path) -> None:
         with db_conn() as db:
             db.execute(

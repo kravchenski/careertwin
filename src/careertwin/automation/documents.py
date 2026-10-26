@@ -10,6 +10,7 @@ from typing import Any
 from careertwin.llm import call_ai, parse_json_object
 from careertwin.settings import OUTPUT_DIR
 
+from . import tailor
 from .models import Settings
 from .store import Store
 
@@ -94,6 +95,9 @@ class DocumentAgent:
             raise ValueError(
                 "Context requires verified experience plus a Contact table with Full name and Email"
             )
+        tailored = await tailor.tailor(job, settings)
+        if tailored is not None:
+            return await self._tailored(job, settings, store, identity, tailored)
         prompt = """Select the strongest documented evidence for this vacancy. Return JSON only:
 {"fact_ids":["fact_1",...]}.
 Choose 8–18 useful facts, covering core requirements and relevant achievements.
@@ -217,5 +221,69 @@ Do not select irrelevant evidence to pad keyword coverage."""
                 "contact_found": True,
                 "pages": len(reader.pages),
                 "claims": "verbatim source evidence",
+            },
+        }
+
+    async def _tailored(
+        self, job: dict[str, Any], settings: Settings, store: Store, identity: dict[str, str], tailored: tailor.Tailored
+    ) -> dict[str, Any]:
+        """The CV of one of the candidate's own variants with the headline, summary and skills tailored."""
+        directory = OUTPUT_DIR / "applications" / job["id"]
+        revision = hashlib.sha256((settings.context + json.dumps(job["vacancy"]) + tailored.html).encode()).hexdigest()[:12]
+        folder = directory / revision
+        folder.mkdir(parents=True, exist_ok=True)
+        pdf = folder / "cv.pdf"
+        from careertwin.rendering.safe import html as safe_html
+
+        await asyncio.to_thread(safe_html(string=tailored.html).write_pdf, str(pdf))
+        from pypdf import PdfReader
+
+        reader = PdfReader(pdf)
+        extracted = "\n".join(page.extract_text() or "" for page in reader.pages)
+        if identity["email"] not in extracted or not extracted.strip():
+            raise ValueError("The generated PDF failed contact/text extraction checks")
+        if len(reader.pages) > 2:
+            raise ValueError("CV exceeds two pages; the base variant is too long")
+        report = {
+            **tailored.report,
+            "coverage": {
+                "must": tailor.coverage(tailored.report.get("must", []), extracted),
+                "nice": tailor.coverage(tailored.report.get("nice", []), extracted),
+            },
+        }
+        name = identity["name"]
+        letter = (
+            f"Dear Hiring Team,\n\nI am applying for {job['vacancy']['title']} at {job['vacancy']['company']}.\n\n"
+            f"{tailored.report['headline']}\n\nI would welcome the opportunity to discuss my work and the role.\n\n{name}\n"
+        )
+        files = {
+            "cv": pdf,
+            "cv_markdown": folder / "cv.md",
+            "cover_letter": folder / "cover-letter.txt",
+            "evidence": folder / "evidence.json",
+            "profile": folder / "profile-snapshot.md",
+            "vacancy": folder / "job.json",
+        }
+        files["cv_markdown"].write_text(extracted)
+        files["cover_letter"].write_text(letter)
+        files["evidence"].write_text(json.dumps(report, ensure_ascii=False, indent=2))
+        files["profile"].write_text(settings.context)
+        files["vacancy"].write_text(json.dumps(job["vacancy"], ensure_ascii=False, indent=2))
+        for kind, path in files.items():
+            store.file(job["id"], kind, path)
+        return {
+            "revision": revision,
+            "cv_path": str(pdf.resolve()),
+            "cv_url": "/outputs/" + pdf.relative_to(OUTPUT_DIR).as_posix(),
+            "profile": settings.context,
+            "facts": [],
+            "files": {kind: str(path.resolve()) for kind, path in files.items()},
+            "checks": {
+                "text_extractable": True,
+                "contact_found": True,
+                "pages": len(reader.pages),
+                "claims": f"your CV variant {tailored.base}; every added term is in your facts or in that variant",
+                "missing_must_haves": [k for k, hit in report["coverage"]["must"].items() if not hit],
+                "not_in_your_facts": report.get("only_in_variant", []),
             },
         }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title, to_iso_date
 
 
 class SmartRecruitersSource(BaseSourceAdapter):
@@ -52,6 +52,7 @@ class SmartRecruitersSource(BaseSourceAdapter):
                 title=title,
                 url=board_url or f"https://smartrecruiters.com/{company_id}/{ref}",
                 location=clean_location(location_name.strip(", ")),
+                posted_at=to_iso_date(p.get("releasedDate")),
                 description=p.get("JobDescription", {}).get("plainTextDescription", "")[:2000],
                 employment_type=p.get("type", ""),
                 is_intern=is_intern,

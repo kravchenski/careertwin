@@ -2,7 +2,7 @@
 
 The API holds a CV, an ABOUT.md and the power to send an application, so it is closed by default:
 
-* every route but `/v1/health` needs `Authorization: Bearer <token>`; the token is
+* every route but `/v1/health` and the data-less page `/dashboard` needs `Authorization: Bearer <token>`; the token is
   `CAREERTWIN_API_TOKEN`, or a random one written once to `data/api-token` (mode 0600);
 * the Host header must be a loopback name (or one in `CAREERTWIN_ALLOWED_HOSTS`), which stops a web
   page from reaching the API through a DNS name that points at 127.0.0.1;
@@ -28,7 +28,7 @@ from careertwin.settings import DATA_DIR
 
 TOKEN_VARIABLE = "CAREERTWIN_API_TOKEN"
 MIN_TOKEN_LENGTH = 32
-PUBLIC_PATHS = frozenset({"/v1/health"})
+PUBLIC_PATHS = frozenset({"/v1/health", "/dashboard"})  # the page carries no data
 DOC_PATHS = frozenset({"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"})
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 MAX_BODY = 12 * 1024 * 1024

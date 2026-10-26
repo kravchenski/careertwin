@@ -41,6 +41,7 @@ class InterviewSettings:
     gateway_key: str = ""
     model: str = ""
     vision_model: str = ""
+    fallback_models: str = ""  # comma-separated; asked in order when the model is rate limited or down
     answer_style: str = "standard"
     answer_layout: str = "lines"
     show_full_answer: bool = True

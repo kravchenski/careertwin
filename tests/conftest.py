@@ -22,6 +22,15 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
+def private_context(tmp_path, monkeypatch):
+    """The candidate context is a file (ABOUT.md). A test writes its own, in a temporary folder: never the one in the
+    repository, which an earlier run would leave behind for the next, and never a developer's real ABOUT.md. The CV
+    is built from the facts alone unless a test points CAREERTWIN_CV_DIR at CV variants."""
+    monkeypatch.setenv("CAREERTWIN_ABOUT_PATH", str(tmp_path / "context" / "ABOUT.md"))
+    monkeypatch.delenv("CAREERTWIN_CV_DIR", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def private_run_log(tmp_path, monkeypatch):
     """No test writes into the real interview log (it sits next to the user's own data)."""
     from careertwin.interview import runlog

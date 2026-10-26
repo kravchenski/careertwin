@@ -28,6 +28,7 @@ class Settings(BaseModel):
     confidence: float = Field(default=0.7, ge=0, le=1)
     auto_prepare: bool = True
     auto_submit: bool = False
+    consent_auto: bool = False  # the candidate's standing permission to tick the terms and privacy boxes a form needs before it can be sent
     scheduled: bool = False
     interval_hours: int = Field(default=12, ge=1, le=168)
     limit: int = Field(default=30, ge=1, le=100)
@@ -69,6 +70,7 @@ class Vacancy(BaseModel):
     description: str = Field(default="", max_length=100_000)
     salary: str = ""
     external_id: str = ""
+    posted_at: str = ""  # the day the employer published it (YYYY-MM-DD) when the source says so
 
     @field_validator("url")
     @classmethod
@@ -79,6 +81,7 @@ class Vacancy(BaseModel):
 class Answer(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     answer: str = Field(min_length=1, max_length=20_000)
+    standing: bool = False  # keep it for every later form, not only this vacancy
 
 
 class Outcome(BaseModel):

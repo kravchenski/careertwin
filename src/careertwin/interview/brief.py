@@ -9,6 +9,7 @@ from pathlib import Path
 
 from careertwin.interview.documents import DocumentError, read_document
 from careertwin.interview.project import ProjectContext
+from careertwin.interview.questions import Kind
 from careertwin.profile.context import read_context, salary_policy
 
 CONTEXT_CHARS = 26_000
@@ -20,6 +21,21 @@ LOW_PRIORITY_SECTIONS = ("applications log", "cv files", "contact")
 # log of applications, CV file names, the job-ad matching rules and the project catalogue.
 # Dropping them makes every request about 40% smaller, so the first words come sooner.
 SKIP_FOR_ANSWERS = ("applications log", "cv files", "matching a job ad")
+# A question about a technology ("what is a left join") is answered from the skills and projects.
+# Contact details, form answers and interview stories, and the CV that repeats ABOUT.md, stay out of
+# its request: it is a third smaller, and a request that is smaller is rate limited later.
+# Terms a speech model mishears without a hint ("tupple", "Hitchit"), added when the vacancy names the topic.
+TOPIC_TERMS = {
+    "python": "tuple, GIL, asyncio, generator, decorator",
+    "sql": "JOIN, LEFT JOIN, GROUP BY, HAVING, window function",
+    "pandas": "DataFrame, groupby",
+    "spark": "PySpark, RDD, lazy evaluation, shuffle, Parquet",
+    "git": "rebase, merge conflict, cherry-pick",
+    "cloud": "IaaS, PaaS, SaaS, serverless",
+}
+MAX_VOCABULARY = 50
+KNOWLEDGE_KINDS = (Kind.TECHNICAL, Kind.DEFINITION)
+SKIP_FOR_KNOWLEDGE = ("contact", "standard form answers", "interview stories")
 
 
 class BriefError(ValueError):
@@ -163,14 +179,15 @@ class InterviewBrief:
             items.append(("project", f"project {self.project.name}"))
         return items
 
-    def render(self) -> str:
+    def render(self, kind: Kind | None = None) -> str:
+        """The request's background. `kind` is the kind of question: a knowledge question gets less."""
+        knowledge = kind in KNOWLEDGE_KINDS
         parts = []
         if self.candidate.strip():
-            parts.append(
-                f"CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{fit_context(slim_for_answers(self.candidate), CONTEXT_CHARS)}"
-            )
+            about = fit_context(slim_for_answers(self.candidate, knowledge), CONTEXT_CHARS)
+            parts.append(f"CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{about}")
         for doc in self.documents:
-            if not doc.enabled:
+            if not doc.enabled or (knowledge and doc.kind == "cv" and self.candidate.strip()):
                 continue
             heading = (
                 "CV THE EMPLOYER HAS READ"
@@ -201,7 +218,7 @@ class InterviewBrief:
     def vocabulary(self) -> str:
         """Names worth biasing speech recognition toward: the vacancy and your skills."""
         words = [self.company, self.job_title]
-        words += re.findall(r"\b[A-Z][A-Za-z+#.]{2,}\b", self.job_description)[:25]
+        words += vacancy_terms(self.job_description)[:25]
         words += _skill_terms(self.candidate)
         for doc in self.documents:
             if doc.enabled:
@@ -210,13 +227,34 @@ class InterviewBrief:
         for word in words:
             if word:
                 seen.setdefault(word, None)
-        return ", ".join(list(seen)[:45])
+        names = list(seen)[:24]
+        topics = f"{self.job_title} {self.job_description}".lower()
+        for topic, terms in TOPIC_TERMS.items():
+            if topic in topics:
+                names += [term for term in terms.split(", ") if term not in names]
+        return ", ".join(names[:MAX_VOCABULARY])
 
 
-def slim_for_answers(text: str) -> str:
-    """ABOUT.md without the sections that never help answer a question."""
+def vacancy_terms(text: str) -> list[str]:
+    """Names of technologies in a vacancy: words with a capital that do not simply begin a sentence or a
+    line ("What", "Our", "Build"), unless they have a capital inside, a digit or a symbol (PySpark, C#).
+    Every word given to speech recognition is one it may write back on music, so the list must be short."""
+    found: dict[str, None] = {}
+    for match in re.finditer(r"(?<![\w])[A-Z][A-Za-z0-9+#.]+(?![\w])", text):
+        word = match.group().rstrip(".")
+        previous = text[: match.start()].rstrip(" \t")[-1:]
+        begins = not previous or previous in ".!?\n\u2022*-"
+        technical = bool(re.search(r"[A-Z0-9+#]", word[1:]))
+        if len(word) > 1 and (technical or not begins):
+            found.setdefault(word, None)
+    return list(found)
+
+
+def slim_for_answers(text: str, knowledge: bool = False) -> str:
+    """ABOUT.md without the sections that never help answer a question (and, for a question about a
+    technology, the ones that only help with a question about the candidate)."""
     parts = re.split(r"^(?=## )", text, flags=re.M)
-    skip = tuple(f"## {name}" for name in SKIP_FOR_ANSWERS)
+    skip = tuple(f"## {name}" for name in (*SKIP_FOR_ANSWERS, *(SKIP_FOR_KNOWLEDGE if knowledge else ())))
     kept = "".join(part for part in parts if not part.lower().startswith(skip))
     return re.sub(r"^### Project catalog[\s\S]*?(?=^## |\Z)", "", kept, flags=re.M)
 

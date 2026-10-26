@@ -8,6 +8,7 @@ worker thread.
 from __future__ import annotations
 
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -20,10 +21,11 @@ from careertwin.interview.brief import InterviewBrief
 from careertwin.interview.coach import CoachError
 from careertwin.interview.languages import LanguageTracker
 from careertwin.interview.prompts import parse_suggestion
-from careertwin.interview.questions import is_question
+from careertwin.interview.prompts import SKIP, parse_suggestion
+from careertwin.interview.questions import is_question, mentions, worth_an_answer
 from careertwin.interview.stt import Transcriber
 from careertwin.interview.transcript import TranscriptLog
-from careertwin.interview.vad import UtteranceSegmenter
+from careertwin.interview.vad import FRAME_MS, SAMPLE_RATE, UtteranceSegmenter
 
 INTERVIEWER = "Interviewer"
 YOU = "You"
@@ -33,6 +35,44 @@ PARTIAL_EVERY = 75  # frames of 20 ms: a live caption about every 1.5 s of speec
 QUESTION_MARK_WAIT = 0.1  # seconds to wait after a sentence that ends with a question mark
 REUSE_SAMPLES = 16_000 * 6 // 10  # a caption that covers all but 0.6 s of the speech is final enough
 REPEAT_ERROR_AFTER = 10.0  # seconds before the same transcription failure is shown again
+EARLY_AFTER = 3.0  # seconds of the interviewer speaking before the answer starts on what is heard
+EARLY_MIN_WORDS = 5  # fewer words than this is not yet something to answer
+EARLY_LONG_WORDS = 12  # without a sign of a question, this many words are shown to the model anyway
+EARLY_ATTEMPTS = 3  # tries on one utterance: the first words may be only the set-up of the question
+EARLY_RETRY = 2.0  # seconds between two tries
+EARLY_RETRY_WORDS = 4  # and the words that must have come in between
+EARLY_STALE = 30.0  # an early answer older than this is not the answer to what was just asked
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[\w']+", text.lower())
+
+
+def covers(early: str, final: str) -> bool:
+    """Whether the answer started on `early` already answers `final`, the question once it is over.
+
+    It does when nearly all the early words are in the final text and the final adds little. When
+    the interviewer went on to say the real question, the answer starts again on all of it.
+    """
+    seen, heard = _words(early), _words(final)
+    if not seen or not heard:
+        return False
+    known = set(heard)
+    shared = sum(1 for word in seen if word in known)
+    return shared / len(seen) >= 0.75 and len(heard) - len(seen) <= max(5, len(seen) // 3)
+
+
+def _skip_verdict(text: str, *, final: bool = False) -> bool | None:
+    """Whether the model's reply so far says SKIP: True, False, or None while it cannot be told yet."""
+    head = text.lstrip()
+    if not head:
+        return None
+    upper = head.upper()
+    if upper.startswith(SKIP):
+        return len(head) == len(SKIP) or not head[len(SKIP)].isalnum()
+    if SKIP.startswith(upper):
+        return True if final else None  # "SK" so far: it may still become SKIP
+    return False
 
 
 class FrameSource(Protocol):
@@ -48,6 +88,7 @@ class Coach(Protocol):
         cancel: threading.Event,
         language: str | None = None,
         image: str | None = None,
+        listening: str | None = None,
     ) -> Iterator[str]: ...
 
 
@@ -57,6 +98,8 @@ class Callbacks:
     on_suggestion_start: Callable[[str], None] = lambda question: None
     on_suggestion_chunk: Callable[[str], None] = lambda text: None
     on_suggestion_done: Callable[[str], None] = lambda text: None
+    # the answer shown last was for part of a question that has since been said in full: drop it
+    on_suggestion_discard: Callable[[], None] = lambda: None
     on_status: Callable[[str], None] = lambda text: None
     on_state: Callable[[str], None] = lambda kind: None
     on_level: Callable[[str, float], None] = lambda speaker, level: None
@@ -77,12 +120,15 @@ class InterviewSession:
         language: str | None = None,
         debounce: float = 0.4,
         log: TranscriptLog | None = None,
+        early_after: float | None = EARLY_AFTER,
     ):
         self.brief = brief
         self.transcriber = transcriber
         self.coach = coach
         self.cb = callbacks or Callbacks()
         self.debounce = debounce
+        # seconds of speech before answering what was heard so far; None turns it off
+        self.early_after = early_after
         self.log = log or TranscriptLog()
         self.language = LanguageTracker(language)
         if transcriber is not None and self.language.fixed:
@@ -101,6 +147,15 @@ class InterviewSession:
         self._cancel = threading.Event()
         self._suggest_lock = threading.Lock()
         self._listening = False
+        # the question an answer was started on while it was still being said, and when
+        self._early: tuple[str, float] | None = None
+        # tries to answer the utterance now being heard before it ends
+        self._early_attempts = 0
+        self._early_last: tuple[float, int] | None = None  # when the last try began, and its words
+        self._early_busy = False  # a try is still being judged or written
+        self._early_card = False  # a try became a card on the screen
+        self._early_parts: list[str] | None = None  # finished parts of this question, said before
+        self._early_shown: float | None = None  # when an early answer was put on the screen
 
     def start(self, sources: dict[str, FrameSource]) -> None:
         """Listen to `{speaker: source}`; with no sources only `ask` works."""
@@ -219,6 +274,8 @@ class InterviewSession:
         segmenter = UtteranceSegmenter(min_threshold=120.0 if speaker == INTERVIEWER else 250.0)
         count = 0
         since_partial = 0
+        early_frames = int(self.early_after * 1000) // FRAME_MS if self.early_after else 0
+        early_taken = False
         try:
             for frame in source.frames():
                 if self.stopping.is_set():
@@ -231,14 +288,21 @@ class InterviewSession:
                     self.cb.on_level(speaker, min(1.0, (rms / 6000.0) ** 0.5))
                 if (utterance := segmenter.push(frame)) is not None:
                     since_partial = 0
+                    early_taken = False
                     self._utterances.put((speaker, utterance, False))
                 elif speaker == INTERVIEWER and segmenter.active:
                     since_partial += 1
-                    if since_partial >= PARTIAL_EVERY and (heard := segmenter.snapshot()) is not None:
+                    # a caption is made when the speech reaches the early mark, not at the next beat
+                    reached = early_frames and len(segmenter.frames) >= early_frames
+                    at_mark = bool(reached) and not early_taken
+                    due = at_mark or since_partial >= PARTIAL_EVERY
+                    if due and (heard := segmenter.snapshot()) is not None:
                         since_partial = 0
+                        early_taken = early_taken or at_mark
                         self._utterances.put((speaker, heard, True))
                 else:
                     since_partial = 0
+                    early_taken = False
         except Exception as exc:
             self.cb.on_state("error")
             self.cb.on_error(f"Audio from {speaker.lower()} stopped: {exc}")
@@ -290,14 +354,63 @@ class InterviewSession:
                 if text and self._utterances.empty():
                     last_partial = (speaker, len(pcm), text)
                     self.cb.on_partial(text)
+                    self._answer_early(speaker, text, len(pcm) / SAMPLE_RATE)
             elif text:
                 last_partial = None
+                self._end_of_utterance()
                 self.cb.on_partial("")
                 self._observe_language(text)
                 self.handle_text(speaker, text)
             else:
                 last_partial = None
+                self._end_of_utterance()
                 self.cb.on_partial("")
+
+    def _end_of_utterance(self) -> None:
+        self._early_attempts, self._early_last = 0, None
+        self._early_card, self._early_parts = False, None
+
+    def _answer_early(self, speaker: str, text: str, seconds: float) -> None:
+        """The interviewer has been speaking for a while: start answering what was heard.
+
+        Waiting for the end of a long question wastes the seconds the answer could already be
+        written in. The first words may be only the set-up ("imagine a service that...") and the
+        model then says SKIP, so it is tried again as more is said, a few times at most, until an
+        answer is on the screen. When the question is over `_flush_pending` keeps that answer if it
+        covers the question, or starts again on the whole of it.
+        """
+        if speaker != INTERVIEWER or not self.early_after or self.paused.is_set():
+            return
+        if self._early_card or self._early_busy:
+            return
+        words = len(_words(text))
+        if seconds < self.early_after or words < EARLY_MIN_WORDS:
+            return
+        asks = is_question(text, self.language.current)
+        if not (asks or words >= EARLY_LONG_WORDS):
+            return  # a few words that sound like a statement: wait to hear more or the end of it
+        # a statement is shown to the model once: it is probably the set-up, and every try is a request
+        if self._early_attempts >= (EARLY_ATTEMPTS if asks else 1):
+            return
+        now = time.monotonic()
+        if self._early_last and (
+            now - self._early_last[0] < EARLY_RETRY or words < self._early_last[1] + EARLY_RETRY_WORDS
+        ):
+            return
+        self._early_attempts += 1
+        self._early_last = (now, words)
+        self._early_busy = True
+        with self._lock:
+            if self._timer:
+                self._timer.cancel()  # a part of this question waiting to be sent goes with it
+            if self._early_parts is None:
+                self._early_parts = list(self._pending)
+                self._pending.clear()
+            question = " ".join([*self._early_parts, text])
+            self._early = (question, now)
+            parts = len(self._early_parts)
+        # the parts of this question already said are turns in the log; they are in the question
+        self._suggest(question, early=parts, listening="hearing")
 
     def _observe_language(self, text: str) -> None:
         if len(text.split()) < MIN_WORDS_FOR_LANGUAGE or self.transcriber is None:
@@ -312,7 +425,9 @@ class InterviewSession:
     def handle_text(self, speaker: str, text: str) -> None:
         self.log.add(speaker, text)
         self.cb.on_turn(speaker, text)
-        if speaker != INTERVIEWER or not is_question(text, self.language.current):
+        if speaker != INTERVIEWER or not (
+            worth_an_answer(text, self.language.current) or mentions(text, self.brief.vocabulary())
+        ):
             return
         with self._lock:
             self._pending.append(text)
@@ -328,25 +443,78 @@ class InterviewSession:
         with self._lock:
             question = " ".join(self._pending)
             self._pending.clear()
-        if question and not self.stopping.is_set():
-            self._suggest(question)
+            early, self._early = self._early, None
+        if not question or self.stopping.is_set():
+            return
+        if early and time.monotonic() - early[1] < EARLY_STALE and covers(early[0], question):
+            return  # the answer started while the question was still being asked is for this
+        self._suggest(question, listening="heard")
 
-    def _suggest(self, question: str, image: str | None = None, started_at: float | None = None) -> None:
+    def _suggest(
+        self,
+        question: str,
+        image: str | None = None,
+        started_at: float | None = None,
+        *,
+        early: int | None = None,
+        listening: str | None = None,
+    ) -> None:
+        """Answer `question`.
+
+        `early` is the number of finished turns of the log that are part of it while it is still
+        being said and so is not a turn itself; for a finished question it is None. `listening` is
+        set when the words came from the call audio, so the model may judge them not a question.
+        """
         self._cancel.set()
         cancel = threading.Event()
         self._cancel = cancel
         threading.Thread(
             target=self._run_suggestion,
-            args=(question, cancel, image, started_at),
+            args=(question, cancel, image, started_at, early, listening),
             name="coach",
             daemon=True,
         ).start()
+
+    def _announce(self, question: str, early: int | None, listening: str | None) -> None:
+        """The answer has its first words: put its place on the screen. An answer started on part of a
+        question is replaced when the whole of it has been said; a typed question leaves it alone."""
+        with self._lock:
+            replaced = self._early_shown
+            if early is not None:
+                self._early_shown = time.monotonic()
+                self._early_card = True
+            elif listening is not None:
+                self._early_shown = None
+        if replaced is not None and listening == "heard" and time.monotonic() - replaced < EARLY_STALE:
+            self.cb.on_suggestion_discard()
+        self.cb.on_suggestion_start(question)
 
     def _idle_state(self) -> str:
         return "paused" if self.paused.is_set() else "listening" if self._listening else "idle"
 
     def _run_suggestion(
-        self, question: str, cancel: threading.Event, image: str | None, started_at: float | None = None
+        self,
+        question: str,
+        cancel: threading.Event,
+        image: str | None,
+        started_at: float | None = None,
+        early: int | None = None,
+        listening: str | None = None,
+    ) -> None:
+        try:
+            self._write_suggestion(question, cancel, image, started_at, early, listening)
+        finally:
+            if early is not None:
+                self._early_busy = False
+
+    def _write_suggestion(
+        self,
+        question: str,
+        cancel: threading.Event,
+        image: str | None,
+        started_at: float | None,
+        early: int | None,
+        listening: str | None,
     ) -> None:
         with self._suggest_lock:
             if cancel.is_set():
@@ -355,25 +523,60 @@ class InterviewSession:
                 self.cb.on_state("error")
                 self.cb.on_error("No context yet: add your CV or write about yourself in Settings → Interview")
                 return
-            history = self.log.history()[:-1]
+            # the question is the last turn of the log, except what is still being said
+            history = self.log.history()
+            history = history[: max(0, len(history) - (1 if early is None else early))]
             self.cb.on_state("thinking")
-            self.cb.on_suggestion_start(question)
+            # Words from the call audio may not be a question: the model says SKIP, and then nothing is
+            # shown. So the answer is announced at its first words, not before them.
+            judging = listening is not None and bool(getattr(self.coach, "supports_listening", False))
+            if not judging:
+                self._announce(question, early, listening)
+            announced = not judging
             text = ""
             first_words: float | None = None
             try:
-                for chunk in self.coach.stream(
-                    question, history, cancel, self.language.current, image
-                ):
+                stream = (
+                    self.coach.stream(question, history, cancel, self.language.current, image, listening)
+                    if judging
+                    else self.coach.stream(question, history, cancel, self.language.current, image)
+                )
+                for chunk in stream:
                     if cancel.is_set():
                         return
                     first_words = first_words or time.perf_counter()
                     text += chunk
-                    self.cb.on_suggestion_chunk(chunk)
+                    if announced:
+                        self.cb.on_suggestion_chunk(chunk)
+                        continue
+                    verdict = _skip_verdict(text)
+                    if verdict is None:
+                        continue  # too little to tell yet
+                    if verdict:
+                        self.cb.on_state(self._idle_state())
+                        self.cb.on_status("That was not a question for you, so no answer")
+                        return
+                    announced = True
+                    self._announce(question, early, listening)
+                    self.cb.on_suggestion_chunk(text)
             except CoachError as exc:
-                self.cb.on_state("error")
-                self.cb.on_error(str(exc))
+                if not cancel.is_set():  # an answer that was given up on has nothing to report
+                    self.cb.on_state("error")
+                    self.cb.on_error(str(exc))
+                return
+            if cancel.is_set():
+                return
+            if not announced and text.strip() and not _skip_verdict(text, final=True):
+                self._announce(question, early, listening)
+                self.cb.on_suggestion_chunk(text)
+            elif not announced:
+                self.cb.on_state(self._idle_state())
+                if text.strip():
+                    self.cb.on_status("That was not a question for you, so no answer")
                 return
             self.cb.on_state(self._idle_state())
+            if (fell_back := getattr(self.coach, "fell_back", None)) and not cancel.is_set():
+                self.cb.on_status(f"The first model is rate limited or down: answered by {fell_back}")
             if getattr(self.coach, "last_finish", None) == "length" and not cancel.is_set():
                 self.cb.on_status(
                     "Cut off: the model ran out of room before it finished. "

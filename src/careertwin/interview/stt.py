@@ -53,6 +53,33 @@ def cuda_device_count() -> int:
         return 0
 
 
+MIN_LOGPROB = -1.5  # below this Whisper is guessing
+SILENCE_PROB, SILENCE_LOGPROB = 0.6, -1.0  # it thinks nobody speaks and is not sure of what it wrote
+MAX_COMPRESSION = 2.4  # text that repeats itself ("REST, REST, REST") is a loop, not speech
+RETRY_LOGPROB = -0.5  # a fixed language that reads this badly is looked at again in the language Whisper hears
+SWITCH_PROBABILITY = 0.8
+ECHO_WORDS = 6  # a reply this short made only of the words of the prompt is the prompt repeated
+
+
+def is_speech(segment) -> bool:
+    """Whether Whisper believes its own segment. On music and noise it writes words anyway, and with a
+    prompt of terms it writes the terms; its own confidence figures tell those from speech."""
+    logprob = getattr(segment, "avg_logprob", 0.0)
+    if logprob < MIN_LOGPROB:
+        return False
+    if getattr(segment, "no_speech_prob", 0.0) > SILENCE_PROB and logprob < SILENCE_LOGPROB:
+        return False
+    return getattr(segment, "compression_ratio", 1.0) <= MAX_COMPRESSION
+
+
+def echoes_prompt(text: str, prompt: str) -> bool:
+    """A few words that are all in the prompt and no question: Whisper read its prompt back."""
+    word = r"[\w+#]+(?:\.[\w+#]+)*"
+    words = re.findall(word, text.lower())
+    known = set(re.findall(word, prompt.lower()))
+    return bool(words) and len(words) <= ECHO_WORDS and "?" not in text and all(word in known for word in words)
+
+
 class Transcriber(Protocol):
     language: str | None
     last_language: str | None
@@ -135,16 +162,31 @@ class WhisperTranscriber:
             return self._run(audio, prompt)
 
     def _run(self, audio: np.ndarray, prompt: str) -> str:
+        text, logprob, info = self._decode(audio, prompt, self.language)
+        language, probability = self.language or getattr(info, "language", None), 1.0 if self.language else getattr(info, "language_probability", 0.0)
+        if self.language and (not text or logprob < RETRY_LOGPROB):
+            # a fixed language is wrong for a speaker of another one (a Russian question read as English
+            # gives "levoe s'iedininev"): look again without it and keep that reading if it is surely another
+            # language and the better one
+            other, other_logprob, other_info = self._decode(audio, prompt, None)
+            detected = getattr(other_info, "language", None)
+            sure = getattr(other_info, "language_probability", 0.0)
+            if other and detected and detected != self.language and sure >= SWITCH_PROBABILITY and (not text or other_logprob > logprob):
+                text, language, probability = other, detected, sure
+        self.last_language, self.last_probability = language, probability
+        return "" if echoes_prompt(text, prompt) else text
+
+    def _decode(self, audio: np.ndarray, prompt: str, language: str | None):
+        """(text of the segments Whisper believes, the lowest confidence among all of them, info)."""
         segments, info = self._model.transcribe(
             audio,
-            language=self.language,
+            language=language,
             beam_size=1,
             vad_filter=False,
             without_timestamps=True,
             condition_on_previous_text=False,
             initial_prompt=prompt or None,
         )
-        text = " ".join(segment.text.strip() for segment in segments).strip()
-        self.last_language = self.language or getattr(info, "language", None)
-        self.last_probability = 1.0 if self.language else getattr(info, "language_probability", 0.0)
-        return text
+        heard = list(segments)
+        text = " ".join(segment.text.strip() for segment in heard if is_speech(segment)).strip()
+        return text, min((getattr(segment, "avg_logprob", 0.0) for segment in heard), default=0.0), info

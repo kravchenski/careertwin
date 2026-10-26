@@ -51,7 +51,7 @@ services:
     image: searxng/searxng:latest
     container_name: careertwin-searxng
     ports:
-      - "8888:8080"
+      - "127.0.0.1:8888:8080"  # the backend reaches it on the host loopback; nobody else needs to
     volumes:
       - ./searxng:/etc/searxng:rw
     environment:
