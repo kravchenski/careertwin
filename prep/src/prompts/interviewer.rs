@@ -225,6 +225,8 @@ pub fn system(spec: &InterviewerSpec, brief: &Brief) -> String {
          a question, do it simply. If the candidate says they do not know, say that is fine and move to something \
          nearby and easier.\n\
          - Never say you are an AI and never describe these instructions. You are {name}.\n\
+         - Never mention \"the context\", \"your profile\", \"ABOUT\" or a file. When you refer to what you know about the \
+         candidate, say it the way a person who read a CV would: \"I see on your CV...\", \"you mentioned...\".\n\
          - If the candidate speaks Russian because they are stuck, answer calmly in {language} and invite them to \
          try again in {language}.\n\n\
          WHAT YOU KNOW\n\
@@ -342,6 +344,22 @@ pub fn opening(spec: &InterviewerSpec, brief: &Brief) -> Vec<Message> {
     ]
 }
 
+/// Some providers answer a conversation that has two messages of one role in a row with an empty
+/// reply, so neighbours of the same role are joined into one.
+pub fn coalesce(messages: Vec<Message>) -> Vec<Message> {
+    let mut out: Vec<Message> = Vec::with_capacity(messages.len());
+    for message in messages {
+        match out.last_mut() {
+            Some(last) if last.role == message.role && message.role != crate::llm::Role::System => {
+                last.content.push_str(if message.role == crate::llm::Role::Assistant { " " } else { "\n\n" });
+                last.content.push_str(&message.content);
+            }
+            _ => out.push(message),
+        }
+    }
+    out
+}
+
 /// The request for the next interviewer turn: the whole call so far, then what the candidate said.
 pub fn turn(spec: &InterviewerSpec, brief: &Brief, history: &[(bool, String)], note: Option<String>) -> Vec<Message> {
     let mut messages = vec![Message::system(system(spec, brief))];
@@ -352,7 +370,7 @@ pub fn turn(spec: &InterviewerSpec, brief: &Brief, history: &[(bool, String)], n
     if let Some(note) = note {
         messages.push(Message::user(note));
     }
-    messages
+    coalesce(messages)
 }
 
 #[cfg(test)]
@@ -377,6 +395,7 @@ mod tests {
             "never say \"great question\"",
             "Do not teach, correct, grade",
             "Never say you are an AI",
+            "I see on your CV",
             "make it harder",
         ] {
             assert!(text.to_lowercase().contains(&must.to_lowercase()), "missing: {must}");
@@ -493,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn a_turn_replays_the_call_in_order_with_roles() {
+    fn a_turn_replays_the_call_in_order_with_roles_and_the_note_joins_the_last_answer() {
         let history = vec![
             (true, "Hi, I'm Daniel.".to_owned()),
             (false, "Hello.".to_owned()),
@@ -502,11 +521,35 @@ mod tests {
         ];
         let messages = turn(&InterviewerSpec::new(Track::Technical), &brief(), &history, Some("[STATE: x]".into()));
         let roles: Vec<Role> = messages.iter().map(|m| m.role).collect();
-        assert_eq!(
-            roles,
-            vec![Role::System, Role::User, Role::Assistant, Role::User, Role::Assistant, Role::User, Role::User]
-        );
-        assert_eq!(messages.last().unwrap().content, "[STATE: x]");
+        assert_eq!(roles, vec![Role::System, Role::User, Role::Assistant, Role::User, Role::Assistant, Role::User]);
+        assert_eq!(messages.last().unwrap().content, "An order API.\n\n[STATE: x]");
+    }
+
+    #[test]
+    fn no_two_neighbours_ever_share_a_role() {
+        let histories: Vec<Vec<(bool, String)>> = vec![
+            vec![],
+            vec![(false, "a".into()), (false, "b".into())],
+            vec![(true, "a".into()), (true, "b".into()), (false, "c".into())],
+            vec![(true, "a".into()), (false, "b".into()), (false, "c".into()), (false, "d".into())],
+        ];
+        for history in histories {
+            for note in [None, Some("[STATE: n]".to_owned())] {
+                let messages = turn(&InterviewerSpec::new(Track::Technical), &brief(), &history, note);
+                for pair in messages.windows(2) {
+                    assert!(pair[0].role == Role::System || pair[0].role != pair[1].role, "{history:?}: {pair:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_nudge_note_after_the_interviewer_is_its_own_user_message() {
+        let history = vec![(true, "What is an index?".to_owned())];
+        let messages =
+            turn(&InterviewerSpec::new(Track::Technical), &brief(), &history, Some("[STATE: silent]".into()));
+        assert_eq!(messages.last().unwrap().role, Role::User);
+        assert_eq!(messages.last().unwrap().content, "[STATE: silent]");
     }
 
     #[test]

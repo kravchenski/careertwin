@@ -6,12 +6,16 @@
 
 #![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 
+pub mod audio;
 pub mod brief;
 pub mod config;
+pub mod conversation;
 pub mod llm;
 pub mod prompts;
 pub mod secrets;
 pub mod sentences;
 pub mod session;
+pub mod speech;
 pub mod srs;
+pub mod testing;
 pub mod textdiff;
