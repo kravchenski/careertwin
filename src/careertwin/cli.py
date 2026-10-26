@@ -371,6 +371,10 @@ def main() -> None:
     watch = sub.add_parser("watch", help="Control the agents from this terminal: live feed, approvals, notifications")
     _ = watch.add_argument("--once", action="store_true", help="Print the status and what waits, then exit")
 
+    dashboard = sub.add_parser("dashboard", help="Open the page that shows what the agents are doing (read-only)")
+    _ = dashboard.add_argument("--no-open", action="store_true", help="Only print the address")
+    _ = dashboard.add_argument("--no-start", action="store_true", help="Do not start the API when it is not running")
+
     security = sub.add_parser("security", help="Check how well your secrets and the API are protected")
     _ = security.add_argument("--fix", action="store_true", help="Apply the fixes that are safe (file permissions)")
 
@@ -383,7 +387,7 @@ def main() -> None:
     args = parser.parse_args()
     command: str = args.command or ""
 
-    if command in {"serve", "mcp", "agent", "watch", "security"}:
+    if command in {"serve", "mcp", "agent", "watch", "security", "dashboard"}:
         _run_service(command, args)
         return
 
@@ -442,6 +446,18 @@ def _run_service(command: str, args: argparse.Namespace) -> None:
         from careertwin.watch import main as watch_main
 
         watch_main(["--once"] if args.once else [])
+    elif command == "dashboard":
+        from careertwin.agentic.client import api_url
+        from careertwin.api.dashboard import open_dashboard
+        from careertwin.api.security import client_token
+
+        try:
+            address = open_dashboard(
+                base_url=api_url(), token=client_token(), browser=not args.no_open, start=not args.no_start
+            )
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(address + ("" if args.no_open else "  (opened in your browser)"))
     elif command == "security":
         from careertwin.security_check import main as security_main
 

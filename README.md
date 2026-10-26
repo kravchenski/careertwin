@@ -150,6 +150,7 @@ flowchart LR
 | **Your coding agent, over MCP** | `claude mcp add careertwin -- uv run careertwin-mcp` | [docs/AGENTS.md](docs/AGENTS.md) |
 | **The HTTP API** | `uv run careertwin serve`, then call it with the token from `data/api-token` | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Your control terminal** | `uv run careertwin watch`: the live feed, an approval question for everything that is about to leave, desktop notifications | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
+| **A page to watch them** | `uv run careertwin dashboard`: starts the API if it is not running and opens a page with the flow of the agents, the newest vacancies by site with their fit and buttons to move them on, what waits for you and a live feed | [docs/AGENTS.md](docs/AGENTS.md) |
 | **The security check** | `uv run careertwin security` | [docs/SECURITY.md](docs/SECURITY.md) |
 | **The interview window** | `uv run --extra interview careertwin-interview` | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
 

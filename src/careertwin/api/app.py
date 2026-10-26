@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from careertwin.api import dashboard
 from careertwin.api.routes import (
     applications,
     automation,
@@ -64,6 +65,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+app.include_router(dashboard.router)
 app.include_router(files.router)
 app.include_router(profile.router)
 app.include_router(resume.router)

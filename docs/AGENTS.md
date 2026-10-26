@@ -29,6 +29,20 @@ make api                        # CareerTwin API on http://127.0.0.1:8000
 
 Fill `ABOUT.md` (see `ABOUT.example.md`) and set `SWITCHYARD_*` in `.env`.
 
+Watch them while they work:
+
+```bash
+uv run careertwin dashboard     # starts the API if it is not running, opens a read only page, already signed in
+uv run careertwin watch         # the terminal where you approve, send and stop
+```
+
+The page shows the flow (find, rank, prepare, fill, you, submit, replies, outcome) with the stage that is
+working lit up, the newest vacancies first (each with the site it came from, the day it was published and its
+fit, and buttons to rank, prepare the CV, fill the form or skip), the step each vacancy has reached, what waits
+for you, the watched company sites and a live feed, and it downloads the XLSX. Sending an application or an
+email, and stopping everything, stay in `careertwin watch`. Open it from another machine through an
+SSH tunnel, as in the terminal case; the page asks for the token when it is not given one.
+
 ## 2. Pick how the agent reaches the tools
 
 ### A. The built-in agent
