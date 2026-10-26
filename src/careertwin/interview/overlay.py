@@ -60,6 +60,7 @@ class Bridge(QObject):
 
     turn = Signal(str, str)
     started = Signal(str)
+    discarded = Signal()
     chunk = Signal(str)
     done = Signal(str)
     status = Signal(str)
@@ -75,6 +76,7 @@ class Bridge(QObject):
         return Callbacks(
             on_turn=self.turn.emit,
             on_suggestion_start=self.started.emit,
+            on_suggestion_discard=self.discarded.emit,
             on_suggestion_chunk=self.chunk.emit,
             on_suggestion_done=self.done.emit,
             on_status=self.status.emit,
@@ -504,6 +506,7 @@ class OverlayWindow(QWidget):
 
         bridge.turn.connect(self.add_turn)
         bridge.started.connect(self.begin_suggestion)
+        bridge.discarded.connect(self.discard_suggestion)
         bridge.chunk.connect(self.add_chunk)
         bridge.done.connect(self.finish_suggestion)
         bridge.status.connect(self._status_text)
@@ -896,6 +899,13 @@ class OverlayWindow(QWidget):
         self.error_text = self.notice_text = ""
         self.entries.append(Entry(question))
         self.show_entry(len(self.entries) - 1)
+
+    def discard_suggestion(self) -> None:
+        """The answer shown last was for part of a question; the whole of it is about to be answered."""
+        if self.entries:
+            self.entries.pop()
+            self.index = max(0, min(self.index, len(self.entries) - 1))
+            self._render()
 
     def add_chunk(self, chunk: str) -> None:
         if self.entries:

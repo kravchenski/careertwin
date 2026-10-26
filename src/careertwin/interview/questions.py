@@ -40,7 +40,12 @@ LEXICON: dict[str, dict[str, str]] = {
         r"hours (a|per) (week|day)|\d+ hours|manage .*(studies|study|university|exams?|classes)|"
         r"(studies|university|exams?|classes) .*(work|internship|hours)",
         "start": r"what|why|how|when|where|who|which|can|could|would|do|does|did|are|is|have|has|will|"
-        r"tell|describe|explain|walk|talk|give|share|show|name|list|compare",
+        r"tell|describe|explain|walk|talk|give|share|show|name|list|compare|"
+        # a task or a scenario put to the candidate that is not worded as a question
+        r"imagine|suppose|assume|consider|picture|let'?s|let us|i'd like|i would like|"
+        r"i want to (?:hear|know|see)|i'?m (?:curious|interested)|i am (?:curious|interested)|"
+        r"help me understand|take me|say you|say we|if you|if we|think of|pretend|go ahead|"
+        r"i wonder|i was wondering|my next|next question",
         "small_talk": r"hi|hello|hey|thanks|thank you|great|sure|okay|ok|nice|good|right|yes|no",
     },
     "ru": {
@@ -54,7 +59,8 @@ LEXICON: dict[str, dict[str, str]] = {
         "logistics": r"когда (вы )?(сможете|готовы) выйти|срок уведомления|переезд|удал[её]н|гибрид|в офисе|"
         r"сколько часов|совмещать .*(учёб|универ)|график",
         "start": r"что|почему|как|когда|где|кто|какой|какая|какие|можете|расскажите|опишите|объясните|"
-        r"приведите|назовите|сравните|есть ли",
+        r"приведите|назовите|сравните|есть ли|представьте|допустим|предположим|давайте|мне интересно|"
+        r"хотел бы|хотела бы|скажите|поясните|а если|а что|следующий вопрос|расскажи|опиши|объясни",
         "small_talk": r"привет|здравствуйте|спасибо|отлично|хорошо|ясно|понятно|да|нет",
     },
     "pl": {
@@ -65,7 +71,8 @@ LEXICON: dict[str, dict[str, str]] = {
         "motivation": r"dlaczego (chcesz|wybrałeś|wybrałaś|odchodzisz)",
         "definition": r"co to (jest|są)|czym (jest|są)|wyjaśnij|jaka jest różnica|czym się różni|jak działa",
         "logistics": r"okres wypowiedzenia|kiedy możesz zacząć|relokacj|zdaln|w biurze|ile godzin|studi",
-        "start": r"co|dlaczego|jak|kiedy|gdzie|kto|który|czy|opowiedz|opisz|wyjaśnij|podaj",
+        "start": r"co|dlaczego|jak|kiedy|gdzie|kto|który|czy|opowiedz|opisz|wyjaśnij|podaj|"
+        r"wyobraź|załóżmy|powiedz|chciałbym|chciałabym|następne pytanie",
         "small_talk": r"cześć|dzień dobry|dziękuję|dobrze",
     },
     "uk": {
@@ -142,6 +149,8 @@ QUESTION_MARKS = ("?", "？", "¿", "؟", "；")
 # A reply in a language with no lexicon is sent as a question when it is at least this many words,
 # because a missing answer is worse than an extra one (the Ask button and Pause are there).
 FALLBACK_WORDS = 5
+# Words from which a sentence that is not a question is still shown to the model to judge.
+SENTENCE_WORDS = 8
 
 _KINDS = (
     ("salary", Kind.SALARY),
@@ -161,7 +170,8 @@ def _union(field: str) -> str:
 _PATTERNS: list[tuple[Kind, re.Pattern[str]]] = [
     (kind, re.compile(_union(field), re.I)) for field, kind in _KINDS
 ]
-_QUESTION_START = re.compile(rf"^(?:{_union('start')})\b", re.I)
+# a question may begin with a discourse word: "okay, tell me about...", "and how do you..."
+_QUESTION_START = re.compile(rf"^(?:(?:and|so|okay|ok|well|now|then|alright)[ ,]+)?(?:{_union('start')})\b", re.I)
 _SMALL_TALK = re.compile(rf"^(?:{_union('small_talk')})\b[\s,.!]*$", re.I)
 
 
@@ -180,6 +190,16 @@ def is_question(text: str, language: str | None = None) -> bool:
     if any(pattern.search(value) for _, pattern in _PATTERNS):
         return True
     return bool(language) and language not in LEXICON and len(value.split()) >= FALLBACK_WORDS
+
+
+def worth_an_answer(text: str, language: str | None = None) -> bool:
+    """Whether an interviewer's words may be something to answer: a question or a task, or enough
+    said that one was probably put. The model has the last word and replies SKIP to what is not for
+    the candidate, so this errs on the side of asking."""
+    value = " ".join(text.split())
+    if is_question(value, language):
+        return True
+    return len(value.split()) >= SENTENCE_WORDS and not _SMALL_TALK.match(value)
 
 
 def classify(text: str) -> Kind:

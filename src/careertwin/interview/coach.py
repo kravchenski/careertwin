@@ -198,8 +198,11 @@ class StreamingCoach:
         cancel: threading.Event,
         language: str | None = None,
         image: str | None = None,
+        listening: str | None = None,
     ) -> Iterator[str]:
         """Stream a hint. `image` is a base64 PNG of the screen; the question is then ignored.
+        `listening` says the words came from the call audio and may not be a question ("heard") or
+        are not finished ("hearing"); see `prompts.LISTENING_HINTS`.
 
         If the chosen model fails before saying anything (rate limit, outage) on a Switchyard
         gateway, the request is repeated once on automatic routing, so one bad provider does not
@@ -207,7 +210,7 @@ class StreamingCoach:
         model = (image and self.vision_model) or self.model or model_name()
         started = False
         try:
-            for chunk in self._stream_model(model, question, history, cancel, language, image):
+            for chunk in self._stream_model(model, question, history, cancel, language, image, listening):
                 started = True
                 yield chunk
         except CoachError as first:
@@ -219,7 +222,7 @@ class StreamingCoach:
                 raise
             try:
                 for chunk in self._stream_model(
-                    self.FALLBACK_MODEL, question, history, cancel, language, image
+                    self.FALLBACK_MODEL, question, history, cancel, language, image, listening
                 ):
                     started = True
                     yield chunk
@@ -229,6 +232,8 @@ class StreamingCoach:
                 raise first from None  # the chosen model's error says more than "auto"'s
 
     FALLBACK_MODEL = "auto"
+    # The session may ask this coach to tell a question from other audio (it then replies SKIP).
+    supports_listening = True
 
     def _stream_model(
         self,
@@ -238,6 +243,7 @@ class StreamingCoach:
         cancel: threading.Event,
         language: str | None,
         image: str | None,
+        listening: str | None = None,
     ) -> Iterator[str]:
         system, temperature, max_tokens = SYSTEM, 0.3, 1800
         if image:
@@ -251,7 +257,8 @@ class StreamingCoach:
         else:
             code = self.brief.project.retrieve(question) if self.brief.project else ""
             content = user_prompt(
-                self.brief, question, classify(question), history, language, self.style, self.layout, code
+                self.brief, question, classify(question), history, language, self.style, self.layout, code,
+                listening,
             )
         body = {
             "model": model,
