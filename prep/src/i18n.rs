@@ -350,6 +350,77 @@ strings! {
     LongMinutes => ("Long break, min", "Долгий перерыв, мин"),
     LongEvery => ("Long break after", "Долгий после"),
     GoalMinutes => ("Goal per day, min", "Цель на день, мин"),
+
+    // the plan: the vacancy ranked by the 80/20 rule
+    CardPlan => ("Your plan", "Ваш план"),
+    CardPlanText => (
+        "The topics that cover 80% of the questions for your vacancy, with every term in plain words.",
+        "Темы, которые закрывают 80% вопросов по вашей вакансии, и каждый термин простыми словами."
+    ),
+    PlanTitle => ("Your plan", "Ваш план"),
+    PlanIntro => (
+        "The vacancy ranked by the 80/20 rule: a few topics hold most of the questions. Learn those first.",
+        "Вакансия по правилу 80/20: несколько тем содержат большую часть вопросов. Учите их первыми."
+    ),
+    PlanNone => (
+        "There is no plan yet. Paste the vacancy and I will work out what you are likely to be asked.",
+        "Плана пока нет. Вставьте вакансию, и я выясню, о чём вас, скорее всего, спросят."
+    ),
+    PlanResearch => ("Research the vacancy", "Изучить вакансию"),
+    PlanResearching => ("Researching… {done} of {total}", "Изучаю… {done} из {total}"),
+    PlanAgain => ("Research again", "Изучить заново"),
+    PlanStale => (
+        "The vacancy has changed since this plan was made.",
+        "Вакансия изменилась с тех пор, как был составлен план."
+    ),
+    PlanCoverage => ("{n}% of the likely questions covered", "Закрыто вероятных вопросов: {n}%"),
+    PlanVitalLine => (
+        "{vital} of {all} topics hold 80% of the questions. You know {known}% of those.",
+        "{vital} из {all} тем дают 80% вопросов. Из них вы знаете {known}%."
+    ),
+    PlanVital => ("The 20% that matters", "Те самые 20%"),
+    PlanOthers => ("Later", "Потом"),
+    PlanLikely => ("likely {n}/10", "вероятность {n}/10"),
+    PlanEffort => ("effort {n}/10", "усилия {n}/10"),
+    PlanWriteTerms => ("Write the terms", "Составить термины"),
+    PlanTermsCount => ("Terms: {n}", "Терминов: {n}"),
+    PlanPlain => ("In plain words", "Простыми словами"),
+    PlanAnalogy => ("Think of it like this", "Как это понять"),
+    PlanSayIt => ("Say it in English", "Скажите по-английски"),
+    PlanFollowUps => ("They may ask next", "Могут спросить дальше"),
+    PlanStart => ("Start here", "Начните отсюда"),
+    PlanChangeVacancy => ("Change the vacancy", "Изменить вакансию"),
+    PlanPractise => ("Practise this topic", "Потренировать тему"),
+    PlanLevels => (
+        "In your words {native}/3 · in English {english}/3",
+        "Своими словами {native}/3 · по-английски {english}/3"
+    ),
+
+    // notes
+    NotesTitle => ("Notes", "Заметки"),
+    NotesIntro => (
+        "Short, one idea each. After a lesson the tutor keeps the 20% worth remembering; you can add your own.",
+        "Коротко, по одной мысли. После занятия репетитор сохраняет те самые 20%, которые стоит помнить; свои можно добавить."
+    ),
+    NotesWrite => ("Write a note…", "Напишите заметку…"),
+    NotesAdd => ("Add", "Добавить"),
+    NotesEmpty => ("No notes yet. The first lesson fills this page.", "Заметок пока нет. Первое же занятие наполнит эту страницу."),
+    NotesCopy => ("Copy as Markdown", "Скопировать как Markdown"),
+    NotesCopied => ("Copied", "Скопировано"),
+    NoteStar => ("Star this note", "Отметить заметку"),
+    NoteUnstar => ("Remove the star", "Снять отметку"),
+    NoteDelete => ("Delete this note", "Удалить заметку"),
+    KindVital => ("Key", "Главное"),
+    KindLecture => ("Lecture", "Лекция"),
+    KindMistake => ("Slip", "Ошибка"),
+    KindIdea => ("Idea", "Идея"),
+    FilterAll => ("All", "Все"),
+
+    // after a lesson
+    DigestTitle => ("The 20% to keep", "Те самые 20%"),
+    DigestNext => ("Next time", "В следующий раз"),
+    DigestSaved => ("Saved to your notes", "Сохранено в заметки"),
+    OpenNotes => ("Open notes", "Открыть заметки"),
 }
 
 /// The strings of one language.

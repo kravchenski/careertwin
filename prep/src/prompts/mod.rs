@@ -9,6 +9,7 @@ pub mod feedback;
 pub mod interviewer;
 pub mod json;
 pub mod prepare;
+pub mod research;
 pub mod translate;
 
 use serde::{Deserialize, Serialize};

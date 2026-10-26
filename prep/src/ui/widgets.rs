@@ -37,6 +37,8 @@ pub enum Icon {
     Pause,
     Skip,
     Notebook,
+    Star,
+    StarFilled,
 }
 
 pub(crate) fn arc(center: Pos2, radius: f32, from: f32, to: f32, steps: usize) -> Vec<Pos2> {
@@ -187,6 +189,28 @@ pub fn paint_icon(painter: &egui::Painter, icon: Icon, center: Pos2, size: f32, 
                 Stroke::NONE,
             ));
             painter.line_segment([at(0.24, -0.24), at(0.24, 0.24)], Stroke::new(stroke.width * 1.5, color));
+        }
+        Icon::Star | Icon::StarFilled => {
+            let points: Vec<Pos2> = (0..10)
+                .map(|i| {
+                    let radius = if i % 2 == 0 { 0.36 } else { 0.15 };
+                    let angle = -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::PI / 5.0;
+                    at(radius * angle.cos(), radius * angle.sin())
+                })
+                .collect();
+            if icon == Icon::StarFilled {
+                // a star is not convex, so it is filled as ten triangles from its middle
+                for i in 0..10 {
+                    painter.add(Shape::convex_polygon(
+                        vec![center, points[i], points[(i + 1) % 10]],
+                        color,
+                        Stroke::NONE,
+                    ));
+                }
+            }
+            let mut outline = points.clone();
+            outline.push(points[0]);
+            path(outline);
         }
         Icon::Notebook => {
             let body = Rect::from_center_size(center, vec2(0.54 * s, 0.68 * s));

@@ -12,6 +12,7 @@ use super::{Core, Nav, scrolling_column};
 use crate::i18n::K;
 use crate::prompts::Lang;
 use crate::prompts::feedback::Feedback;
+use crate::prompts::research::Digest;
 use crate::session::{Session, date};
 use crate::srs::{Card, CardKind};
 use crate::textdiff::{Comparison, Mark};
@@ -46,6 +47,42 @@ impl ReviewView {
     pub fn feedback(&self) -> Option<&Feedback> {
         self.session.feedback.as_ref()
     }
+
+    /// The notes taken from the call, once they are ready.
+    pub fn digest(&self) -> Option<Digest> {
+        serde_json::from_value(self.session.payload.get("digest")?.clone()).ok()
+    }
+}
+
+/// The few lines to keep from the call, and what to do next time.
+fn digest_card(ui: &mut Ui, tr: crate::i18n::Tr, digest: &Digest, nav: &mut Option<Nav>) {
+    card_frame().show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            widgets::caps(ui, tr.get(K::DigestTitle));
+            ui.label(RichText::new(tr.get(K::DigestSaved)).font(theme::mono(11.0)).color(GOOD));
+        });
+        bullets(ui, &digest.vital, BERRY);
+        if !digest.mistakes.is_empty() {
+            ui.add_space(6.0);
+            bullets(ui, &digest.mistakes, FAINT);
+        }
+        if !digest.next.is_empty() {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(format!("{}: {}", tr.get(K::DigestNext), digest.next))
+                    .font(theme::serif_italic(16.5))
+                    .color(MUTED),
+            );
+        }
+        if !digest.hook.is_empty() {
+            ui.label(RichText::new(&digest.hook).font(theme::sans(14.5)).color(MUTED));
+        }
+        ui.add_space(6.0);
+        if ghost_button(ui, tr.get(K::OpenNotes)).clicked() {
+            *nav = Some(Nav::Notes);
+        }
+    });
 }
 
 fn bullets(ui: &mut Ui, items: &[String], color: Color32) {
@@ -107,6 +144,10 @@ pub fn ui(core: &mut Core, view: &mut ReviewView, ui: &mut Ui) -> Option<Nav> {
                 .color(FAINT),
         );
         ui.add_space(14.0);
+        if let Some(digest) = view.digest() {
+            digest_card(ui, tr, &digest, &mut nav);
+            ui.add_space(14.0);
+        }
         match &view.state {
             State::Working => {
                 ui.horizontal(|ui| {

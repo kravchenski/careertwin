@@ -8,8 +8,10 @@ pub mod help;
 pub mod history;
 pub mod home;
 pub mod live;
+pub mod notebook;
 pub mod orb;
 pub mod phrases;
+pub mod plan;
 pub mod prepare;
 pub mod review;
 pub mod settings;
@@ -28,19 +30,22 @@ use crate::brief::Brief;
 use crate::config::{Paths, Settings};
 use crate::i18n::{K, Tr};
 use crate::jobs::Jobs;
-use crate::ops::OpError;
+use crate::notes::{NoteKind, Notebook};
+use crate::ops::{OpError, ResearchProgress};
 use crate::pomodoro::Pomodoro;
 use crate::prompts::Lang;
 use crate::prompts::cards::ConceptCard;
 use crate::prompts::feedback::Feedback;
 use crate::prompts::interviewer::InterviewerSpec;
 use crate::prompts::prepare::{Analysis, BankQuestion};
+use crate::prompts::research::Digest;
 use crate::prompts::translate::Translation;
 use crate::services::{Problems, Services};
 use crate::session::{Session, Store, Track};
 use crate::speech::Transcript;
 use crate::srs::Deck;
 use crate::stats::Stats;
+use crate::syllabus::{Progress, Syllabus, Term, vacancy_key};
 
 use self::theme::{BG, LINE, SNOW};
 use self::widgets::{Icon, icon_button, pill_tabs, pill_width};
@@ -55,6 +60,8 @@ pub enum Screen {
     Translate(Box<translate::TranslateView>),
     Prepare(Box<prepare::PrepareView>),
     Phrases(Box<phrases::PhrasesView>),
+    Plan(Box<plan::PlanView>),
+    Notes(Box<notebook::NotebookView>),
 }
 
 /// What a screen asks the window to do next.
@@ -66,6 +73,8 @@ pub enum Nav {
     Phrases,
     Translate,
     Prepare,
+    Plan,
+    Notes,
     StartCall {
         spec: Box<InterviewerSpec>,
         headphones: bool,
@@ -89,6 +98,9 @@ pub enum Outcome {
     Questions(Result<Vec<BankQuestion>, OpError>),
     Models(Result<Vec<String>, String>),
     Downloaded { name: String, result: Result<(), String> },
+    Researched(Result<Syllabus, OpError>),
+    Terms { topic: String, result: Result<Vec<Term>, OpError> },
+    Digested { session_id: String, result: Result<Digest, OpError> },
 }
 
 /// A model being fetched for the offline engines.
@@ -152,6 +164,12 @@ pub struct Core {
     pub quit: bool,
     pub stats: Stats,
     pub pomodoro: Pomodoro,
+    /// The researched plan for the vacancy, how well you know it, and your notes.
+    pub syllabus: Option<Syllabus>,
+    pub progress: Progress,
+    pub notebook: Notebook,
+    /// Set while the vacancy is being researched.
+    pub research: Option<Arc<ResearchProgress>>,
     /// Asks the window to draw again.
     pub wake: Arc<dyn Fn() + Send + Sync>,
     /// A message for the person that no open screen has a place for.
@@ -325,6 +343,78 @@ impl Core {
         self.brief.as_ref().and_then(Brief::email).unwrap_or_default()
     }
 
+    pub fn save_notes(&self) {
+        let _ = self.notebook.save(&self.paths.notes_file());
+    }
+
+    pub fn save_progress(&self) {
+        let _ = self.progress.save(&self.paths.progress_file());
+    }
+
+    pub fn save_plan(&self) {
+        if let Some(plan) = &self.syllabus {
+            let _ = plan.save(&self.paths.syllabus_file());
+        }
+    }
+
+    /// Keeps a note, unless the same one is already there.
+    pub fn add_note(&mut self, kind: NoteKind, topic: &str, text: &str) {
+        if self.notebook.add(kind, topic, text, self.now()) {
+            self.save_notes();
+        }
+    }
+
+    /// Whether the vacancy has been edited since `plan` was made.
+    pub fn plan_is_stale(&self, plan: &Syllabus) -> bool {
+        !self.vacancy.description.trim().is_empty()
+            && plan.key != vacancy_key(&self.vacancy.title, &self.vacancy.company, &self.vacancy.description)
+    }
+
+    /// Starts researching the vacancy: the topics ranked by the 80/20 rule and their terms.
+    pub fn start_research(&mut self) {
+        if self.research.is_some() {
+            return;
+        }
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.model;
+        let brief = self.working_brief();
+        let native = self.ui_lang();
+        let progress = Arc::new(ResearchProgress::default());
+        self.research = Some(Arc::clone(&progress));
+        let label = self.tr.get(K::PlanResearch).to_owned();
+        self.jobs.spawn(label, async move {
+            Outcome::Researched(crate::ops::research(llm.as_ref(), &model, &brief, native, &progress).await)
+        });
+    }
+
+    /// Writes the terms of a topic that was left without them.
+    pub fn write_terms(&mut self, topic: usize) {
+        let Some(found) = self.syllabus.as_ref().and_then(|plan| plan.topics.get(topic)).cloned() else { return };
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.model;
+        let brief = self.working_brief();
+        let native = self.syllabus.as_ref().map_or_else(|| self.ui_lang(), |plan| plan.native);
+        let label = self.tr.get(K::PlanWriteTerms).to_owned();
+        self.jobs.spawn(label, async move {
+            let result = crate::ops::topic_terms(llm.as_ref(), &model, &brief, &found, native).await;
+            Outcome::Terms { topic: found.name, result }
+        });
+    }
+
+    /// Starts taking the notes of a finished call: the few lines worth keeping.
+    pub fn spawn_digest(&mut self, session: &Session) {
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.model;
+        let native = self.ui_lang();
+        let topic = session.setup.get("focus").and_then(|f| f.as_str()).unwrap_or_default().to_owned();
+        let session = session.clone();
+        let label = self.tr.get(K::NotesTitle).to_owned();
+        self.jobs.spawn(label, async move {
+            let result = crate::ops::digest(llm.as_ref(), &model, &session, &topic, native).await;
+            Outcome::Digested { session_id: session.id, result }
+        });
+    }
+
     pub fn save_stats(&self) {
         let _ = self.stats.save(&self.paths.stats_file());
     }
@@ -479,6 +569,9 @@ impl PrepApp {
         let tr = Tr::new(settings.ui_language);
         let stats = Stats::load(&paths.stats_file());
         let pomodoro = Pomodoro::new(settings.pomodoro);
+        let syllabus = Syllabus::load(&paths.syllabus_file());
+        let progress = Progress::load(&paths.progress_file());
+        let notebook = Notebook::load(&paths.notes_file());
         let mut app = Self {
             core: Core {
                 paths,
@@ -503,6 +596,10 @@ impl PrepApp {
                 quit: false,
                 stats,
                 pomodoro,
+                syllabus,
+                progress,
+                notebook,
+                research: None,
                 wake,
                 notice: None,
                 notice_at: None,
@@ -545,6 +642,8 @@ impl PrepApp {
                 Screen::Translate(view) => translate::ui(&mut self.core, view, ui),
                 Screen::Prepare(view) => prepare::ui(&mut self.core, view, ui),
                 Screen::Phrases(view) => phrases::ui(&mut self.core, view, ui),
+                Screen::Plan(view) => plan::ui(&mut self.core, view, ui),
+                Screen::Notes(view) => notebook::ui(&mut self.core, view, ui),
             };
             next = next.take().or(screen_nav);
         });
@@ -587,6 +686,8 @@ impl PrepApp {
             Nav::Phrases => self.screen = Screen::Phrases(Box::default()),
             Nav::Translate => self.screen = Screen::Translate(Box::default()),
             Nav::Prepare => self.screen = Screen::Prepare(Box::default()),
+            Nav::Plan => self.screen = Screen::Plan(Box::default()),
+            Nav::Notes => self.screen = Screen::Notes(Box::default()),
             Nav::PracticeQuestion(question) => {
                 let mut view = setup::SetupView::new(&self.core);
                 view.spec.focus = format!("Begin with this question: {question}");
@@ -690,6 +791,13 @@ impl PrepApp {
                     session.feedback = Some(feedback.clone());
                     let _ = self.core.store.save(&session);
                 }
+                // the notes are asked for after the review, not beside it: one request at a time
+                if let Ok(session) = self.core.store.load(&session_id)
+                    && session.payload.get("digest").is_none()
+                    && session.candidate_turns() >= 2
+                {
+                    self.core.spawn_digest(&session);
+                }
                 if let Screen::Review(view) = &mut self.screen
                     && view.session.id == session_id
                 {
@@ -707,6 +815,59 @@ impl PrepApp {
                     match result {
                         Ok(()) => download.finished = true,
                         Err(why) => download.failed = Some(why),
+                    }
+                }
+            }
+            Outcome::Researched(result) => {
+                self.core.research = None;
+                match result {
+                    Ok(plan) => {
+                        self.core.syllabus = Some(plan);
+                        self.core.save_plan();
+                        if let Screen::Plan(view) = &mut self.screen {
+                            view.error = None;
+                            view.editing = false;
+                        }
+                    }
+                    Err(error) => self.notify(error.to_string()),
+                }
+            }
+            Outcome::Terms { topic, result } => {
+                if let Screen::Plan(view) = &mut self.screen {
+                    view.writing = None;
+                }
+                match result {
+                    Ok(terms) => {
+                        if let Some(plan) = &mut self.core.syllabus
+                            && let Some(index) = plan.topic_index(&topic)
+                        {
+                            plan.topics[index].terms = terms;
+                        }
+                        self.core.save_plan();
+                    }
+                    Err(error) => self.notify(error.to_string()),
+                }
+            }
+            Outcome::Digested { session_id, result } => {
+                let Ok(digest) = result else { return };
+                let session = self.core.store.load(&session_id).ok();
+                let topic = session
+                    .as_ref()
+                    .and_then(|s| s.setup.get("focus").and_then(|f| f.as_str()).map(str::to_owned))
+                    .unwrap_or_default();
+                for line in &digest.vital {
+                    self.core.add_note(NoteKind::Vital, &topic, line);
+                }
+                for line in &digest.mistakes {
+                    self.core.add_note(NoteKind::Mistake, &topic, line);
+                }
+                if let Some(mut session) = session {
+                    session.payload = serde_json::json!({ "digest": digest });
+                    let _ = self.core.store.save(&session);
+                    if let Screen::Review(view) = &mut self.screen
+                        && view.session.id == session_id
+                    {
+                        view.session.payload = session.payload;
                     }
                 }
             }
@@ -824,6 +985,7 @@ impl PrepApp {
             Screen::Review(view) => view.drill_error = Some(message),
             Screen::Translate(view) => view.error = Some(message),
             Screen::Prepare(view) => view.error = Some(message),
+            Screen::Plan(view) => view.error = Some(message),
             _ => self.core.notice = Some(message),
         }
     }
@@ -846,13 +1008,16 @@ impl PrepApp {
                     self.core.track = Track::ALL[index];
                     nav = Some(Nav::Home);
                 }
-                let left = Rect::from_min_size(pos2(bar.left(), bar.center().y - 20.0), vec2(110.0, 40.0));
+                let left = Rect::from_min_size(pos2(bar.left(), bar.center().y - 20.0), vec2(150.0, 40.0));
                 ui.scope_builder(UiBuilder::new().max_rect(left).layout(Layout::left_to_right(Align::Center)), |ui| {
                     if icon_button(ui, Icon::List, tr.get(K::Sessions), 38.0, None).clicked() {
                         self.core.history_open = !self.core.history_open;
                     }
                     if icon_button(ui, Icon::Plus, tr.get(K::NewSession), 38.0, None).clicked() {
                         nav = Some(Nav::Home);
+                    }
+                    if icon_button(ui, Icon::Notebook, tr.get(K::NotesTitle), 38.0, None).clicked() {
+                        nav = Some(Nav::Notes);
                     }
                 });
                 let size = vec2(focus::PILL_WIDTH, 44.0);

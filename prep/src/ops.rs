@@ -1,8 +1,10 @@
 //! The things you ask of the model outside a live call: the review after one, concept checks,
 //! translations, and the analysis of a vacancy. Each asks once more when the answer cannot be read.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use thiserror::Error;
 
 use crate::audio::vad::{self, Segmenter};
@@ -12,11 +14,13 @@ use crate::prompts::cards::{self, ConceptCard};
 use crate::prompts::feedback::{self, Feedback};
 use crate::prompts::interviewer::InterviewerSpec;
 use crate::prompts::prepare::{self, Analysis, BankQuestion};
+use crate::prompts::research::{self, Digest};
 use crate::prompts::translate::{self, Translation};
 use crate::prompts::{Lang, PromptError};
 use crate::services::Services;
 use crate::session::Session;
 use crate::speech::{SttHint, Transcript};
+use crate::syllabus::{Syllabus, Term, Topic, vacancy_key};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum OpError {
@@ -149,6 +153,119 @@ pub async fn question_bank(
         &prepare::questions_prompt(brief, count, focus),
         3000,
         |reply| prepare::parse_questions(reply, count),
+    )
+    .await
+}
+
+/// How far the research of a vacancy has got, for the window to show.
+#[derive(Debug, Default)]
+pub struct ResearchProgress {
+    pub done: AtomicUsize,
+    pub total: AtomicUsize,
+}
+
+/// How many topics have their terms written at the same time.
+const RESEARCH_PARALLEL: usize = 3;
+/// The topics whose terms are written during the research: the vital few, up to this many. The
+/// others get theirs when you ask for them.
+const RESEARCH_TOPICS: usize = 8;
+
+/// Researches a vacancy: ranks the topics by the 80/20 rule, then writes the terms of the vital
+/// few, three at a time. A topic whose terms could not be written is kept without them and can be
+/// asked for again; only when none could be written is the research a failure.
+pub async fn research(
+    llm: &dyn Llm,
+    model: &str,
+    brief: &Brief,
+    native: Lang,
+    progress: &ResearchProgress,
+) -> Result<Syllabus, OpError> {
+    if brief.job_description.trim().is_empty() {
+        return Err(OpError::Prompt("Paste the vacancy first: the research starts from its text.".into()));
+    }
+    progress.done.store(0, Ordering::Relaxed);
+    progress.total.store(1, Ordering::Relaxed);
+    let mut syllabus =
+        ask_json(llm, model, &research::map_system(native), &research::map_prompt(brief), 2500, |reply| {
+            research::parse_map(reply, native)
+        })
+        .await?;
+    if syllabus.role.is_empty() {
+        syllabus.role = brief.job_title.clone();
+    }
+    syllabus.company = brief.company.clone();
+    syllabus.key = vacancy_key(&brief.job_title, &brief.company, &brief.job_description);
+    syllabus.made = crate::session::now();
+    let wanted: Vec<usize> = syllabus.vital().into_iter().take(RESEARCH_TOPICS).collect();
+    progress.total.store(wanted.len() + 1, Ordering::Relaxed);
+    progress.done.store(1, Ordering::Relaxed);
+    let written: Vec<(usize, Result<Vec<Term>, OpError>)> = futures_util::stream::iter(wanted.iter().copied())
+        .map(|index| {
+            let topic = syllabus.topics[index].clone();
+            async move { (index, topic_terms(llm, model, brief, &topic, native).await) }
+        })
+        .buffer_unordered(RESEARCH_PARALLEL)
+        .inspect(|_| {
+            progress.done.fetch_add(1, Ordering::Relaxed);
+        })
+        .collect()
+        .await;
+    let mut first_error = None;
+    let mut any = false;
+    for (index, result) in written {
+        match result {
+            Ok(terms) => {
+                syllabus.topics[index].terms = terms;
+                any = true;
+            }
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    match (any, first_error) {
+        (false, Some(error)) => Err(error),
+        _ => Ok(syllabus),
+    }
+}
+
+/// The terms of one topic, in plain words in your language with a model answer in English.
+pub async fn topic_terms(
+    llm: &dyn Llm,
+    model: &str,
+    brief: &Brief,
+    topic: &Topic,
+    native: Lang,
+) -> Result<Vec<Term>, OpError> {
+    ask_json(
+        llm,
+        model,
+        &research::terms_system(native),
+        &research::terms_prompt(brief, topic),
+        3500,
+        research::parse_terms,
+    )
+    .await
+}
+
+/// The few lines worth keeping from a session.
+pub async fn digest(
+    llm: &dyn Llm,
+    model: &str,
+    session: &Session,
+    topic: &str,
+    native: Lang,
+) -> Result<Digest, OpError> {
+    if session.candidate_turns() == 0 {
+        return Err(OpError::Prompt("There was nothing said to take notes from.".into()));
+    }
+    ask_json(
+        llm,
+        model,
+        &research::digest_system(native),
+        &research::digest_prompt(&session.transcript(), topic),
+        1200,
+        research::parse_digest,
     )
     .await
 }
@@ -294,6 +411,84 @@ mod tests {
         assert_eq!(analyze(llm.as_ref(), "m", &brief(), Lang::En).await.unwrap().gaps.len(), 1);
         assert_eq!(question_bank(llm.as_ref(), "m", &brief(), 5, "", Lang::En).await.unwrap().len(), 1);
         assert!(analyze(llm.as_ref(), "m", &Brief::default(), Lang::En).await.is_err());
+    }
+
+    const MAP: &str = r#"{"role": "Backend Engineer", "summary": "About the web.", "topics": [
+      {"name": "OOP", "kind": "concept", "why": "base", "likelihood": 9, "effort": 2},
+      {"name": "REST", "kind": "concept", "why": "api", "likelihood": 8, "effort": 3},
+      {"name": "SQL", "kind": "concept", "why": "db", "likelihood": 7, "effort": 4},
+      {"name": "Kubernetes", "kind": "framework", "why": "ops", "likelihood": 2, "effort": 9},
+      {"name": "Rust", "kind": "language", "why": "x", "likelihood": 1, "effort": 10}]}"#;
+    const TERMS: &str = r#"{"terms": [{"name": "Term", "plain": "Plain.", "analogy": "Like a shop.", "english": "It is a thing.", "follow_ups": ["Why?"], "visual": "A box."}]}"#;
+
+    fn vacancy() -> Brief {
+        let mut brief = brief();
+        brief.set_vacancy("Backend Engineer", "Acme", "Python and PostgreSQL.");
+        brief
+    }
+
+    #[tokio::test]
+    async fn research_ranks_the_topics_then_writes_terms_for_the_vital_few() {
+        let llm = FakeLlm::new(vec![json(MAP), json(TERMS), json(TERMS), json(TERMS)]);
+        let progress = ResearchProgress::default();
+        let syllabus = research(llm.as_ref(), "m", &vacancy(), Lang::Ru, &progress).await.unwrap();
+        assert_eq!(syllabus.topics.len(), 5);
+        assert_eq!(syllabus.role, "Backend Engineer");
+        assert_eq!(syllabus.company, "Acme");
+        assert_eq!(syllabus.native, Lang::Ru);
+        assert!(!syllabus.key.is_empty() && syllabus.made > 0);
+        // OOP, REST and SQL are the vital three (24 of 27); the others wait until asked for
+        for name in ["OOP", "REST", "SQL"] {
+            let topic = &syllabus.topics[syllabus.topic_index(name).unwrap()];
+            assert_eq!(topic.terms.len(), 1, "{name}");
+        }
+        assert!(syllabus.topics[syllabus.topic_index("Kubernetes").unwrap()].terms.is_empty());
+        assert_eq!(llm.calls(), 4, "one map and one request per vital topic");
+        assert_eq!(progress.done.load(Ordering::Relaxed), 4);
+        assert_eq!(progress.total.load(Ordering::Relaxed), 4);
+    }
+
+    #[tokio::test]
+    async fn research_needs_a_vacancy_and_costs_nothing_without_one() {
+        let llm = FakeLlm::new(vec![]);
+        let error = research(llm.as_ref(), "m", &brief(), Lang::En, &ResearchProgress::default()).await.unwrap_err();
+        assert!(error.to_string().contains("Paste the vacancy"));
+        assert_eq!(llm.calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_topic_that_fails_is_kept_without_terms_but_all_failing_is_an_error() {
+        let one_fails = FakeLlm::new(vec![json(MAP), json(TERMS), json("nope"), json("still nope"), json(TERMS)]);
+        let syllabus =
+            research(one_fails.as_ref(), "m", &vacancy(), Lang::En, &ResearchProgress::default()).await.unwrap();
+        let with_terms = syllabus.topics.iter().filter(|t| !t.terms.is_empty()).count();
+        assert_eq!(with_terms, 2, "two of the three vital topics got terms");
+        let all_fail = FakeLlm::new(vec![
+            json(MAP),
+            Reply::failing(LlmError::Unreachable("No AI gateway answers".into())),
+            Reply::failing(LlmError::Unreachable("No AI gateway answers".into())),
+            Reply::failing(LlmError::Unreachable("No AI gateway answers".into())),
+        ]);
+        let error =
+            research(all_fail.as_ref(), "m", &vacancy(), Lang::En, &ResearchProgress::default()).await.unwrap_err();
+        assert!(error.to_string().contains("No AI gateway"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn the_digest_is_made_from_the_session_and_refuses_an_empty_one() {
+        let llm = FakeLlm::new(vec![json(
+            r#"{"vital": ["Encapsulation hides state."], "next": "Do REST.", "hook": "Two left."}"#,
+        )]);
+        let made = digest(llm.as_ref(), "m", &session(), "OOP", Lang::Ru).await.unwrap();
+        assert_eq!(made.vital, vec!["Encapsulation hides state."]);
+        let request = llm.last_request();
+        assert!(
+            request[0].content.contains("in Russian")
+                && request[1].content.contains("CANDIDATE: I build the order API.")
+        );
+        let empty = Session::new(Track::English, Kind::Live, "t");
+        assert!(digest(llm.as_ref(), "m", &empty, "", Lang::En).await.is_err());
+        assert_eq!(llm.calls(), 1);
     }
 
     fn services_with(texts: &[&str], frames: tokio::sync::mpsc::Receiver<Vec<i16>>) -> Services {

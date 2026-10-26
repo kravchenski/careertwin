@@ -29,6 +29,35 @@ impl Default for PrepareView {
     }
 }
 
+/// The job title, the company and the text of the vacancy. Returns whether anything was edited.
+pub fn vacancy_fields(core: &mut Core, ui: &mut Ui) -> bool {
+    let tr = core.tr;
+    let mut changed = false;
+    let title_label = widgets::caps(ui, tr.get(K::JobTitle));
+    changed |= ui
+        .add(TextEdit::singleline(&mut core.vacancy.title).desired_width(f32::INFINITY).margin(vec2(12.0, 9.0)))
+        .labelled_by(title_label.id)
+        .changed();
+    ui.add_space(4.0);
+    let company_label = widgets::caps(ui, tr.get(K::Company));
+    changed |= ui
+        .add(TextEdit::singleline(&mut core.vacancy.company).desired_width(f32::INFINITY).margin(vec2(12.0, 9.0)))
+        .labelled_by(company_label.id)
+        .changed();
+    ui.add_space(4.0);
+    let description_label = widgets::caps(ui, tr.get(K::JobDescription));
+    changed |= ui
+        .add(
+            TextEdit::multiline(&mut core.vacancy.description)
+                .desired_rows(9)
+                .desired_width(f32::INFINITY)
+                .margin(vec2(12.0, 10.0)),
+        )
+        .labelled_by(description_label.id)
+        .changed();
+    changed
+}
+
 pub fn ui(core: &mut Core, view: &mut PrepareView, ui: &mut Ui) -> Option<Nav> {
     let tr = core.tr;
     let mut nav = None;
@@ -45,28 +74,7 @@ pub fn ui(core: &mut Core, view: &mut PrepareView, ui: &mut Ui) -> Option<Nav> {
         widgets::title(ui, tr.get(K::PrepareTitle));
         ui.label(RichText::new(tr.get(K::PrepareIntro)).font(theme::sans(16.0)).color(MUTED));
         ui.add_space(14.0);
-        let title_label = widgets::caps(ui, tr.get(K::JobTitle));
-        changed |= ui
-            .add(TextEdit::singleline(&mut core.vacancy.title).desired_width(f32::INFINITY).margin(vec2(12.0, 9.0)))
-            .labelled_by(title_label.id)
-            .changed();
-        ui.add_space(4.0);
-        let company_label = widgets::caps(ui, tr.get(K::Company));
-        changed |= ui
-            .add(TextEdit::singleline(&mut core.vacancy.company).desired_width(f32::INFINITY).margin(vec2(12.0, 9.0)))
-            .labelled_by(company_label.id)
-            .changed();
-        ui.add_space(4.0);
-        let description_label = widgets::caps(ui, tr.get(K::JobDescription));
-        changed |= ui
-            .add(
-                TextEdit::multiline(&mut core.vacancy.description)
-                    .desired_rows(9)
-                    .desired_width(f32::INFINITY)
-                    .margin(vec2(12.0, 10.0)),
-            )
-            .labelled_by(description_label.id)
-            .changed();
+        changed |= vacancy_fields(core, ui);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let ready = !core.vacancy.description.trim().is_empty();
