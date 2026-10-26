@@ -371,6 +371,18 @@ def main() -> None:
     watch = sub.add_parser("watch", help="Control the agents from this terminal: live feed, approvals, notifications")
     _ = watch.add_argument("--once", action="store_true", help="Print the status and what waits, then exit")
 
+    autopilot = sub.add_parser("autopilot", help="Let the agents find, prepare, fill and send applications without you (on, off, status)")
+    _ = autopilot.add_argument("action", choices=["on", "off", "status"])
+    _ = autopilot.add_argument("--daily-limit", type=int, help="Applications sent per day")
+    _ = autopilot.add_argument("--threshold", type=float, help="Lowest fit that is sent (never below 80)")
+    _ = autopilot.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
+
+    consent = sub.add_parser("consent", help="Let the filler tick the terms and privacy boxes of an application, never advertising ones (on, off, status)")
+    _ = consent.add_argument("action", choices=["on", "off", "status"])
+
+    answers = sub.add_parser("answers", help="Answers kept for every application form (list, add, remove, import)")
+    _ = answers.add_argument("rest", nargs=argparse.REMAINDER)
+
     security = sub.add_parser("security", help="Check how well your secrets and the API are protected")
     _ = security.add_argument("--fix", action="store_true", help="Apply the fixes that are safe (file permissions)")
 
@@ -383,7 +395,7 @@ def main() -> None:
     args = parser.parse_args()
     command: str = args.command or ""
 
-    if command in {"serve", "mcp", "agent", "watch", "security"}:
+    if command in {"serve", "mcp", "agent", "watch", "security", "autopilot", "answers", "consent"}:
         _run_service(command, args)
         return
 
@@ -442,6 +454,20 @@ def _run_service(command: str, args: argparse.Namespace) -> None:
         from careertwin.watch import main as watch_main
 
         watch_main(["--once"] if args.once else [])
+    elif command == "autopilot":
+        from careertwin.automation.autopilot_cli import main as autopilot_main
+
+        raise SystemExit(autopilot_main([args.action, *(["--yes"] if args.yes else []),
+                                         *(["--daily-limit", str(args.daily_limit)] if args.daily_limit else []),
+                                         *(["--threshold", str(args.threshold)] if args.threshold is not None else [])]))
+    elif command == "consent":
+        from careertwin.automation.autopilot_cli import consent_main
+
+        raise SystemExit(consent_main([args.action]))
+    elif command == "answers":
+        from careertwin.automation.autopilot_cli import answers_main
+
+        raise SystemExit(answers_main(args.rest))
     elif command == "security":
         from careertwin.security_check import main as security_main
 

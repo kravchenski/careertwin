@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
-from careertwin.automation import guard
+from careertwin.automation import autopilot, guard
 from careertwin.automation.engine import Engine
 from careertwin.automation.mail import MailError, config as mail_config, configured as mail_configured
 from careertwin.automation.excel import workbook
@@ -18,6 +18,7 @@ from careertwin.automation.models import Answer, Outcome, Settings, Vacancy
 from careertwin.automation.monitor import Target
 from careertwin.automation.stats import attention as attention_items
 from careertwin.automation.stats import stats as pipeline_stats
+from careertwin.automation.salary import SALARY_FIELD
 from careertwin.net import validate_public_url
 from careertwin.automation.sources import SOURCES
 
@@ -157,9 +158,59 @@ async def action(job_id: str, request: Operation):
 @router.post("/jobs/{job_id}/answers")
 async def answer(job_id: str, request: Answer):
     existing(job_id)
-    engine.store.answer(request.question, request.answer, job_id)
+    if request.standing and SALARY_FIELD.search(request.question):
+        raise HTTPException(422, "A salary is settled per vacancy, not for every form")
+    engine.store.answer(request.question, request.answer, "" if request.standing else job_id)
     engine.store.event(job_id, "user_answer", request.model_dump())
-    return {"status": "saved"}
+    resumed = engine.resume_waiting() if request.standing else engine.resume_waiting(job_id)
+    return {"status": "saved", "resumed": resumed}
+
+
+@router.get("/standing-answers")
+async def standing_answers():
+    return engine.store.standing()
+
+
+@router.put("/standing-answers")
+async def save_standing_answer(request: Answer):
+    if SALARY_FIELD.search(request.question):
+        raise HTTPException(422, "A salary is settled per vacancy, not for every form")
+    engine.store.answer(request.question, request.answer)
+    return {"status": "saved", "resumed": engine.resume_waiting()}
+
+
+@router.delete("/standing-answers")
+async def forget_standing_answer(question: str):
+    if not engine.store.forget(question):
+        raise HTTPException(404, "No such standing answer")
+    return {"status": "forgotten"}
+
+
+class Autopilot(BaseModel):
+    on: bool
+    daily_limit: int | None = Field(default=None, ge=1, le=100)
+    threshold: float | None = Field(default=None, ge=0, le=100)
+
+
+@router.get("/autopilot")
+async def get_autopilot():
+    return autopilot.report(engine.store, engine.store.settings(), gateway=await asyncio.to_thread(autopilot.switchyard_reachable))
+
+
+@router.put("/autopilot")
+async def set_autopilot(request: Autopilot):
+    """The candidate's switch. It is not a tool an agent has: only a call with the API token reaches it."""
+    settings = engine.store.settings()
+    if request.on:
+        found = autopilot.blockers(autopilot.readiness(engine.store, settings, gateway=await asyncio.to_thread(autopilot.switchyard_reachable)))
+        if found:
+            raise HTTPException(409, "; ".join(f"{check.title}: {check.detail}" for check in found))
+        engine.store.save_settings(autopilot.enable(settings, daily_limit=request.daily_limit, threshold=request.threshold))
+        engine.store.event(None, "autopilot_on", {"daily_limit": request.daily_limit, "threshold": request.threshold})
+    else:
+        engine.store.save_settings(autopilot.disable(settings))
+        engine.store.event(None, "autopilot_off", {})
+    return autopilot.report(engine.store, engine.store.settings(), gateway=True)
 
 
 @router.post("/jobs/{job_id}/outcome")
