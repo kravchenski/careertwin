@@ -41,6 +41,10 @@ LEXICON: dict[str, dict[str, str]] = {
         r"(studies|university|exams?|classes) .*(work|internship|hours)",
         "start": r"what|why|how|when|where|who|which|can|could|would|do|does|did|are|is|have|has|will|"
         r"tell|describe|explain|walk|talk|give|share|show|name|list|compare|"
+        # a task or a request for a definition, worded as an order
+        r"write|implement|code|design|build|create|solve|find|fix|optimi[sz]e|reverse|convert|parse|sort|"
+        r"count|calculate|compute|merge|refactor|debug|determine|rewrite|identify|define|distinguish|"
+        r"outline|summari[sz]e|elaborate|clarify|"
         # a task or a scenario put to the candidate that is not worded as a question
         r"imagine|suppose|assume|consider|picture|let'?s|let us|i'd like|i would like|"
         r"i want to (?:hear|know|see)|i'?m (?:curious|interested)|i am (?:curious|interested)|"
@@ -200,6 +204,16 @@ def worth_an_answer(text: str, language: str | None = None) -> bool:
     if is_question(value, language):
         return True
     return len(value.split()) >= SENTENCE_WORDS and not _SMALL_TALK.match(value)
+
+
+def mentions(text: str, vocabulary: str) -> bool:
+    """Whether a short utterance names a technology of the vacancy or the candidate ("levoe PostgreSQL"):
+    too short to look like a question, but the model may read a question out of it."""
+    value = " ".join(text.split())
+    if len(value.split()) < 2 or _SMALL_TALK.match(value):
+        return False
+    terms = [term.strip() for term in re.split(r"[,/]", vocabulary) if len(term.strip()) > 2]  # "SQL / PostgreSQL" names two
+    return any(re.search(rf"(?<!\w){re.escape(term)}(?!\w)", value, re.I) for term in terms)
 
 
 def classify(text: str) -> Kind:

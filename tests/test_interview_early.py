@@ -394,3 +394,15 @@ def test_a_task_or_a_scenario_put_to_the_candidate_counts_as_something_to_answer
     # a sentence of some length is shown to the model, which says SKIP when it is only a statement
     assert worth_an_answer(STATEMENT) and not is_question(STATEMENT)
     assert not worth_an_answer("We are based in Gdansk")
+
+
+def test_a_statement_is_shown_to_the_model_once_only(about, tmp_path):
+    more = STATEMENT + " and each of them has its own team and its own way of working with us"
+    session, coach, screen, thread = make(tmp_path, STATEMENT, more, coach=Scripted(("SKIP",)))
+    session._utterances.put((INTERVIEWER, pcm(3.2), True))
+    assert wait_for(lambda: len(coach.asked) == 1)
+    time.sleep(2.1)
+    session._utterances.put((INTERVIEWER, pcm(6.4), True))
+    time.sleep(0.3)
+    assert len(coach.asked) == 1, "a set-up costs one request, not one for every few words more"
+    finish(session, thread)

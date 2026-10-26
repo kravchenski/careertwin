@@ -73,7 +73,10 @@ a guess the candidate has not confirmed: phrase it as "the main reason is probab
 unless the candidate notes confirm it.
 - When ANSWER STYLE is concise, leave out KEY and CONTEXT.
 - When ANSWER LAYOUT is main answer only, reply with just "ANSWER:" and the paragraph: no POINTS, \
-no KEY, no CONTEXT, and start the paragraph at once. It is read aloud, so write it as speech.
+no KEY, no CONTEXT, and start the paragraph at once. It is read aloud, so write it as speech. A task to \
+write, implement, fix or solve something in code is the exception: its ANSWER starts with the complete \
+working code in fenced blocks (one per function the task asks for, each with its language), never a \
+description of the code, and then one or two spoken sentences with the idea and the complexity.
 - Never invent routines, methods, habits, tools or examples that are not in the context. If the \
 context has no such fact, say plainly what is known and what the candidate can offer, and do not \
 make up a plan.
@@ -169,7 +172,9 @@ KIND_HINTS = {
 LAYOUT_HINTS = {
     "main": (
         "ANSWER LAYOUT: main answer only. Write only the ANSWER section, as one spoken paragraph "
-        "the candidate can read aloud."
+        "the candidate can read aloud. If the interviewer asks to write, implement, fix or solve something "
+        "in code, the ANSWER is the complete code in fenced blocks first (a description of code is not "
+        "an answer), then one or two spoken sentences."
     ),
     "lines": "ANSWER LAYOUT: lines to say, then the detailed answer.",
 }
@@ -227,7 +232,7 @@ def user_prompt(
     excerpts = f"RELEVANT CODE FROM THE PROJECT (excerpts)\n{code}\n\n" if code else ""
     heard = f"{LISTENING_HINTS[listening]}\n" if listening in LISTENING_HINTS else ""
     return (
-        f"{brief.render()}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\n"
+        f"{brief.render(kind)}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\n"
         f"INTERVIEWER'S QUESTION: {question}\nTYPE: {kind.value}. {KIND_HINTS[kind]}\n"
         f"INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n"
         f"{STYLE_HINTS.get(style, STYLE_HINTS['standard'])}\n"

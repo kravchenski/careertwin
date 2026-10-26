@@ -22,7 +22,7 @@ from careertwin.interview.coach import CoachError
 from careertwin.interview.languages import LanguageTracker
 from careertwin.interview.prompts import parse_suggestion
 from careertwin.interview.prompts import SKIP, parse_suggestion
-from careertwin.interview.questions import is_question, worth_an_answer
+from careertwin.interview.questions import is_question, mentions, worth_an_answer
 from careertwin.interview.stt import Transcriber
 from careertwin.interview.transcript import TranscriptLog
 from careertwin.interview.vad import FRAME_MS, SAMPLE_RATE, UtteranceSegmenter
@@ -381,13 +381,17 @@ class InterviewSession:
         """
         if speaker != INTERVIEWER or not self.early_after or self.paused.is_set():
             return
-        if self._early_card or self._early_busy or self._early_attempts >= EARLY_ATTEMPTS:
+        if self._early_card or self._early_busy:
             return
         words = len(_words(text))
         if seconds < self.early_after or words < EARLY_MIN_WORDS:
             return
-        if not (is_question(text, self.language.current) or words >= EARLY_LONG_WORDS):
+        asks = is_question(text, self.language.current)
+        if not (asks or words >= EARLY_LONG_WORDS):
             return  # a few words that sound like a statement: wait to hear more or the end of it
+        # a statement is shown to the model once: it is probably the set-up, and every try is a request
+        if self._early_attempts >= (EARLY_ATTEMPTS if asks else 1):
+            return
         now = time.monotonic()
         if self._early_last and (
             now - self._early_last[0] < EARLY_RETRY or words < self._early_last[1] + EARLY_RETRY_WORDS
@@ -421,7 +425,9 @@ class InterviewSession:
     def handle_text(self, speaker: str, text: str) -> None:
         self.log.add(speaker, text)
         self.cb.on_turn(speaker, text)
-        if speaker != INTERVIEWER or not worth_an_answer(text, self.language.current):
+        if speaker != INTERVIEWER or not (
+            worth_an_answer(text, self.language.current) or mentions(text, self.brief.vocabulary())
+        ):
             return
         with self._lock:
             self._pending.append(text)
@@ -554,8 +560,11 @@ class InterviewSession:
                     self._announce(question, early, listening)
                     self.cb.on_suggestion_chunk(text)
             except CoachError as exc:
-                self.cb.on_state("error")
-                self.cb.on_error(str(exc))
+                if not cancel.is_set():  # an answer that was given up on has nothing to report
+                    self.cb.on_state("error")
+                    self.cb.on_error(str(exc))
+                return
+            if cancel.is_set():
                 return
             if not announced and text.strip() and not _skip_verdict(text, final=True):
                 self._announce(question, early, listening)
@@ -566,6 +575,8 @@ class InterviewSession:
                     self.cb.on_status("That was not a question for you, so no answer")
                 return
             self.cb.on_state(self._idle_state())
+            if (fell_back := getattr(self.coach, "fell_back", None)) and not cancel.is_set():
+                self.cb.on_status(f"The first model is rate limited or down: answered by {fell_back}")
             if getattr(self.coach, "last_finish", None) == "length" and not cancel.is_set():
                 self.cb.on_status(
                     "Cut off: the model ran out of room before it finished. "
