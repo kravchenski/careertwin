@@ -70,6 +70,7 @@ class Vacancy(BaseModel):
     description: str = Field(default="", max_length=100_000)
     salary: str = ""
     external_id: str = ""
+    posted_at: str = ""  # the day the employer published it (YYYY-MM-DD) when the source says so
 
     @field_validator("url")
     @classmethod

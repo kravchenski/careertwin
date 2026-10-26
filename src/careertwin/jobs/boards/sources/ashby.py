@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 
-from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title
+from ..base import BaseSourceAdapter, JobListing, clean_location, is_internship_title, to_iso_date
 
 
 class AshbySource(BaseSourceAdapter):
@@ -55,6 +55,7 @@ class AshbySource(BaseSourceAdapter):
                 title=title,
                 url=f"https://jobs.ashbyhq.com/{company_slug}/{j.get('id', '')}",
                 location=clean_location(j.get("locationName", "")),
+                posted_at=to_iso_date(j.get("publishedAt") or j.get("updatedAt")),
                 employment_type=j.get("employmentType", "") or j.get("teamName", ""),
                 is_intern=is_intern,
                 raw=j,

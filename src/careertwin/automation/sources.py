@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
+from careertwin.jobs.boards.base import to_iso_date
 from careertwin.net import fetch_text, safe_async_client
 
 from .models import Settings, Vacancy
@@ -191,6 +192,7 @@ class SearchAgent:
                     location=item.get("candidate_required_location") or item.get("location", ""),
                     salary=str(item.get("salary", "")),
                     external_id=str(item["id"]),
+                    posted_at=to_iso_date(item.get("publication_date") or item.get("date") or item.get("epoch")),
                 )
             )
         return jobs

@@ -383,6 +383,10 @@ def main() -> None:
     answers = sub.add_parser("answers", help="Answers kept for every application form (list, add, remove, import)")
     _ = answers.add_argument("rest", nargs=argparse.REMAINDER)
 
+    dashboard = sub.add_parser("dashboard", help="Open the page that shows what the agents are doing (read-only)")
+    _ = dashboard.add_argument("--no-open", action="store_true", help="Only print the address")
+    _ = dashboard.add_argument("--no-start", action="store_true", help="Do not start the API when it is not running")
+
     security = sub.add_parser("security", help="Check how well your secrets and the API are protected")
     _ = security.add_argument("--fix", action="store_true", help="Apply the fixes that are safe (file permissions)")
 
@@ -395,7 +399,7 @@ def main() -> None:
     args = parser.parse_args()
     command: str = args.command or ""
 
-    if command in {"serve", "mcp", "agent", "watch", "security", "autopilot", "answers", "consent"}:
+    if command in {"serve", "mcp", "agent", "watch", "security", "autopilot", "answers", "consent", "dashboard"}:
         _run_service(command, args)
         return
 
@@ -468,6 +472,18 @@ def _run_service(command: str, args: argparse.Namespace) -> None:
         from careertwin.automation.autopilot_cli import answers_main
 
         raise SystemExit(answers_main(args.rest))
+    elif command == "dashboard":
+        from careertwin.agentic.client import api_url
+        from careertwin.api.dashboard import open_dashboard
+        from careertwin.api.security import client_token
+
+        try:
+            address = open_dashboard(
+                base_url=api_url(), token=client_token(), browser=not args.no_open, start=not args.no_start
+            )
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(address + ("" if args.no_open else "  (opened in your browser)"))
     elif command == "security":
         from careertwin.security_check import main as security_main
 

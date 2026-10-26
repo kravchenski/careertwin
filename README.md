@@ -39,7 +39,7 @@ The language model is scripted so the recording is repeatable; the API, tools, s
 |---|---|---|
 | **Five job-search agents** | A monitor that watches company career sites, a résumé builder, a form filler that works in your signed-in Chrome, a mail agent that reads replies and sends approved applications, and an Excel agent with a dashboard. You control them from a terminal and approve every send; secrets never reach a model. | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Interview assistant** | A compact window that transcribes the call and writes what to say, in first person, from your real experience. Solves a task from a screenshot, defends a project from its code, speaks seven languages. | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
-| **MCP server and HTTP API** | 30 typed tools and a documented REST API that any agent or script can drive. | [docs/AGENTS.md](docs/AGENTS.md) |
+| **MCP server and HTTP API** | 32 typed tools and a documented REST API that any agent or script can drive. | [docs/AGENTS.md](docs/AGENTS.md) |
 | **Document library** | A career knowledge graph, nine PDF templates, an ATS checker, a vision-based quality check and a repair loop. | [docs/DOCUMENTS.md](docs/DOCUMENTS.md) |
 
 ## Quick start
@@ -151,6 +151,7 @@ flowchart LR
 | **The HTTP API** | `uv run careertwin serve`, then call it with the token from `data/api-token` | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Your control terminal** | `uv run careertwin watch`: the live feed, an approval question for everything that is about to leave, desktop notifications | [docs/AUTOMATION.md](docs/AUTOMATION.md) |
 | **Autopilot** | `uv run careertwin autopilot on`: your own switch for search, CV, form and send without you; stops at accounts, CAPTCHAs, unanswered questions and the daily limit; answers kept once with `careertwin answers` | [docs/AGENTS.md](docs/AGENTS.md#autopilot) |
+| **A page to watch them** | `uv run careertwin dashboard`: starts the API if it is not running and opens a page with the flow of the agents, the newest vacancies by site with their fit and buttons to move them on, what waits for you and a live feed | [docs/AGENTS.md](docs/AGENTS.md) |
 | **The security check** | `uv run careertwin security` | [docs/SECURITY.md](docs/SECURITY.md) |
 | **The interview window** | `uv run --extra interview careertwin-interview` | [docs/INTERVIEW.md](docs/INTERVIEW.md) |
 

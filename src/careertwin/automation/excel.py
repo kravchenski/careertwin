@@ -13,6 +13,7 @@ from careertwin.profile.context import context_path, read_context
 from careertwin.settings import OUTPUT_DIR
 from careertwin.vault import redact, redact_data
 
+from . import freshness
 from .mail import MailStore
 from .monitor import WatchStore
 from .stats import stats
@@ -97,6 +98,7 @@ def workbook(store: Store) -> bytes:
             "Created",
             "Updated",
             "Error",
+            "Posted",
         ]
     )
     for job in store.jobs():
@@ -118,9 +120,31 @@ def workbook(store: Store) -> bytes:
                     job["created_at"],
                     job["updated_at"],
                     job["error"],
+                    vacancy.get("posted_at", ""),
                 ]
             ]
         )
+    fresh = book.create_sheet("Newest")
+    fresh.append(["Posted", "Days ago", "Dated by the employer", "Site", "Company", "Role", "Location", "Fit", "Category", "Status", "Link"])
+    for row in freshness.newest(store, limit=2000):
+        if row["state"] in freshness.HIDDEN:  # skipped or closed: they stay in the Applications sheet
+            continue
+        fresh.append(
+            [
+                row["day"],
+                row["age_days"] if row["age_days"] is not None else "",
+                "yes" if row["dated"] else "found on this day",
+                *[safe(row[key]) for key in ("source", "company", "title", "location")],
+                row["score"] if row["score"] is not None else "",
+                row["category"],
+                row["state"],
+                safe(row["url"]),
+            ]
+        )
+        link = fresh.cell(row=fresh.max_row, column=11)
+        if str(row["url"]).startswith(("http://", "https://")):
+            link.hyperlink = row["url"]
+    book.active = book.sheetnames.index("Newest")  # the file opens on the list to look at first
     answers = book.create_sheet("Answers")
     answers.append(["Job ID", "Date", "Field", "Value part", "Exact value", "Evidence"])
     history = book.create_sheet("History")

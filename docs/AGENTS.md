@@ -29,6 +29,20 @@ make api                        # CareerTwin API on http://127.0.0.1:8000
 
 Fill `ABOUT.md` (see `ABOUT.example.md`) and set `SWITCHYARD_*` in `.env`.
 
+Watch them while they work:
+
+```bash
+uv run careertwin dashboard     # starts the API if it is not running, opens a read only page, already signed in
+uv run careertwin watch         # the terminal where you approve, send and stop
+```
+
+The page shows the flow (find, rank, prepare, fill, you, submit, replies, outcome) with the stage that is
+working lit up, the newest vacancies first (each with the site it came from, the day it was published and its
+fit, and buttons to rank, prepare the CV, fill the form or skip), the step each vacancy has reached, what waits
+for you, the watched company sites and a live feed, and it downloads the XLSX. Sending an application or an
+email, and stopping everything, stay in `careertwin watch`. Open it from another machine through an
+SSH tunnel, as in the terminal case; the page asks for the token when it is not given one.
+
 ## 2. Pick how the agent reaches the tools
 
 ### A. The built-in agent
@@ -66,6 +80,25 @@ The HTTP transport binds to localhost; keep it there.
 OpenAI function-calling specs and `get_tool(name).call(args)` runs one tool,
 so any OpenAI-compatible client can use the same tools.
 
+## Searching the web like a web search
+
+CareerTwin does not search the web itself: an agent that has a web search (Claude Code, Codex, ChatGPT through
+Switchyard) does, and files what it finds. That gives the quality of a real search, with the pipeline doing the
+rest. A good loop for a candidate in one city:
+
+1. Search for fresh postings, one query per site: `site:myworkdayjobs.com python intern poland`,
+   `linkedin.com/jobs junior python developer gdansk`, and the local boards (Just Join IT, Bulldog Job, Pracuj.pl).
+2. For every Workday tenant the search turns up, call `discover_workday` with any link of it: it reads the
+   newest vacancies of the country or the city from the site's own JSON, each with the exact day it was published.
+3. For every other posting, open the page, take the title, company, location, the text and the date, and call
+   `import_vacancy` with `posted_at` (`YYYY-MM-DD`; leave it empty when the page shows only an expiry date).
+4. Call `process_vacancy` with `rank` on the ones that fit the level and the place, a few at a time.
+5. `newest_vacancies` or the `/dashboard` page shows them newest first with the site and the fit; the XLSX
+   (`/v1/automation/export.xlsx`, the "Newest" sheet) holds the same list.
+
+LinkedIn and Glassdoor offer no API, so the agent reads their public result pages like a person would; a page that
+asks for a login is left out.
+
 ## Tools
 
 | Tool | Changes state | What it does |
@@ -79,6 +112,8 @@ so any OpenAI-compatible client can use the same tools.
 | `wait_for_vacancy` | no | Wait for a queued step to finish |
 | `import_vacancy` | local | Add a vacancy to the pipeline |
 | `import_posting_text` | local | File a vacancy from pasted text: matched to the one already in the pipeline, or filed with its link |
+| `discover_workday` | local | Read the newest vacancies of a Workday career site (any `*.myworkdayjobs.com` link, for example from a web search for `site:myworkdayjobs.com python intern poland`) in a country or city, each with the day it was published |
+| `newest_vacancies` | no | The vacancies in the pipeline, newest first, with the site each is on (LinkedIn, Workday, Pracuj.pl...), the day it was published and its fit |
 | `update_search_settings` | local | Queries, sources, threshold, limits |
 | `start_search_cycle`, `stop_agents` | local | Run or cancel the search agent |
 | `process_vacancy` | local | Queue `rank`, `prepare`, `fill` or `verify` |

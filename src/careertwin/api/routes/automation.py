@@ -6,11 +6,11 @@ from typing import Literal
 import httpx
 import asyncio
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
-from careertwin.automation import autopilot, guard
+from careertwin.automation import autopilot, freshness, guard
 from careertwin.automation.engine import Engine
 from careertwin.automation.mail import MailError, config as mail_config, configured as mail_configured
 from careertwin.automation.excel import workbook
@@ -19,6 +19,7 @@ from careertwin.automation.monitor import Target
 from careertwin.automation.stats import attention as attention_items
 from careertwin.automation.stats import stats as pipeline_stats
 from careertwin.automation.salary import SALARY_FIELD
+from careertwin.jobs import workday
 from careertwin.net import validate_public_url
 from careertwin.automation.sources import SOURCES
 
@@ -130,6 +131,49 @@ async def import_job(vacancy: Vacancy):
     job = engine.store.add(vacancy)
     engine.store.event(job["id"], "imported", {"url": vacancy.url})
     return job
+
+
+@router.get("/newest")
+async def newest_vacancies(days: int = Query(0, ge=0, le=365), limit: int = Query(100, ge=1, le=500)):
+    """The newest vacancies first, from every source, with the site each is on and its fit."""
+    return freshness.newest(engine.store, days=days, limit=limit)
+
+
+class WorkdayRequest(BaseModel):
+    url: str = Field(description="Any link to a posting or to the career site on *.myworkdayjobs.com")
+    query: str = Field(default="", max_length=200)
+    place: str = Field(default="Poland", max_length=80, description='A country or a city; "" for anywhere')
+    limit: int = Field(default=20, ge=1, le=60)
+    days: int = Field(default=0, ge=0, le=365, description="Keep only vacancies published in this many days")
+
+
+@router.post("/workday")
+async def workday_discover(request: WorkdayRequest):
+    """Read the newest vacancies of a Workday career site and file them in the pipeline."""
+    site = workday.parse_site(request.url)
+    if site is None:
+        raise HTTPException(422, "That is not a link to a Workday career site (*.myworkdayjobs.com)")
+    try:
+        items = await workday.newest(site, request.query, place=request.place, limit=request.limit, days=request.days)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(502, f"The Workday site did not answer: {type(exc).__name__}") from exc
+    jobs = []
+    for item in items:
+        job = engine.store.add(Vacancy(**item))
+        engine.store.event(job["id"], "imported", {"url": item["url"], "via": "workday"})
+        jobs.append(job["id"])
+    return {"site": f"{site.tenant}/{site.name}", "found": len(items), "jobs": jobs}
+
+
+@router.post("/jobs/{job_id}/skip")
+async def skip(job_id: str):
+    """The candidate does not want this one: it leaves the lists and nothing more is done on it."""
+    job = existing(job_id)
+    if job["state"] in {"submitted", "interview", "offer", "hired", "rejected", "withdrawn", "submitting"}:
+        raise HTTPException(409, "This application already has a recorded outcome")
+    engine.store.update(job_id, state="skip", error="")
+    engine.store.event(job_id, "user_skip", {"previous_state": job["state"]})
+    return engine.store.job(job_id)
 
 
 @router.get("/jobs/{job_id}")

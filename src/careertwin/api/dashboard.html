@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="What the CareerTwin agents are doing right now, from the API on this computer.">
+<meta name="robots" content="noindex">
+<title>CareerTwin agents</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181818'/%3E%3Crect x='6' y='6' width='20' height='6' rx='2' fill='%237AA7FF'/%3E%3Crect x='6' y='14' width='14' height='6' rx='2' fill='%23E5B15C'/%3E%3Crect x='6' y='22' width='8' height='4' rx='2' fill='%236FCF97'/%3E%3C/svg%3E">
+<style>
+/* Fonts are embedded: the page may load nothing from outside. Geist, SIL Open Font License 1.1. */
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url(data:font/woff2;base64,{{GEIST_LATIN}}) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url(data:font/woff2;base64,{{GEIST_LATIN_EXT}}) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url(data:font/woff2;base64,{{GEIST_MONO_LATIN}}) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* Spacing, radius and motion come from fixed tables; nothing else is used. */
+:root, :root[data-theme="light"] {
+  --s0: 0; --s25: 2px; --s50: 4px; --s75: 8px; --s100: 12px; --s200: 16px; --s300: 24px;
+  --s400: 32px; --s500: 40px; --s600: 48px; --s700: 64px;
+  --r-sm: 2px; --r: 4px; --r-lg: 8px; --r-xl: 12px; --r-2xl: 16px; --r-full: 9999px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font: "Geist", ui-sans-serif, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --bg: #f4f4f1; --panel: #ffffff; --raised: #ecece8; --hover: #e7e7e2; --line: #dcdcd6; --field: #ffffff;
+  --ink: #1b1c1e; --muted: #5f6269; --accent: #2a58c8; --wait: #8f5300; --ok: #1d6b45; --bad: #a82a2a; --idle: #8b8f98;
+  --dots: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyNCcgaGVpZ2h0PScyNCc+PGNpcmNsZSBjeD0nMycgY3k9JzMnIHI9JzEuMScgZmlsbD0nI2MyYzJiZScvPjwvc3ZnPg==);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --panel: #181818; --raised: #1f1f1f; --hover: #272727; --line: #313131; --field: #131209;
+    --ink: #ececec; --muted: #a0a0a0; --accent: #7aa7ff; --wait: #e5b15c; --ok: #6fcf97; --bad: #f28b8b; --idle: #6f6f6f;
+    --dots: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyNCcgaGVpZ2h0PScyNCc+PGNpcmNsZSBjeD0nMycgY3k9JzMnIHI9JzEuMScgZmlsbD0nIzI2MjYyNicvPjwvc3ZnPg==);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000000; --panel: #181818; --raised: #1f1f1f; --hover: #272727; --line: #313131; --field: #131209;
+  --ink: #ececec; --muted: #a0a0a0; --accent: #7aa7ff; --wait: #e5b15c; --ok: #6fcf97; --bad: #f28b8b; --idle: #6f6f6f;
+  --dots: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyNCcgaGVpZ2h0PScyNCc+PGNpcmNsZSBjeD0nMycgY3k9JzMnIHI9JzEuMScgZmlsbD0nIzI2MjYyNicvPjwvc3ZnPg==);
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/20px var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, p { margin: 0; }
+h1 { font: 600 24px/32px var(--font); text-wrap: balance; }
+h2 { font: 600 16px/24px var(--font); color: var(--ink); margin-bottom: var(--s200); text-wrap: balance; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+p { text-wrap: pretty; }
+code { font: 400 12px/16px var(--mono); background: var(--raised); border-radius: var(--r); padding: var(--s25) var(--s50); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: var(--s400) var(--s200) var(--s600); }
+.skip { position: absolute; left: var(--s200); top: var(--s75); padding: var(--s75) var(--s100); background: var(--panel); border: 1px solid var(--accent); border-radius: var(--r-lg); font-weight: 600; transform: translateY(-200%); transition: transform 500ms var(--ease); z-index: 5; color: var(--ink); }
+.skip:focus { transform: translateY(0); }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s50) var(--s300); margin-bottom: var(--s500); }
+.pills { display: flex; flex-wrap: wrap; gap: var(--s0) var(--s100); margin-left: auto; align-items: baseline; font-size: 12px; line-height: 16px; color: var(--muted); }
+.pill b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pill + .pill::before { content: "\00b7"; margin-right: var(--s100); }
+.pill.bad, .pill.off { color: var(--bad); }
+.pill.bad b, .pill.off b { color: var(--bad); }
+.pills button { font-size: 12px; line-height: 16px; font-weight: 400; color: var(--muted); border: 0; background: none; padding: var(--s0) var(--s0) var(--s0) var(--s100); }
+.pills button:hover { color: var(--ink); background: none; text-decoration: underline; }
+button { font: 600 14px/20px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s50) var(--s100); cursor: pointer; transition: background-color 300ms var(--ease), border-color 300ms var(--ease); }
+button:hover { background: var(--hover); }
+button:active { transform: scale(0.98); }
+button.main { font-size: 16px; line-height: 24px; }
+button:focus-visible, input:focus-visible, .skip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { border: 1px solid var(--bad); background: var(--panel); border-radius: var(--r-lg); padding: var(--s100) var(--s200); margin-bottom: var(--s200); }
+.notice b { color: var(--bad); font-weight: 600; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s300); }
+.canvas { display: flex; align-items: flex-start; justify-content: center; padding: var(--s400) var(--s300) var(--s300); margin-bottom: var(--s400); overflow-x: auto; background-color: var(--panel); background-image: var(--dots); background-size: 24px 24px; border: 1px solid var(--line); border-radius: var(--r-lg); }
+.item { width: 112px; flex: none; display: grid; justify-items: center; gap: var(--s25); text-align: center; }
+.node { width: 48px; height: 48px; margin-bottom: var(--s75); display: grid; place-items: center; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); transition: border-color 300ms var(--ease); }
+.node svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.item .name { font-weight: 600; }
+.item .fig { font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.item .sub { color: var(--muted); font-size: 12px; line-height: 16px; min-height: 16px; text-wrap: pretty; }
+.item .state { font-size: 12px; line-height: 16px; font-weight: 600; }
+.link { width: 24px; height: 48px; flex: none; display: grid; place-items: center; color: var(--idle); }
+.link svg { width: 48px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.item[data-mode="active"] .node { border-color: var(--accent); }
+.item[data-mode="active"] .state { color: var(--accent); }
+.item[data-mode="waiting"] .node { border-color: var(--wait); }
+.item[data-mode="waiting"] .state { color: var(--wait); }
+.item[data-mode="problem"] .node { border-color: var(--bad); }
+.item[data-mode="problem"] .state { color: var(--bad); }
+@keyframes blink { 50% { opacity: 0.4; } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--s400); align-items: start; }
+.stack { display: grid; gap: var(--s400); }
+.empty { color: var(--muted); display: grid; gap: var(--s75); }
+.empty strong { color: var(--ink); font-weight: 600; }
+.jobs, .feed { list-style: none; margin: 0; padding: 0; }
+.jobs { display: grid; gap: var(--s200); }
+.job { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s50) var(--s200); }
+.job .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job .c { color: var(--muted); font-weight: 400; }
+.job .where { grid-column: 1; font-size: 12px; line-height: 16px; color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--s50) var(--s75); align-items: center; }
+.track { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: var(--s50); align-items: center; }
+.seg { width: 24px; height: 8px; border-radius: var(--r-sm); background: var(--line); }
+.seg.done { background: var(--ok); }
+.seg.now { background: var(--accent); animation: blink 1600ms var(--ease) infinite; }
+.seg.waiting { background: var(--wait); }
+.seg.problem { background: var(--bad); }
+.tag { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.tag.wait { color: var(--wait); } .tag.bad { color: var(--bad); }
+.feed { display: grid; gap: var(--s75); max-height: 520px; overflow: auto; }
+.feed li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: var(--s25) var(--s100); }
+.feed time { color: var(--muted); font-size: 12px; line-height: 20px; font-variant-numeric: tabular-nums; }
+.feed .fresh { animation: rise 500ms var(--ease); }
+.need { display: grid; gap: var(--s50); }
+.needs { display: grid; gap: var(--s100); }
+.need .d { color: var(--muted); font-size: 12px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table { width: 100%; border-collapse: separate; border-spacing: 0 var(--s75); font-size: 14px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; line-height: 16px; padding: 0 var(--s100) 0 0; }
+td { padding: 0 var(--s100) 0 0; font-variant-numeric: tabular-nums; }
+td.err { color: var(--bad); }
+.bars { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: var(--s75); align-items: end; }
+.day { display: grid; gap: var(--s50); justify-items: center; }
+.col { width: 100%; display: flex; gap: var(--s25); align-items: end; height: 80px; }
+.col i { flex: 1; border-radius: var(--r-sm) var(--r-sm) 0 0; }
+.col .f { background: var(--accent); } .col .s { background: var(--ok); } .col .r { background: var(--wait); }
+.day small { color: var(--muted); font-size: 12px; line-height: 16px; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s75) var(--s200); margin-bottom: var(--s100); }
+.head h2 { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s75); margin-left: auto; align-items: center; }
+.chips.row { margin: 0 0 var(--s200); }
+.hidden-note { color: var(--muted); font-size: 12px; line-height: 16px; margin-top: var(--s100); }
+.chip { font-size: 12px; line-height: 16px; font-weight: 400; padding: var(--s25) var(--s75); border-radius: var(--r); }
+.chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); font-weight: 600; }
+.new { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s100); }
+.new li { display: grid; grid-template-columns: 48px 96px minmax(0, 1fr) 48px auto; gap: var(--s25) var(--s100); align-items: center; }
+.new .when { font-size: 12px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.new .when.exact { color: var(--ink); }
+.new .what { min-width: 0; }
+.new .what a { color: var(--ink); font-weight: 600; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; transition: color 300ms var(--ease); }
+.new .what a:hover { color: var(--accent); text-decoration: underline; }
+.new .what small { color: var(--muted); font-size: 12px; line-height: 16px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new .fit { font: 600 16px/24px var(--font); font-variant-numeric: tabular-nums; text-align: right; }
+.new .fit.dim { color: var(--muted); font-weight: 400; font-size: 12px; line-height: 16px; }
+.moves { display: flex; flex-wrap: wrap; gap: var(--s50); justify-content: flex-end; }
+.moves button { font-size: 12px; line-height: 16px; font-weight: 400; color: var(--muted); border: 0; background: none; padding: var(--s25) var(--s50); }
+.moves button:first-child { color: var(--ink); font-weight: 600; }
+.moves button:hover { background: none; color: var(--ink); text-decoration: underline; }
+.moves .note { color: var(--muted); font-size: 12px; line-height: 16px; }
+.moves .note.bad { color: var(--bad); }
+.legend { display: flex; gap: var(--s200); font-size: 12px; line-height: 16px; color: var(--muted); margin-top: var(--s200); flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: var(--r-sm); margin-right: var(--s75); background: var(--c); }
+.lg-ok { --c: var(--ok); } .lg-go { --c: var(--accent); } .lg-wait { --c: var(--wait); } .lg-bad { --c: var(--bad); }
+.statrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s300); }
+.stat .n { font: 600 24px/32px var(--font); font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--muted); font-size: 12px; line-height: 16px; }
+.login { max-width: 480px; margin: var(--s700) auto 0; display: grid; gap: var(--s100); }
+.login p { color: var(--muted); }
+.login label { font-weight: 600; }
+.login input { width: 100%; font: 400 14px/20px var(--mono); padding: var(--s75) var(--s100); border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--field); color: var(--ink); }
+.login button { justify-self: start; }
+footer { color: var(--muted); font-size: 12px; line-height: 16px; margin-top: var(--s300); }
+[hidden] { display: none !important; }
+/* Before the first answer the shapes of the page are shown, not a spinner. */
+[aria-busy="true"] .fig, [aria-busy="true"] .sub, [aria-busy="true"] .state, [aria-busy="true"] .skeleton { color: transparent; background: var(--hover); border-radius: var(--r); animation: blink 1600ms var(--ease) infinite; }
+[aria-busy="true"] .fig { width: 64px; }
+.skeleton { height: 40px; }
+@media (max-width: 1100px) {
+  .canvas { flex-wrap: wrap; row-gap: var(--s400); }
+  .link { display: none; }
+  .item { width: 25%; }
+  .grid { grid-template-columns: 1fr; }
+  .new li { grid-template-columns: 56px 1fr 48px; }
+  .new .site, .new .moves { grid-column: 1 / -1; }
+}
+@media (max-width: 620px) { .item { width: 50%; } .statrow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) {
+  .seg.now, [aria-busy="true"] * { animation: none !important; }
+  .feed .fresh { animation: fade 500ms var(--ease); }
+  .skip, button { transition: opacity 300ms var(--ease), background-color 300ms var(--ease); }
+  .skip { transform: none; opacity: 0; } .skip:focus { opacity: 1; }
+  button:active { transform: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+<div class="wrap">
+  <section class="login panel" id="login" hidden aria-labelledby="login-title">
+    <h1 id="login-title">CareerTwin agents</h1>
+    <p>This page reads from the API on this computer. Paste its token, which is in the file <code>data/api-token</code>, or open the page with <code>careertwin dashboard</code>. The token stays in this tab only.</p>
+    <label for="token">API token</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false">
+    <button id="signin" class="main" type="button">Open the dashboard</button>
+    <p id="login-error" class="notice" role="alert" hidden></p>
+  </section>
+
+  <main id="main" hidden aria-busy="true">
+    <header>
+      <h1>CareerTwin agents</h1>
+      <div class="pills" id="pills"></div>
+    </header>
+    <p class="notice" id="killed" role="status" hidden><b>The kill switch is on.</b> Nothing is submitted or sent until it is lifted.</p>
+    <p class="notice" id="problem" role="alert" hidden></p>
+
+    <section aria-labelledby="h-flow">
+      <h2 class="sr" id="h-flow">How the work flows</h2>
+      <div class="canvas" id="flow" role="list"></div>
+    </section>
+
+    <div class="grid">
+      <div class="stack">
+        <section class="panel" aria-labelledby="h-new">
+          <div class="head">
+            <h2 id="h-new">Newest vacancies</h2>
+            <div class="chips" id="order"></div>
+            <button id="xlsx" type="button">Download XLSX</button>
+          </div>
+          <div class="chips row" id="sites"></div>
+          <ul class="new" id="newest"></ul>
+        </section>
+        <section class="panel" aria-labelledby="h-jobs">
+          <h2 id="h-jobs">Vacancies and where each one is</h2>
+          <ul class="jobs" id="jobs"></ul>
+          <div class="legend">
+            <span class="lg-ok">done</span><span class="lg-go">working now</span>
+            <span class="lg-wait">waiting for you</span><span class="lg-bad">needs a look</span>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="h-monitor">
+          <h2 id="h-monitor">Watched company sites</h2>
+          <div id="monitor"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-days">
+          <h2 id="h-days">Last 14 days</h2>
+          <div class="bars" id="days"></div>
+          <div class="legend"><span class="lg-go">found</span><span class="lg-ok">sent</span><span class="lg-wait">replies</span></div>
+        </section>
+      </div>
+      <div class="stack">
+        <section class="panel" aria-labelledby="h-needs">
+          <h2 id="h-needs">Waiting for you</h2>
+          <div class="needs" id="needs"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-mail">
+          <h2 id="h-mail">Mail</h2>
+          <div class="statrow" id="mail"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-feed">
+          <h2 id="h-feed">Live feed</h2>
+          <ul class="feed" id="feed"></ul>
+        </section>
+      </div>
+    </div>
+    <footer>From here you can rank, prepare, fill and skip. Sending an application or an email, and stopping everything, stay in <code>careertwin watch</code>.</footer>
+  </main>
+</div>
+<script>
+"use strict";
+const API = "/v1/automation";
+const NEWEST = "/newest?days=60&limit=80";
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+};
+const clip = (value, max) => {
+  const text = String(value ?? "").replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").trim();
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+};
+const code = (text) => el("code", null, text);
+
+let token = "";
+try { token = sessionStorage.getItem("careertwin-token") || ""; } catch (_) { /* storage can be blocked */ }
+if (location.hash.length > 1) {
+  token = decodeURIComponent(location.hash.slice(1));
+  try { sessionStorage.setItem("careertwin-token", token); } catch (_) { /* kept in memory only */ }
+  history.replaceState(null, "", location.pathname);  // the token does not stay in the address bar
+}
+
+async function send(path, body) {
+  const response = await fetch(API + path, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  if (response.status === 401) throw new Unauthorized();
+  if (!response.ok) {
+    let detail = "";
+    try { detail = (await response.json()).detail || ""; } catch (_) { /* no body */ }
+    throw new Error(clip(detail, 120) || "answered " + response.status);
+  }
+  return response.json();
+}
+
+class Unauthorized extends Error {}
+async function get(path) {
+  const response = await fetch(API + path, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+  if (response.status === 401) throw new Unauthorized();
+  if (!response.ok) throw new Error(path + " answered " + response.status);
+  return response.json();
+}
+
+// ---- what a vacancy's state means ---------------------------------------------------------------
+// done = steps completed (of 7), now = the step in progress, mode = how to paint it.
+const STEPS = ["Found", "Ranked", "Prepared", "Filled", "Approved", "Sent", "Reply"];
+const STATES = {
+  new: { done: 1, now: -1, text: "found, waiting to be ranked" },
+  ranking: { done: 1, now: 1, mode: "active", text: "being ranked" },
+  priority: { done: 2, now: -1, text: "ranked as a priority" },
+  stretch: { done: 2, now: -1, text: "ranked as a stretch" },
+  needs_info: { done: 2, now: -1, text: "ranked, the model is unsure" },
+  skip: { done: 2, now: -1, stop: true, text: "ranked: skip" },
+  preparing: { done: 2, now: 2, mode: "active", text: "writing the CV and letter" },
+  prepared: { done: 3, now: -1, text: "CV and letter ready" },
+  filling: { done: 3, now: 3, mode: "active", text: "filling the form" },
+  awaiting_answers: { done: 3, now: 3, mode: "waiting", text: "the form asks you a question" },
+  form_ready: { done: 4, now: 4, mode: "waiting", text: "filled, waits for your yes" },
+  submitting: { done: 4, now: 5, mode: "active", text: "submitting" },
+  verifying: { done: 4, now: 5, mode: "active", text: "checking the confirmation" },
+  submitted: { done: 6, now: -1, text: "sent" },
+  submission_uncertain: { done: 5, now: 5, mode: "problem", text: "sent, no confirmation seen" },
+  needs_review: { done: 4, now: 4, mode: "problem", text: "stopped, needs your review" },
+  interview: { done: 7, now: -1, text: "interview" },
+  offer: { done: 7, now: -1, text: "offer" },
+  hired: { done: 7, now: -1, text: "hired" },
+  rejected: { done: 7, now: -1, mode: "problem", text: "rejected" },
+  withdrawn: { done: 7, now: -1, stop: true, text: "withdrawn" },
+  closed: { done: 1, now: -1, stop: true, text: "closed on the company site" },
+};
+const stateOf = (name) => STATES[name] || { done: 0, now: -1, text: String(name).replace(/_/g, " ") };
+
+// ---- the cards of the flow ---------------------------------------------------------------------
+const FLOW = [
+  { id: "find", name: "Find", role: "Watches company sites and job boards" },
+  { id: "rank", name: "Rank", role: "Scores each vacancy against your facts" },
+  { id: "prepare", name: "Prepare", role: "Writes the CV and the cover letter" },
+  { id: "fill", name: "Fill", role: "Fills the form in your Chrome" },
+  { id: "you", name: "You", role: "Nothing goes out without your yes" },
+  { id: "send", name: "Submit", role: "Presses submit after your yes" },
+  { id: "mail", name: "Replies", role: "Reads the inbox and drafts answers" },
+  { id: "result", name: "Outcome", role: "Interviews, offers and rejections" },
+];
+const NS = "http://www.w3.org/2000/svg";
+const ICONS = {
+  find: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"],
+  rank: ["M5 20v-6", "M12 20V5", "M19 20v-10"],
+  prepare: ["M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M14 3v5h5", "M9 13h6", "M9 17h4"],
+  fill: ["M5 5h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z", "M8 10h8", "M8 14h5"],
+  you: ["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21a8 8 0 0 1 16 0"],
+  send: ["M21 3L10 14", "M21 3l-6 18-4-8-8-4z"],
+  mail: ["M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z", "M3 8l9 6 9-6"],
+  result: ["M6 21V4", "M6 4h11l-2 4 2 4H6"],
+};
+function drawing(paths, view) {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", view || "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of paths) {
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
+}
+const cards = {};
+FLOW.forEach((item, position) => {
+  if (position) {
+    const link = el("div", "link");
+    link.setAttribute("aria-hidden", "true");
+    link.append(drawing(["M0 6h46", "M41 1l5 5-5 5"], "0 0 48 12"));
+    $("flow").append(link);
+  }
+  const box = el("div", "item");
+  box.setAttribute("role", "listitem");
+  box.title = item.role;
+  const tile = el("div", "node");
+  tile.append(drawing(ICONS[item.id]));
+  const parts = { num: el("div", "fig", "none yet"), sub: el("div", "sub", ""), state: el("div", "state", "") };
+  box.append(tile, el("div", "name", item.name), parts.num, parts.sub, parts.state);
+  box.dataset.mode = "idle";
+  cards[item.id] = { card: box, ...parts };
+  $("flow").append(box);
+});
+function paint(id, figure, sub, mode, state) {
+  const c = cards[id];
+  c.num.textContent = figure;
+  c.sub.textContent = sub;
+  c.card.dataset.mode = mode;
+  c.state.textContent = mode === "idle" ? "" : state;
+}
+
+// ---- rendering -----------------------------------------------------------------------------------
+const data = { status: null, summary: null, attention: [], monitor: null, jobs: [], events: [], newest: [] };
+let siteFilter = "";
+let orderBy = "newest";
+let firstFeed = true;
+let lastEventId = 0;
+
+function render() {
+  const { status, summary } = data;
+  if (!status || !summary) return;
+  $("main").setAttribute("aria-busy", "false");
+  renderPills(status);
+  $("killed").hidden = !status.stopped;
+
+  const reached = new Array(7).fill(0);
+  const working = new Array(7).fill(0);
+  const waiting = new Array(7).fill(0);
+  const problem = new Array(7).fill(0);
+  for (const job of data.jobs) {
+    const s = stateOf(job.state);
+    if (s.stop) continue;
+    for (let i = 0; i < Math.min(s.done, 7); i++) reached[i]++;
+    if (s.now >= 0) {
+      if (s.mode === "active") working[s.now]++;
+      else if (s.mode === "waiting") waiting[s.now]++;
+      else if (s.mode === "problem") problem[s.now]++;
+    }
+  }
+  const watching = summary.monitor ? summary.monitor.watching : 0;
+  const failing = summary.monitor ? summary.monitor.failing : 0;
+  const findActive = status.running || status.monitoring;
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+  paint("find", summary.jobs + " found", watching ? plural(watching, "company", "companies") + " watched" + (failing ? ", " + failing + " failing" : "") : "no company watched",
+    findActive ? "active" : "idle", status.monitoring ? "visiting company sites" : status.running ? "searching" : "");
+  const notRanked = data.jobs.filter((job) => job.state === "new").length;
+  for (const [id, index, word, rest] of [["rank", 1, "ranked", notRanked ? notRanked + " not ranked yet" : ""], ["prepare", 2, "prepared", ""], ["fill", 3, "filled", ""]]) {
+    const mode = problem[index] ? "problem" : working[index] ? "active" : waiting[index] ? "waiting" : "idle";
+    const text = working[index] ? "working on " + working[index] : waiting[index] ? "waiting for you: " + waiting[index] : problem[index] ? "needs a look: " + problem[index] : "";
+    paint(id, reached[index] + " " + word, rest, mode, text);
+  }
+  const attention = data.attention;
+  paint("you", attention.length ? attention.length + " to decide" : "nothing to decide", "", attention.length ? "waiting" : "idle", "waiting for you");
+  const sendMode = problem[5] ? "problem" : working[5] ? "active" : "idle";
+  paint("send", summary.applied + " sent", summary.submitted_today + " today", sendMode, working[5] ? "submitting" : "check the confirmation");
+  const mail = summary.mail || { received: 0, sent: 0, drafts: 0, to_read: 0 };
+  paint("mail", status.mail_configured ? mail.received + " received" : "no mailbox", status.mail_configured ? plural(mail.drafts, "draft", "drafts") + ", " + mail.to_read + " to read" : "", mail.to_read || mail.drafts ? "waiting" : "idle", "waiting for you");
+  paint("result", plural(summary.interviews, "interview", "interviews"), plural(summary.rejections, "rejection", "rejections") + (summary.reply_rate === null ? "" : ", " + Math.round(summary.reply_rate * 100) + "% replied"), "idle", "");
+
+  renderNewest();
+  renderJobs();
+  renderNeeds();
+  renderMail(mail);
+  renderMonitor();
+  renderDays();
+  renderFeed();
+}
+
+const pills = {};
+function buildPills() {
+  const box = $("pills");
+  const make = (key, label) => {
+    const pill = el("span", "pill");
+    pill.append(document.createTextNode(label + " "), (pills[key] = el("b")));
+    pills[key + "Box"] = pill;
+    box.append(pill);
+  };
+  make("api", "API"); make("kill", "Kill switch"); make("sent", "Sent today"); make("gateway", "Model gateway");
+  make("mail", "Mail"); make("updated", "Updated");
+  pills.mailBox.hidden = true;
+  const mode = el("button", null, "Dark");
+  mode.type = "button";
+  mode.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+  themeButton = mode;
+  const out = el("button", null, "Sign out");
+  out.type = "button";
+  out.addEventListener("click", () => { try { sessionStorage.removeItem("careertwin-token"); } catch (_) { /* nothing to clear */ } token = ""; showLogin(); });
+  box.append(mode, out);
+}
+let themeButton = null;
+function setTheme(name, remember = true) {
+  document.documentElement.dataset.theme = name;
+  if (themeButton) themeButton.textContent = name === "dark" ? "Light" : "Dark";
+  if (remember) { try { localStorage.setItem("careertwin-theme", name); } catch (_) { /* the choice is not kept */ } }
+}
+buildPills();
+try { if (localStorage.getItem("careertwin-theme") === "dark") setTheme("dark", false); } catch (_) { /* light stays */ }
+function setPill(key, cls, value) {
+  pills[key].textContent = value;
+  pills[key + "Box"].className = "pill " + cls;
+}
+function renderPills(status) {
+  setPill("api", "on", "connected");
+  setPill("kill", status.stopped ? "off" : "", status.stopped ? "on" : "off");
+  setPill("sent", "", String(status.submitted_today));
+  setPill("gateway", status.decision_configured ? "" : "bad", status.decision_configured ? "configured" : "not set");
+  pills.mailBox.hidden = !status.mail_error;
+  if (status.mail_error) setPill("mail", "bad", clip(status.mail_error, 60));
+  setPill("updated", "", new Date().toLocaleTimeString());
+}
+
+function emptyState(box, title, ...lines) {
+  const wrap = el("div", "empty");
+  wrap.append(el("strong", null, title));
+  for (const line of lines) {
+    const p = el("p");
+    for (const part of Array.isArray(line) ? line : [line]) p.append(typeof part === "string" ? document.createTextNode(part) : part);
+    wrap.append(p);
+  }
+  box.append(wrap);
+}
+
+// What the candidate can do next with a vacancy that stands in this state. Sending an application or an
+// email is not here: it stays in `careertwin watch`, where each of those is confirmed.
+const MOVES = {
+  new: ["rank", "skip"],
+  needs_info: ["rank", "prepare", "skip"],
+  priority: ["prepare", "skip"],
+  stretch: ["prepare", "skip"],
+  prepared: ["fill", "skip"],
+};
+const MOVE_LABEL = { rank: "Rank", prepare: "Prepare CV", fill: "Fill form", skip: "Skip" };
+const SITE_COLOURS = {};
+
+function when(row) {
+  if (row.age_days === null || row.age_days === undefined) return "";
+  if (row.age_days <= 0) return "today";
+  if (row.age_days === 1) return "1 d";
+  return row.age_days + " d";
+}
+
+async function move(row, kind, cell) {
+  for (const button of cell.querySelectorAll("button")) button.disabled = true;
+  const note = el("span", "note", "sending");
+  cell.append(note);
+  try {
+    if (kind === "skip") await send("/jobs/" + row.id + "/skip");
+    else await send("/jobs/" + row.id + "/actions", { operation: kind });
+    note.textContent = kind === "skip" ? "skipped" : "queued";
+    setTimeout(() => refresh([["jobs", "/jobs"], ["newest", NEWEST], ["summary", "/summary"], ["attention", "/attention"]]), 1200);
+  } catch (error) {
+    if (error instanceof Unauthorized) { showLogin("The API refused this token."); return; }
+    note.className = "note bad";
+    note.textContent = clip(error.message, 80);
+    for (const button of cell.querySelectorAll("button")) button.disabled = false;
+  }
+}
+
+function renderNewest() {
+  const list = $("newest");
+  const chips = $("sites");
+  const order = $("order");
+  list.replaceChildren();
+  chips.replaceChildren();
+  order.replaceChildren();
+  for (const [key, label] of [["newest", "Newest first"], ["fit", "Best fit"]]) {
+    const chip = el("button", "chip", label);
+    chip.type = "button";
+    chip.setAttribute("aria-pressed", String(key === orderBy));
+    chip.addEventListener("click", () => { orderBy = key; renderNewest(); });
+    order.append(chip);
+  }
+  const all = data.newest || [];
+  const rows = all.filter((row) => !["skip", "closed", "withdrawn"].includes(row.state));
+  const sites = [...new Set(rows.map((row) => row.source).filter(Boolean))];
+  if (siteFilter && !sites.includes(siteFilter)) siteFilter = "";
+  for (const name of ["", ...sites]) {
+    const chip = el("button", "chip", name || "All sites");
+    chip.type = "button";
+    chip.setAttribute("aria-pressed", String(name === siteFilter));
+    chip.addEventListener("click", () => { siteFilter = name; renderNewest(); });
+    if (sites.length > 1 || name) chips.append(chip);
+  }
+  let shown = rows.filter((row) => !siteFilter || row.source === siteFilter);
+  if (orderBy === "fit") {
+    shown = [...shown].sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || String(b.day).localeCompare(String(a.day)));
+  }
+  shown = shown.slice(0, 30);
+  if (!shown.length) {
+    const item = el("li");
+    emptyState(item, "No vacancies yet",
+      ["Ask the agent to search the web, or read a Workday career site: ", code("discover_workday")],
+      "The newest ones appear here first, each with the site it came from and the day it was published.");
+    list.append(item);
+    return;
+  }
+  for (const row of shown) {
+    const item = el("li");
+    item.append(el("span", "when" + (row.dated ? " exact" : ""), when(row) || "new"));
+    item.append(el("span", "tag site", clip(row.source, 20) || "other"));
+    const what = el("div", "what");
+    const title = /^https?:\/\//i.test(row.url) ? el("a", null, clip(row.title, 90)) : el("span", null, clip(row.title, 90));
+    if (title.tagName === "A") { title.href = row.url; title.target = "_blank"; title.rel = "noopener noreferrer"; }
+    what.append(title, el("small", null, [clip(row.company, 40), clip(row.location, 50), row.dated ? "" : "date not given"].filter(Boolean).join(" \u00b7 ")));
+    item.append(what);
+    item.append(el("span", "fit" + (row.score === null || row.score === undefined ? " dim" : ""), row.score === null || row.score === undefined ? "not ranked" : String(Math.round(row.score))));
+    const moves = el("div", "moves");
+    const kinds = MOVES[row.state] || [];
+    if (!kinds.length) moves.append(el("span", "note", stateOf(row.state).text));
+    for (const kind of kinds) {
+      const button = el("button", null, MOVE_LABEL[kind]);
+      button.type = "button";
+      button.addEventListener("click", () => move(row, kind, moves));
+      moves.append(button);
+    }
+    item.append(moves);
+    list.append(item);
+  }
+  const hidden = all.length - rows.length;
+  if (hidden > 0) {
+    const note = el("li", "hidden-note", hidden + " hidden: skipped by you or by the ranking, or closed.");
+    list.append(note);
+  }
+}
+
+async function downloadWorkbook() {
+  const button = $("xlsx");
+  button.disabled = true;
+  try {
+    const response = await fetch(API + "/export.xlsx", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    if (!response.ok) throw new Error("answered " + response.status);
+    const link = el("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = "CareerTwin-vacancies.xlsx";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+  } catch (error) {
+    showProblem("The workbook could not be downloaded: " + clip(error.message, 80));
+  } finally {
+    button.disabled = false;
+  }
+}
+$("xlsx").addEventListener("click", downloadWorkbook);
+
+function renderJobs() {
+  const list = $("jobs");
+  list.replaceChildren();
+  const jobs = [...data.jobs].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, 14);
+  if (!jobs.length) {
+    const item = el("li");
+    emptyState(item, "No vacancies yet",
+      ["Ask the agent: ", code("careertwin agent \"find python matches\"")],
+      ["Or add a company to watch with the ", code("watch_company"), " tool and let the monitor read its career site."]);
+    list.append(item);
+    return;
+  }
+  for (const job of jobs) {
+    const s = stateOf(job.state);
+    const row = el("li", "job");
+    const title = el("div", "t", clip(job.vacancy && job.vacancy.title, 90) || "Untitled vacancy");
+    if (job.vacancy && job.vacancy.company) title.append(el("span", "c", "  " + clip(job.vacancy.company, 50)));
+    const where = el("div", "where");
+    const score = job.evaluation && job.evaluation.score !== undefined ? "fit " + job.evaluation.score : "";
+    const tag = el("span", "tag " + (s.mode === "waiting" ? "wait" : s.mode === "problem" ? "bad" : s.mode === "active" ? "go" : s.done >= 6 ? "ok" : ""), s.text);
+    where.append(tag);
+    for (const note of [score, clip(job.error, 90)]) if (note) where.append(document.createTextNode(note));
+    const track = el("div", "track");
+    track.title = STEPS.map((name, i) => name + (i < s.done ? " (done)" : i === s.now ? " (now)" : "")).join(", ");
+    for (let i = 0; i < STEPS.length; i++) {
+      let cls = "seg";
+      if (i < s.done) cls += " done";
+      else if (i === s.now) cls += " " + (s.mode === "waiting" ? "waiting" : s.mode === "problem" ? "problem" : "now");
+      track.append(el("span", cls));
+    }
+    row.append(title, track, where);
+    list.append(row);
+  }
+}
+
+function renderNeeds() {
+  const box = $("needs");
+  box.replaceChildren();
+  if (!data.attention.length) {
+    emptyState(box, "Nothing waits for you", "Forms ready to send, drafts to approve and replies to read show up here.");
+    return;
+  }
+  for (const item of data.attention.slice(0, 8)) {
+    const row = el("div", "need");
+    const line = el("div");
+    const tagClass = item.kind === "interview_invite" ? "ok" : item.kind === "verify" || item.kind === "review" ? "bad" : "wait";
+    line.append(el("span", "tag " + tagClass, item.kind.replace(/_/g, " ")), document.createTextNode("  " + clip(item.title, 110)));
+    row.append(line);
+    if (item.detail) row.append(el("div", "d", clip(item.detail, 140)));
+    box.append(row);
+  }
+  if (data.attention.length > 8) box.append(el("p", "empty", "and " + (data.attention.length - 8) + " more in careertwin watch"));
+}
+
+function renderMail(mail) {
+  const box = $("mail");
+  box.replaceChildren();
+  const any = mail.received || mail.to_read || mail.drafts || mail.sent;
+  box.className = any ? "statrow" : "";
+  if (!any) {
+    emptyState(box, "No mail yet", data.status && data.status.mail_configured ? "Replies to your applications are filed here." : "No mailbox is set up. With one, replies to your applications are filed here.");
+    return;
+  }
+  for (const [label, value] of [["received", mail.received], ["to read", mail.to_read], ["drafts", mail.drafts], ["sent", mail.sent]]) {
+    const stat = el("div", "stat");
+    stat.append(el("div", "n", String(value)), el("div", "l", label));
+    box.append(stat);
+  }
+}
+
+const ago = (stamp) => {
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(stamp)) / 1000));
+  if (Number.isNaN(seconds)) return "";
+  if (seconds < 60) return seconds + " s";
+  if (seconds < 3600) return Math.round(seconds / 60) + " min";
+  if (seconds < 86400) return Math.round(seconds / 3600) + " h";
+  return Math.round(seconds / 86400) + " d";
+};
+
+function renderMonitor() {
+  const box = $("monitor");
+  box.replaceChildren();
+  const rows = data.monitor ? data.monitor.watching : [];
+  if (!rows.length) {
+    emptyState(box, "No company is watched yet", "Add one and the monitor reads its career site on a timer and files new vacancies.");
+    return;
+  }
+  const table = el("table");
+  const head = el("tr");
+  for (const label of ["Company", "Open", "Last visit", "Failed"]) head.append(el("th", null, label));
+  table.append(head);
+  for (const row of rows.slice(0, 20)) {
+    const tr = el("tr");
+    tr.append(el("td", null, clip(row.name, 40)), el("td", null, String(row.open_count)), el("td", null, row.last_ok ? ago(row.last_ok) + " ago" : "never"));
+    tr.append(el("td", row.failures ? "err" : null, row.failures ? row.failures + " times: " + clip(row.last_error, 50) : "0"));
+    table.append(tr);
+  }
+  box.append(table);
+  if (rows.length > 20) box.append(el("p", "empty", "and " + (rows.length - 20) + " more"));
+}
+
+function renderDays() {
+  const box = $("days");
+  box.replaceChildren();
+  const days = (data.summary && data.summary.timeline) || [];
+  const peak = Math.max(1, ...days.flatMap((d) => [d.found, d.submitted, d.replies]));
+  for (const day of days) {
+    const cell = el("div", "day");
+    const col = el("div", "col");
+    for (const [cls, value] of [["f", day.found], ["s", day.submitted], ["r", day.replies]]) {
+      const bar = el("i", cls);
+      bar.style.height = Math.round((value / peak) * 100) + "%";
+      bar.title = day.date + ": " + value;
+      col.append(bar);
+    }
+    cell.append(col, el("small", null, day.date.slice(8)));
+    box.append(cell);
+  }
+}
+
+// What each stage of an event says in one line. Only the fields named here are shown: the rest of a
+// payload (page text, typed values) never reaches the screen.
+const SAY = {
+  monitor_found: (p) => ["go", "found", clip(p.title, 80) + " at " + clip(p.company, 40)],
+  monitor_closed: (p) => ["", "closed", clip(p.title, 80) + " at " + clip(p.company, 40)],
+  monitor_summary: (p) => ["", "monitor", p.checked + " companies visited, " + p.new + " new, " + p.failed + " failed"],
+  monitor_error: (p) => ["bad", "monitor", clip(p.company, 40) + " " + clip(p.message, 100)],
+  imported: () => ["go", "imported", "a vacancy was added"],
+  ranked: (p) => ["go", "ranked", clip(p.category, 20).replace(/_/g, " ") + (p.score !== undefined ? ", fit " + p.score : "")],
+  prepared: () => ["go", "prepared", "CV and cover letter written"],
+  form_ready: () => ["wait", "form ready", "filled, waits for your yes"],
+  questions: (p) => ["wait", "question", clip((p.questions || []).join("; "), 120)],
+  browser_action: (p) => ["", "browser", clip(p.tool, 40)],
+  browser_action_planned: (p) => ["", "browser", "next: " + clip(p.tool, 40)],
+  submit_attempt: () => ["go", "submit", "pressing submit"],
+  submission_confirmed: () => ["ok", "sent", "application sent and confirmed"],
+  submission_uncertain: () => ["bad", "check", "sent, but no confirmation was seen"],
+  domain_blocked: (p) => ["bad", "stopped", "the page left the employer site: " + clip(p.url, 70)],
+  secret_blocked: () => ["bad", "stopped", "a password may not be typed on this page"],
+  mail_received: (p) => ["wait", "mail", clip(p.kind, 20).replace(/_/g, " ") + ": " + clip(p.subject, 90)],
+  mail_drafted: (p) => ["wait", "draft", "to " + clip(p.to, 50)],
+  mail_sent: (p) => ["ok", "mail sent", "to " + clip(p.to, 50)],
+  mail_dry_run: (p) => ["", "dry run", "to " + clip(p.to, 50) + ", not sent"],
+  mail_checked: () => ["", "mail", "inbox checked"],
+  mail_error: (p) => ["bad", "mail", clip(p.message, 100)],
+  cycle_started: () => ["go", "search", "a search cycle started"],
+  cycle_finished: (p) => ["", "search", "finished, " + p.found + " found"],
+  cycle_error: (p) => ["bad", "search", clip(p.message, 100)],
+  source_error: () => ["bad", "search", "a source failed"],
+  user_outcome: (p) => ["ok", "outcome", clip(p.status, 30)],
+  user_answer: () => ["", "you", "answered a form question"],
+  user_skip: () => ["", "skipped", "a vacancy was skipped"],
+  error: (p) => ["bad", "error", clip(p.operation, 30) + ": " + clip(p.message, 100)],
+};
+
+function renderFeed() {
+  const list = $("feed");
+  const fresh = data.events.filter((event) => event.id > lastEventId);
+  if (!fresh.length && list.querySelector("time[data-at]")) {
+    for (const time of list.querySelectorAll("time[data-at]")) time.textContent = ago(time.dataset.at);
+    return;
+  }
+  const shown = [...data.events].slice(-60).reverse();
+  list.replaceChildren();
+  if (!shown.length) {
+    const item = el("li");
+    emptyState(item, "No events yet", "Each step an agent takes appears here the moment it happens.");
+    list.append(item);
+    return;
+  }
+  for (const event of shown) {
+    const payload = event.payload && typeof event.payload === "object" ? event.payload : {};
+    let line;
+    try { line = (SAY[event.stage] || (() => ["", event.stage.replace(/_/g, " "), ""]))(payload); } catch (_) { line = ["", event.stage, ""]; }
+    const item = el("li", !firstFeed && event.id > lastEventId ? "fresh" : "");
+    const text = el("div");
+    text.append(el("span", "tag " + line[0], line[1]), document.createTextNode("  " + line[2]));
+    const when = el("time", null, ago(event.created_at));
+    when.dataset.at = event.created_at;
+    item.append(when, text);
+    list.append(item);
+  }
+  lastEventId = Math.max(lastEventId, ...data.events.map((event) => event.id));
+  firstFeed = false;
+}
+
+// ---- polling -------------------------------------------------------------------------------------
+let timers = [];
+function showLogin(message) {
+  timers.forEach(clearInterval);
+  timers = [];
+  $("main").hidden = true;
+  $("login").hidden = false;
+  const error = $("login-error");
+  error.hidden = !message;
+  error.textContent = message || "";
+}
+
+function showProblem(message) {
+  const box = $("problem");
+  box.hidden = !message;
+  box.replaceChildren();
+  if (!message) return;
+  box.append(el("b", null, "The API is not answering. "), document.createTextNode(message));
+}
+
+async function refresh(parts) {
+  try {
+    const results = await Promise.all(parts.map(([key, path]) => get(path)));
+    parts.forEach(([key], index) => { data[key] = results[index]; });
+    showProblem("");
+    render();
+  } catch (error) {
+    if (error instanceof Unauthorized) { showLogin("The API refused this token. Check the file data/api-token and try again."); return; }
+    setPill("api", "bad", "not answering");
+    showProblem("Start it with careertwin serve. This page tries again every two seconds and reconnects by itself.");
+  }
+}
+
+function start() {
+  $("login").hidden = true;
+  $("main").hidden = false;
+  if (!data.status) {
+    // the shapes of the page, until the first answer
+    const jobs = $("jobs"), feed = $("feed");
+    for (const list of [jobs, feed]) for (let i = 0; i < 3; i++) list.append(el("li", "skeleton"));
+  }
+  const fast = [["status", "/status"], ["events", "/events"]];
+  const slow = [["summary", "/summary"], ["attention", "/attention"], ["monitor", "/monitor"], ["jobs", "/jobs"], ["newest", NEWEST]];
+  refresh([...fast, ...slow]);
+  timers.push(setInterval(() => refresh(fast), 2000), setInterval(() => refresh(slow), 6000));
+}
+
+$("signin").addEventListener("click", () => {
+  token = $("token").value.trim();
+  $("token").value = "";
+  if (!token) return;
+  try { sessionStorage.setItem("careertwin-token", token); } catch (_) { /* kept in memory only */ }
+  start();
+});
+$("token").addEventListener("keydown", (event) => { if (event.key === "Enter") $("signin").click(); });
+
+if (token) start(); else showLogin();
+</script>
+</body>
+</html>
