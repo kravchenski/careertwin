@@ -471,6 +471,37 @@ strings! {
         "«Расскажите о себе»: репетитор доводит ответ до короткого, честного и вашего."
     ),
     TodayCoverage => ("Questions covered", "Закрыто вопросов"),
+
+    // visual explanations
+    CardShow => ("Explain with pictures", "Объяснить картинками"),
+    CardShowText => (
+        "An animated story with panels and a voice, from zero, for something you never quite understood.",
+        "Анимированный рассказ с панелями и голосом, с нуля: про то, что вы никак не могли понять."
+    ),
+    ShowTitle => ("Explain it with pictures", "Объяснить картинками"),
+    ShowIntro => (
+        "Name a topic: a term, a framework, a bug. I will draw it and tell it as a story, starting from nothing.",
+        "Назовите тему: термин, фреймворк, баг. Я нарисую и расскажу как историю, начиная с нуля."
+    ),
+    ShowHint => ("What should I explain?", "Что объяснить?"),
+    ShowGo => ("Show me", "Показать"),
+    ShowTry => ("Try", "Например"),
+    ShowItBtn => ("Show it", "Показать"),
+    StageMaking => ("Drawing it…", "Рисую…"),
+    StageFailed => ("The picture could not be made", "Картинку не получилось сделать"),
+    StageAgain => ("Try again, more simply", "Ещё раз, проще"),
+    StageClose => ("Close the picture", "Закрыть картинку"),
+    StageSimpler => ("Explain more simply", "Объяснить проще"),
+    StageReplay => ("Play it again", "Ещё раз сначала"),
+    StagePrevious => ("Previous scene", "Предыдущая сцена"),
+    StageNext => ("Next scene", "Следующая сцена"),
+    StagePause => ("Pause", "Пауза"),
+    StagePlay => ("Play", "Играть"),
+    StageCaptionsOnly => ("No voice for this one: captions only.", "Голоса для этого нет: только подписи."),
+    HelpShow => (
+        "Ask the tutor to show or draw something and it plays as a short animated story you can pause, skip and replay.",
+        "Попросите репетитора показать или нарисовать что-нибудь, и это сыграет как короткая анимация: её можно ставить на паузу, листать и пересматривать."
+    ),
 }
 
 /// The strings of one language.

@@ -6,6 +6,7 @@ pub mod concepts;
 pub mod focus;
 pub mod help;
 pub mod history;
+pub mod holo;
 pub mod home;
 pub mod live;
 pub mod notebook;
@@ -16,6 +17,8 @@ pub mod prepare;
 pub mod review;
 pub mod settings;
 pub mod setup;
+pub mod show;
+pub mod stage;
 pub mod theme;
 pub mod translate;
 pub mod usage;
@@ -28,6 +31,7 @@ use egui::{Align, Frame, Layout, Margin, Rect, ScrollArea, Ui, UiBuilder, pos2, 
 
 use crate::brief::Brief;
 use crate::config::{Paths, Settings};
+use crate::explain::Storyboard;
 use crate::i18n::{K, Tr};
 use crate::jobs::Jobs;
 use crate::notes::{NoteKind, Notebook};
@@ -43,6 +47,7 @@ use crate::prompts::translate::Translation;
 use crate::prompts::tutor::{Lesson, Mode};
 use crate::services::{Problems, Services};
 use crate::session::{Session, Store, Track};
+use crate::speech::Speech;
 use crate::speech::Transcript;
 use crate::srs::Deck;
 use crate::stats::Stats;
@@ -63,6 +68,7 @@ pub enum Screen {
     Phrases(Box<phrases::PhrasesView>),
     Plan(Box<plan::PlanView>),
     Notes(Box<notebook::NotebookView>),
+    Show(Box<show::ShowView>),
 }
 
 /// What a screen asks the window to do next.
@@ -76,6 +82,11 @@ pub enum Nav {
     Prepare,
     Plan,
     Notes,
+    /// Explain a topic with pictures; with no topic, ask for one.
+    Show {
+        topic: Option<String>,
+        hint: String,
+    },
     /// A call with the defaults of the tab, with no setup page.
     QuickCall,
     /// A lesson with the tutor; `topic` is an index into the plan, for a terms lesson.
@@ -109,6 +120,8 @@ pub enum Outcome {
     Researched(Result<Syllabus, OpError>),
     Terms { topic: String, result: Result<Vec<Term>, OpError> },
     Digested { session_id: String, result: Result<Digest, OpError> },
+    Storyboard { stage: u64, result: Result<Storyboard, OpError> },
+    SceneVoice { stage: u64, index: usize, result: Result<Speech, String> },
 }
 
 /// A model being fetched for the offline engines.
@@ -178,6 +191,7 @@ pub struct Core {
     pub notebook: Notebook,
     /// Set while the vacancy is being researched.
     pub research: Option<Arc<ResearchProgress>>,
+    next_stage: u64,
     /// Asks the window to draw again.
     pub wake: Arc<dyn Fn() + Send + Sync>,
     /// A message for the person that no open screen has a place for.
@@ -349,6 +363,42 @@ impl Core {
             return typed.to_owned();
         }
         self.brief.as_ref().and_then(Brief::email).unwrap_or_default()
+    }
+
+    /// Starts writing a visual explanation of `topic`. The returned stage shows that it is being
+    /// made; the story arrives later, as [`Outcome::Storyboard`].
+    pub fn begin_stage(&mut self, topic: &str, context: &str, simpler: bool) -> stage::Picture {
+        let id = self.next_stage;
+        self.next_stage += 1;
+        let llm = self.services.llm.clone();
+        let model = self.settings.effective().llm.model;
+        let native = self.syllabus.as_ref().map_or_else(|| self.ui_lang(), |plan| plan.native);
+        let native = if self.settings.ui_language == crate::config::UiLanguage::Auto { native } else { self.ui_lang() };
+        let (topic_text, context_text) = (topic.trim().to_owned(), context.trim().to_owned());
+        let label = self.tr.get(K::StageMaking).to_owned();
+        self.jobs.spawn(label, async move {
+            let result =
+                crate::ops::storyboard(llm.as_ref(), &model, &topic_text, &context_text, native, simpler).await;
+            Outcome::Storyboard { stage: id, result }
+        });
+        stage::Picture::making(id, topic, context, simpler)
+    }
+
+    /// Makes the voice of one scene of a story, in the language it is told in.
+    pub fn narrate(&mut self, stage: u64, index: usize, text: String, language: Lang) {
+        let tts = self.services.tts.clone();
+        let voice = crate::speech::voice_for(&self.settings.effective(), language);
+        let label = self.tr.get(K::Listen).to_owned();
+        self.jobs.spawn(label, async move {
+            let result = match tts {
+                None => Err(String::new()),
+                Some(tts) => tts
+                    .synthesize(crate::sentences::clean_for_speech(&text), voice)
+                    .await
+                    .map_err(|error| error.to_string()),
+            };
+            Outcome::SceneVoice { stage, index, result }
+        });
     }
 
     pub fn save_notes(&self) {
@@ -628,6 +678,7 @@ impl PrepApp {
                 progress,
                 notebook,
                 research: None,
+                next_stage: 1,
                 wake,
                 notice: None,
                 notice_at: None,
@@ -685,6 +736,7 @@ impl PrepApp {
                     Screen::Phrases(view) => phrases::ui(&mut self.core, view, ui),
                     Screen::Plan(view) => plan::ui(&mut self.core, view, ui),
                     Screen::Notes(view) => notebook::ui(&mut self.core, view, ui),
+                    Screen::Show(view) => show::ui(&mut self.core, view, ui),
                 };
                 next = next.take().or(screen_nav);
             });
@@ -734,6 +786,13 @@ impl PrepApp {
                 self.start_call(spec, headphones);
             }
             Nav::Tutor { mode, topic } => self.start_tutor(mode, topic),
+            Nav::Show { topic, hint } => {
+                let view = match topic {
+                    Some(topic) => show::ShowView::start(&mut self.core, &topic, &hint),
+                    None => show::ShowView::default(),
+                };
+                self.screen = Screen::Show(Box::new(view));
+            }
             Nav::Plan => self.screen = Screen::Plan(Box::default()),
             Nav::Notes => self.screen = Screen::Notes(Box::default()),
             Nav::PracticeQuestion(question) => {
@@ -982,6 +1041,29 @@ impl PrepApp {
                     }
                 }
             }
+            Outcome::Storyboard { stage, result } => {
+                if let Some(found) = self.stage_mut(stage) {
+                    match result {
+                        Ok(board) => found.ready(board),
+                        Err(error) => found.state = stage::Mood::Failed(error.to_string()),
+                    }
+                }
+            }
+            Outcome::SceneVoice { stage, index, result } => {
+                let note = self.core.tr.get(K::StageCaptionsOnly);
+                if let Some(found) = self.stage_mut(stage) {
+                    if let (Err(why), None) = (&result, &found.voice_problem) {
+                        found.voice_problem = Some(if why.is_empty() {
+                            note.to_owned()
+                        } else {
+                            format!("{note} {}", stage::shorten(why, 90))
+                        });
+                    }
+                    if let Some(player) = found.player_mut() {
+                        player.set_voice(index, result.ok());
+                    }
+                }
+            }
             Outcome::Models(Ok(models)) => self.core.models = models,
             Outcome::Models(Err(error)) => {
                 if let Some(draft) = &mut self.draft {
@@ -1086,6 +1168,15 @@ impl PrepApp {
                     }
                 }
             }
+        }
+    }
+
+    /// The picture with this id, wherever it is being shown.
+    fn stage_mut(&mut self, id: u64) -> Option<&mut stage::Picture> {
+        match &mut self.screen {
+            Screen::Live(view) => view.stage.as_mut().filter(|s| s.id == id),
+            Screen::Show(view) => view.stage.as_mut().filter(|s| s.id == id),
+            _ => None,
         }
     }
 

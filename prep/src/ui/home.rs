@@ -25,6 +25,12 @@ fn cards(track: Track) -> Vec<Card> {
         text: K::CardChatText,
         go: Nav::Tutor { mode: Mode::Chat, topic: None },
     };
+    let show = Card {
+        tag: "show",
+        title: K::CardShow,
+        text: K::CardShowText,
+        go: Nav::Show { topic: None, hint: String::new() },
+    };
     match track {
         Track::English => vec![
             Card { tag: "live", title: K::CardConversation, text: K::CardConversationText, go: Nav::SetupCall },
@@ -37,6 +43,7 @@ fn cards(track: Track) -> Vec<Card> {
             Card { tag: "cards", title: K::CardConcepts, text: K::CardConceptsText, go: Nav::Concepts },
             Card { tag: "plan", title: K::CardPlan, text: K::CardPlanText, go: Nav::Plan },
             Card { tag: "prepare", title: K::CardPrepare, text: K::CardPrepareText, go: Nav::Prepare },
+            show,
             chat,
         ],
         Track::Interview => vec![

@@ -11,6 +11,7 @@ pub mod brief;
 pub mod config;
 pub mod conversation;
 pub mod doctor;
+pub mod explain;
 pub mod i18n;
 pub mod jobs;
 pub mod llm;

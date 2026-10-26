@@ -49,6 +49,7 @@ enum Action {
     WriteTerms(usize),
     Listen(String),
     Practise(usize),
+    Show(String, String),
 }
 
 pub fn ui(core: &mut Core, view: &mut PlanView, ui: &mut Ui) -> Option<Nav> {
@@ -153,6 +154,7 @@ pub fn ui(core: &mut Core, view: &mut PlanView, ui: &mut Ui) -> Option<Nav> {
             core.speak(text, Lang::En);
             ui.ctx().request_repaint();
         }
+        Some(Action::Show(topic, hint)) => nav = Some(Nav::Show { topic: Some(topic), hint }),
         Some(Action::Practise(index)) => nav = Some(Nav::Tutor { mode: Mode::Terms, topic: Some(index) }),
         None => {}
     }
@@ -307,6 +309,11 @@ fn term_block(ui: &mut Ui, tr: Tr, topic: &Topic, index: usize, progress: &Progr
                     }
                     ui.label(RichText::new(&term.english).font(theme::sans(15.0)).color(SNOW));
                 });
+            }
+            ui.add_space(6.0);
+            if ghost_button(ui, tr.get(K::ShowItBtn)).clicked() {
+                let hint = format!("{} Comparison: {} A picture could show: {}", term.plain, term.analogy, term.visual);
+                *action = Some(Action::Show(format!("{} ({})", term.name, topic.name), hint));
             }
             if !term.follow_ups.is_empty() {
                 ui.add_space(4.0);

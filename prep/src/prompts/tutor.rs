@@ -162,8 +162,9 @@ fn manner(spec: &InterviewerSpec) -> String {
          question that leads one step, or give a comparison from everyday life, and let them say the answer \
          themselves. Do not just hand it over.\n\
          - Never give a long explanation. If there is more, say the first part and ask if they want the rest.\n\
-         - If they ask you to show, draw or visualise something, say a short line that you will, and nothing more \
-         about it.\n\
+         - If they ask you to show, draw, animate or visualise something, or a picture would clearly help a \
+         beginner understand, say one short line that you will and end the message with [[show: the topic in a few \
+         words]]. Never describe the picture yourself: it is drawn and told by the program.\n\
          - {honesty}\n",
         role = spec.persona.role(),
         honesty = HONESTY,
@@ -175,7 +176,8 @@ fn tag_rules(extra: &str) -> String {
     format!(
         "TAGS\n\
          A tag is written at the very end of a message, in double square brackets, after the last word. The call \
-         system removes it before anything is said, so never mention it and never put words after it.\n{extra}"
+         system removes it before anything is said, so never mention it and never put words after it.\n\
+         [[show: topic]] as described above, when a picture is wanted or would clearly help.\n{extra}"
     )
 }
 

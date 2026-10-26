@@ -36,6 +36,7 @@ pub enum Icon {
     Chevron,
     Pause,
     Skip,
+    Prev,
     Notebook,
     Star,
     StarFilled,
@@ -211,6 +212,14 @@ pub fn paint_icon(painter: &egui::Painter, icon: Icon, center: Pos2, size: f32, 
             let mut outline = points.clone();
             outline.push(points[0]);
             path(outline);
+        }
+        Icon::Prev => {
+            painter.add(Shape::convex_polygon(
+                vec![at(0.26, -0.24), at(-0.1, 0.0), at(0.26, 0.24)],
+                color,
+                Stroke::NONE,
+            ));
+            painter.line_segment([at(-0.24, -0.24), at(-0.24, 0.24)], Stroke::new(stroke.width * 1.5, color));
         }
         Icon::Notebook => {
             let body = Rect::from_center_size(center, vec2(0.54 * s, 0.68 * s));
