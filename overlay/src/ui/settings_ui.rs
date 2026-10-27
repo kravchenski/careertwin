@@ -1100,7 +1100,7 @@ impl App {
 /// A theme as a small card: its background with its accent on it, and its name. True when it was clicked.
 fn swatch(ui: &mut Ui, name: &str, panel: [u8; 3], accent_color: [u8; 3], selected: bool) -> bool {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(74.0, 62.0), egui::Sense::click());
-    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, name));
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, name));
     let painter = ui.painter();
     let fill = egui::Color32::from_rgb(panel[0], panel[1], panel[2]);
     painter.rect_filled(rect, 8.0, fill);

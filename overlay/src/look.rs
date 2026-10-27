@@ -2,8 +2,13 @@
 
 use crate::settings::AppSettings;
 
-/// (name, panel, text, accent): the themes that come with the window.
-pub const PRESETS: [(&str, [u8; 3], [u8; 3], [u8; 3]); 7] = [
+/// Red, green and blue.
+pub type Rgb = [u8; 3];
+
+/// (name, panel, text, accent): a theme that comes with the window.
+pub type Preset = (&'static str, Rgb, Rgb, Rgb);
+
+pub const PRESETS: [Preset; 7] = [
     ("midnight", [19, 20, 30], [215, 218, 232], [188, 180, 255]),
     ("graphite", [24, 24, 26], [225, 225, 228], [232, 232, 236]),
     ("forest", [16, 26, 22], [214, 232, 222], [132, 214, 160]),
