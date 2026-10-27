@@ -264,8 +264,8 @@ def test_the_deepgram_key_can_be_tested_from_the_window(gui, monkeypatch):
 def test_model_tab_saves_the_gateway_and_lists_models(gui):
     gui.dialog.gateway_url.setText("http://127.0.0.1:9999/")
     gui.dialog.gateway_url.editingFinished.emit()
-    gui.dialog.gateway_key.setText("secret")
-    gui.dialog.gateway_key.editingFinished.emit()
+    gui.dialog.account_key.setText("secret")
+    gui.dialog._account_checked("secret", True, None)
     assert gui.runtime.coach.url == "http://127.0.0.1:9999/" and gui.runtime.coach.api_key == "secret"
     gui.dialog.gateway_url.setText("not a url")
     gui.dialog.gateway_url.editingFinished.emit()
@@ -284,12 +284,12 @@ def test_model_tab_saves_the_gateway_and_lists_models(gui):
 
 def test_provider_choice_fills_the_address_and_never_carries_a_key_to_another_provider(gui):
     settings = gui.runtime.settings
-    gui.dialog.gateway_key.setText("groq-key")
-    gui.dialog.gateway_key.editingFinished.emit()
+    gui.choose(gui.dialog.provider, "groq")
+    gui.dialog._account_checked("groq-key", True, None)
     settings.set("model", "llama-x")
     gui.choose(gui.dialog.provider, "openai")
     assert settings.gateway_url == "https://api.openai.com"
-    assert settings.gateway_key == "" and settings.model == "" and gui.dialog.gateway_key.text() == ""
+    assert settings.gateway_key == "" and settings.model == "" and gui.dialog.account_list.count() == 0
     assert "OpenAI" in gui.dialog.model_note.text() and "CV" in gui.dialog.model_note.text()
     gui.choose(gui.dialog.provider, "switchyard")
     assert settings.gateway_url == "http://127.0.0.1:3260"
@@ -707,16 +707,120 @@ def test_only_a_press_on_the_border_resizes_the_window(gui):
 def test_the_ai_tab_asks_only_for_what_the_provider_needs(gui):
     dialog = gui.dialog
     form = dialog.model_form
-    assert not form.isRowVisible(dialog.gateway_url) and not form.isRowVisible(dialog.gateway_key)
+    assert form.isRowVisible(dialog.gateway_url) and not form.isRowVisible(dialog.accounts_block)  # the address is always there
     assert not dialog.model_id.isHidden()
     gui.choose(dialog.provider, "groq")
-    assert not form.isRowVisible(dialog.gateway_url) and form.isRowVisible(dialog.gateway_key)
+    assert form.isRowVisible(dialog.gateway_url) and form.isRowVisible(dialog.accounts_block)
+    assert dialog.gateway_url.text() == "https://api.groq.com/openai"
     gui.choose(dialog.provider, "ollama")
-    assert not form.isRowVisible(dialog.gateway_key)
+    assert not form.isRowVisible(dialog.accounts_block)
     gui.choose(dialog.provider, "other")
     dialog.gateway_url.setText("https://llm.example.com")
     dialog.gateway_url.editingFinished.emit()
-    assert form.isRowVisible(dialog.gateway_url) and form.isRowVisible(dialog.gateway_key)
+    assert form.isRowVisible(dialog.gateway_url) and form.isRowVisible(dialog.accounts_block)
+
+
+def account_rows(dialog):
+    """(name, tail, in use, has a Use button) for every saved key shown."""
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    rows = []
+    for index in range(dialog.account_list.count()):
+        row = dialog.account_list.itemAt(index).widget()
+        labels = [label.text() for label in row.findChildren(QLabel)]
+        buttons = [button.text() for button in row.findChildren(QPushButton)]
+        rows.append((labels[0], labels[1], dialog.t("account_in_use") in labels, dialog.t("account_use") in buttons))
+    return rows
+
+
+def test_several_keys_for_one_provider_are_listed_and_one_is_in_use(gui):
+    dialog, settings = gui.dialog, gui.runtime.settings
+    gui.choose(dialog.provider, "groq")
+    assert account_rows(dialog) == [] and not dialog.account_empty.isHidden()
+    for key in ("gsk_first_key_0001", "gsk_second_key_0002"):
+        dialog.account_key.setText(key)
+        dialog._account_checked(key, True, None)
+    assert account_rows(dialog) == [("default", "…y_0001", True, False), ("default-2", "…y_0002", False, True)]
+    assert dialog.account_empty.isHidden() and dialog.account_key.text() == ""
+    assert settings.gateway_key == "gsk_first_key_0001"
+    assert gui.runtime.coach.api_key == "gsk_first_key_0001" and gui.runtime.coach.spare_keys == ["gsk_second_key_0002"]
+    assert "default-2" in dialog.status.text()
+    shown = " ".join(label.text() for label in dialog.findChildren(type(dialog.status)))
+    assert "gsk_first_key_0001" not in shown and "gsk_second_key_0002" not in shown  # only the end of a key is ever shown
+
+
+def test_a_key_can_be_made_the_one_in_use_and_removed(gui):
+    dialog, settings = gui.dialog, gui.runtime.settings
+    gui.choose(dialog.provider, "groq")
+    for key in ("key-one-aaaa", "key-two-bbbb"):
+        dialog._account_checked(key, True, None)
+    dialog.use_account("default-2")
+    assert settings.gateway_key == "key-two-bbbb" and gui.runtime.coach.spare_keys == ["key-one-aaaa"]
+    assert account_rows(dialog) == [("default", "…aaaa", False, True), ("default-2", "…bbbb", True, False)]
+    dialog.remove_account("default-2")  # the one in use: the other takes over
+    assert settings.gateway_key == "key-one-aaaa" and gui.runtime.coach.spare_keys is None
+    dialog.remove_account("default")
+    assert settings.gateway_key == "" and gui.runtime.coach.api_key is None and settings.accounts == []
+    assert not dialog.account_empty.isHidden()
+
+
+def test_a_rejected_or_repeated_key_is_not_saved(gui):
+    dialog, settings = gui.dialog, gui.runtime.settings
+    gui.choose(dialog.provider, "groq")
+    dialog._account_checked("bad-key-0000", None, "Groq rejected this key")
+    assert dialog.status.objectName() == "error" and "rejected" in dialog.status.text() and settings.accounts == []
+    dialog._account_checked("good-key-1111", False, None)  # the provider could not be asked: saved, and it says so
+    assert len(settings.accounts) == 1 and dialog.status.objectName() == "status"
+    assert "could not" in dialog.status.text()
+    dialog._account_checked("good-key-1111", True, None)
+    assert len(settings.accounts) == 1 and dialog.status.objectName() == "error"
+    dialog.account_key.setText("   ")
+    dialog._save_account()
+    assert dialog.status.objectName() == "error" and len(settings.accounts) == 1
+
+
+def test_saving_a_key_asks_the_provider_off_the_window_thread(gui, monkeypatch):
+    dialog, settings = gui.dialog, gui.runtime.settings
+    gui.choose(dialog.provider, "groq")
+    asked = []
+    monkeypatch.setattr(Runtime, "check_key", lambda self, key: asked.append((threading.current_thread().name, key)) or True)
+    dialog.account_key.setText("gsk_typed_key_9999")
+    dialog.account_key.returnPressed.emit()
+    assert not dialog.account_save.isEnabled()  # no second click while it is being checked
+    deadline = time.monotonic() + 5
+    while not dialog.account_save.isEnabled() and time.monotonic() < deadline:
+        gui.process()
+        time.sleep(0.01)
+    assert asked == [(asked[0][0], "gsk_typed_key_9999")] and asked[0][0] != threading.main_thread().name
+    assert [a["key"] for a in settings.accounts] == ["gsk_typed_key_9999"]
+
+
+def test_the_base_address_can_be_changed_for_any_provider_and_the_keys_follow_the_address(gui):
+    dialog, settings = gui.dialog, gui.runtime.settings
+    gui.choose(dialog.provider, "groq")
+    dialog._account_checked("groq-key-aaaa", True, None)
+    dialog.gateway_url.setText("https://proxy.example.com/groq/v1")  # the same provider through your own proxy
+    dialog.gateway_url.editingFinished.emit()
+    assert dialog.provider.currentData() == "other" and settings.gateway_url == "https://proxy.example.com/groq/v1"
+    assert settings.gateway_key == "" and account_rows(dialog) == []  # the Groq key is not sent to the proxy
+    dialog._account_checked("proxy-key-bbbb", True, None)
+    assert [a["url"] for a in settings.accounts] == ["https://api.groq.com/openai", "https://proxy.example.com/groq"]
+    dialog.gateway_url.setText("https://api.groq.com/openai")
+    dialog.gateway_url.editingFinished.emit()
+    assert dialog.provider.currentData() == "groq" and settings.gateway_key == "groq-key-aaaa"
+    assert account_rows(dialog) == [("default", "…aaaa", True, False)]
+
+
+def test_the_account_texts_follow_the_window_language(gui):
+    dialog = gui.dialog
+    gui.choose(dialog.provider, "groq")
+    dialog._account_checked("key-for-language", True, None)
+    gui.runtime.update("ui_language", "ru")
+    dialog.retranslate()
+    assert dialog.account_save.text() == "Сохранить ключ" and dialog.model_labels[1].text() == "Аккаунты"
+    assert dialog.model_labels[0].text() == "Базовый URL" and "Используется" in [
+        label.text() for label in dialog.account_list.itemAt(0).widget().findChildren(type(dialog.status))
+    ]
 
 
 def test_the_audio_tab_shows_the_controls_of_the_chosen_engine_only(gui):

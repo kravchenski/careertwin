@@ -5,6 +5,7 @@ just a base address (plus a key for the cloud ones)."""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 OTHER = "other"
@@ -35,6 +36,11 @@ def base_url(url: str) -> str:
         if url.endswith(suffix):
             return url[: -len(suffix)].rstrip("/")
     return url
+
+
+def default_gateway() -> str:
+    """Where Switchyard listens, unless SWITCHYARD_URL says otherwise."""
+    return base_url(os.getenv("SWITCHYARD_URL", "http://127.0.0.1:3260"))
 
 
 def provider_for(url: str) -> Provider | None:

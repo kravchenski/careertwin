@@ -84,7 +84,7 @@ def test_a_model_that_asked_for_time_is_left_alone_until_then(tmp_path, monkeypa
     ask(stream_coach)
     ask(stream_coach)
     assert asked == ["groq/big", "backup", "backup"]  # the second question did not spend a round trip on it
-    stream_coach._wait_until["groq/big"] = 0.0  # the time has passed
+    stream_coach._wait_until[("", "groq/big")] = 0.0  # the time has passed
     ask(stream_coach)
     assert asked[-2:] == ["groq/big", "backup"]
 

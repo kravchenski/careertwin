@@ -34,7 +34,9 @@ from careertwin.interview.prepare import (
     parse_questions,
     questions_prompt,
 )
-from careertwin.interview.providers import base_url
+from careertwin.interview import accounts
+from careertwin.interview.accounts import Account
+from careertwin.interview.providers import base_url, provider_for
 from careertwin.interview.session import INTERVIEWER, YOU, FrameSource, InterviewSession
 from careertwin.interview.settings import InterviewSettings
 from careertwin.interview.stt import Transcriber, WhisperTranscriber
@@ -45,6 +47,7 @@ SPEECH_KEYS = {"stt_engine", "whisper_model", "whisper_device", "deepgram_key", 
 COACH_KEYS = {
     "gateway_url",
     "gateway_key",
+    "accounts",
     "model",
     "vision_model",
     "fallback_models",
@@ -114,6 +117,7 @@ class Runtime:
     def _apply_coach(self) -> None:
         self.coach.url = self.settings.gateway_url or None
         self.coach.api_key = self.settings.gateway_key or None
+        self.coach.spare_keys = accounts.spares(self.settings.accounts, self.gateway(), self.settings.gateway_key) or None
         self.coach.model = self.settings.model or None
         self.coach.vision_model = self.settings.vision_model or None
         names = (name.strip() for name in self.settings.fallback_models.split(","))
@@ -192,6 +196,58 @@ class Runtime:
 
     def gateway(self) -> str:
         return base_url(self.settings.gateway_url or gateway_url())
+
+    def set_gateway(self, url: str) -> None:
+        """Point the window at another address. A key belongs to its address and never goes to another one: the
+        first account saved for the new address is used, or none."""
+        before = self.gateway()
+        self.update("gateway_url", url)
+        if self.gateway() != before:
+            saved = accounts.for_url(self.settings.accounts, self.gateway())
+            self.update("gateway_key", saved[0].key if saved else "")
+
+    def accounts_here(self) -> list[Account]:
+        """The accounts saved for the address in use."""
+        return accounts.for_url(self.settings.accounts, self.gateway())
+
+    def check_key(self, key: str) -> bool:
+        """Ask the provider about `key`: True when it accepts it, False when it could not say (offline, no model
+        list), RuntimeError when it rejects it."""
+        provider = provider_for(self.gateway())
+        try:
+            response = httpx.get(f"{self.gateway()}/v1/models", headers={"Authorization": f"Bearer {key}"}, timeout=8)
+        except httpx.HTTPError:
+            return False
+        if response.status_code in (401, 403):
+            raise RuntimeError(f"{provider.label if provider else self.gateway()} rejected this key")
+        return response.is_success
+
+    def add_account(self, key: str) -> Account:
+        """Save `key` for the address in use. The first key becomes the one in use; the others are spare and are
+        tried in turn when it is limited. AlreadySaved when it is there already."""
+        saved = accounts.add(self.settings.accounts, self.gateway(), key)
+        account = next(a for a in accounts.for_url(saved, self.gateway()) if a.key == key.strip())
+        self.update("accounts", saved)
+        if not self.settings.gateway_key:
+            self.update("gateway_key", account.key)
+        return account
+
+    def use_account(self, name: str) -> Account:
+        account = next((a for a in self.accounts_here() if a.name == name), None)
+        if account is None:
+            raise KeyError(name)
+        self.update("gateway_key", account.key)
+        return account
+
+    def remove_account(self, name: str) -> Account:
+        gone = next((a for a in self.accounts_here() if a.name == name), None)
+        if gone is None:
+            raise KeyError(name)
+        self.update("accounts", accounts.remove(self.settings.accounts, gone.url, name))
+        if self.settings.gateway_key == gone.key:
+            rest = self.accounts_here()
+            self.update("gateway_key", rest[0].key if rest else "")
+        return gone
 
     def models(self) -> list[str]:
         """Model ids offered by the gateway; raises RuntimeError with a readable message."""

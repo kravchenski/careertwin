@@ -31,7 +31,7 @@ from careertwin.interview.prompts import (
     screenshot_prompt,
     user_prompt,
 )
-from careertwin.interview.providers import base_url, provider_for
+from careertwin.interview.providers import base_url, default_gateway, provider_for
 from careertwin.interview.questions import classify
 from careertwin.llm import call_ai
 
@@ -44,7 +44,7 @@ def model_name() -> str:
 
 
 def gateway_url() -> str:
-    return base_url(os.getenv("SWITCHYARD_URL", "http://127.0.0.1:3260"))
+    return default_gateway()
 
 
 def unreachable(base: str, exc: Exception) -> str:
@@ -68,11 +68,14 @@ def failed(base: str, model: str, status: int, text: str) -> str:
 class CoachError(RuntimeError):
     """The language model could not be reached or returned nothing."""
 
-    def __init__(self, message: str = "", *, retry_after: float | None = None):
+    def __init__(self, message: str = "", *, retry_after: float | None = None, status: int | None = None):
         super().__init__(message)
         self.retry_after = retry_after  # seconds until a rate-limited model may be asked again
+        self.status = status  # the HTTP status, when the provider answered
 
 
+KEY_PROBLEMS = (401, 402, 403, 429)  # another key may be accepted where this one is limited, rejected or out of credit
+KEY_REST = 600.0  # a key the provider rejected is left alone this long
 MAX_COOLDOWN = 90.0  # a model that said "wait" is left alone this long at most
 CANCEL_POLL = 0.05  # seconds between looks at the cancel flag while the model has said nothing yet
 _WAIT_HINT = re.compile(r"next one in (\d+)\s*s", re.I)
@@ -155,6 +158,7 @@ class StreamingCoach:
         layout: str = "lines",
         vision_model: str | None = None,
         fallback_models: list[str] | None = None,
+        spare_keys: list[str] | None = None,
     ):
         self.brief = brief
         self.model = model
@@ -162,7 +166,8 @@ class StreamingCoach:
         self.fallback_models = fallback_models  # asked in this order when the chosen model fails; None: "auto"
         self.last_finish: str | None = None  # why the last reply ended: "stop", or "length" when cut off
         self.fell_back: str | None = None  # the model that answered when it was not the chosen one
-        self._wait_until: dict[str, float] = {}  # models that were rate limited, and until when
+        self.spare_keys = spare_keys  # keys of the same address, tried in turn when the one in use is limited or rejected
+        self._wait_until: dict[tuple[str, str], float] = {}  # (key, model) that was rate limited, and until when; model "" is the whole key
         self._http: httpx.Client | None = None
         self.transport = transport
         self.url = url
@@ -176,9 +181,14 @@ class StreamingCoach:
             self._http = httpx.Client(timeout=httpx.Timeout(120, connect=5), transport=self.transport)
         return self._http
 
-    def _auth(self) -> dict[str, str]:
-        key = self.api_key or os.getenv("SWITCHYARD_API_KEY")
+    def _auth(self, key: str | None = None) -> dict[str, str]:
+        key = key or self.api_key or os.getenv("SWITCHYARD_API_KEY")
         return {"Authorization": f"Bearer {key}"} if key else {}
+
+    def _keys(self) -> list[str | None]:
+        """The key in use first, then the spare ones; `[None]` when there is no key at all."""
+        own = self.api_key or os.getenv("SWITCHYARD_API_KEY")
+        return list(dict.fromkeys(key for key in [own, *(self.spare_keys or [])] if key)) or [None]
 
     def warm_up(self) -> None:
         """Open the connection to the gateway now, so the first answer of a call does not pay for it."""
@@ -194,9 +204,6 @@ class StreamingCoach:
 
     def complete(self, system: str, prompt: str, *, max_tokens: int = 2500, temperature: float = 0.3) -> str:
         """One blocking completion through the configured gateway, model and key."""
-        headers = {}
-        if key := self.api_key or os.getenv("SWITCHYARD_API_KEY"):
-            headers["Authorization"] = f"Bearer {key}"
         base = base_url(self.url or gateway_url())
         body = {
             "model": self.model or model_name(),
@@ -204,13 +211,17 @@ class StreamingCoach:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        keys = self._keys()
         try:
             with httpx.Client(timeout=httpx.Timeout(180, connect=5), transport=self.transport) as client:
-                response = client.post(f"{base}/v1/chat/completions", json=body, headers=headers)
+                for position, key in enumerate(keys):
+                    response = client.post(f"{base}/v1/chat/completions", json=body, headers=self._auth(key))
+                    if response.status_code not in KEY_PROBLEMS or position == len(keys) - 1:
+                        break  # otherwise the next key of this address may be accepted
         except httpx.HTTPError as exc:
             raise CoachError(unreachable(base, exc)) from exc
         if response.status_code >= 400:
-            raise CoachError(failed(base, body["model"], response.status_code, response.text))
+            raise CoachError(failed(base, body["model"], response.status_code, response.text), status=response.status_code)
         try:
             text = response.json()["choices"][0]["message"]["content"] or ""
         except (ValueError, KeyError, IndexError, TypeError) as exc:
@@ -238,24 +249,28 @@ class StreamingCoach:
         a Switchyard gateway; other providers have no "auto", so their error is shown as it is."""
         model = (image and self.vision_model) or self.model or model_name()
         chain = list(dict.fromkeys([model, *self._fallbacks(bool(image))]))
+        keys = self._keys()
         started = False
         first: CoachError | None = None
         self.fell_back = None
         for position, name in enumerate(chain):
-            if position < len(chain) - 1 and self._waiting(name):
-                continue
-            try:
-                for chunk in self._stream_model(name, question, history, cancel, language, image, listening):
-                    started = True
-                    self.fell_back = name if name != model else None
-                    yield chunk
-                return
-            except CoachError as error:
-                if started or cancel.is_set():
-                    raise
-                if error.retry_after:
-                    self._wait_until[name] = time.monotonic() + error.retry_after
-                first = first or error  # the chosen model's error says more than the fallback's
+            for turn, key in enumerate(keys):
+                last = position == len(chain) - 1 and turn == len(keys) - 1
+                if not last and self._waiting(name, key):
+                    continue
+                try:
+                    for chunk in self._stream_model(name, question, history, cancel, language, image, listening, key):
+                        started = True
+                        self.fell_back = name if name != model else None
+                        yield chunk
+                    return
+                except CoachError as error:
+                    if started or cancel.is_set():
+                        raise
+                    self._rest(name, key, error, len(keys) > 1)
+                    first = first or error  # the chosen model's error says more than the fallback's
+                    if error.status not in KEY_PROBLEMS:
+                        break  # the same answer would come with another key: on to the next model
         if first:
             raise first
 
@@ -265,8 +280,16 @@ class StreamingCoach:
         known = provider_for(base_url(self.url or gateway_url()))
         return [] if known and known.id != "switchyard" else [self.FALLBACK_MODEL]
 
-    def _waiting(self, model: str) -> bool:
-        return time.monotonic() < self._wait_until.get(model, 0.0)
+    def _waiting(self, model: str, key: str | None = None) -> bool:
+        until = max(self._wait_until.get((key or "", model), 0.0), self._wait_until.get((key or "", ""), 0.0))
+        return time.monotonic() < until
+
+    def _rest(self, model: str, key: str | None, error: CoachError, several: bool) -> None:
+        """Leave a limited model alone for as long as it asked; a rejected key (with others to use) for good measure."""
+        if error.retry_after:
+            self._wait_until[(key or "", model)] = time.monotonic() + error.retry_after
+        elif several and error.status in (401, 402, 403):
+            self._wait_until[(key or "", "")] = time.monotonic() + KEY_REST
 
     FALLBACK_MODEL = "auto"
     # The session may ask this coach to tell a question from other audio (it then replies SKIP).
@@ -281,6 +304,7 @@ class StreamingCoach:
         language: str | None,
         image: str | None,
         listening: str | None = None,
+        key: str | None = None,
     ) -> Iterator[str]:
         system, temperature, max_tokens = SYSTEM, 0.3, 1800
         if image:
@@ -307,7 +331,7 @@ class StreamingCoach:
             "max_tokens": max_tokens,
             "stream": True,
         }
-        headers = {"Accept": "text/event-stream", **self._auth()}
+        headers = {"Accept": "text/event-stream", **self._auth(key)}
         base = base_url(self.url or gateway_url())
         finish: dict[str, str] = {}
         replies: queue.Queue[str | Exception | None] = queue.Queue()
@@ -324,6 +348,7 @@ class StreamingCoach:
                         raise CoachError(
                             failed(base, model, response.status_code, response.text),
                             retry_after=retry_after(response),
+                            status=response.status_code,
                         )
                     for chunk in _chunks(response, cancel, finish):
                         replies.put(chunk)
