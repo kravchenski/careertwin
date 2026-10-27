@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from careertwin.interview import capture_exclude, i18n, languages
+from careertwin.interview.accounts import Account, AlreadySaved
 from careertwin.interview import project as project_store
 from careertwin.interview.providers import OTHER, PROVIDERS, provider_for
 from careertwin.interview.runtime import Runtime
@@ -55,6 +57,8 @@ QPushButton { background: rgba(188,180,255,0.16); border: 1px solid rgba(188,180
     border-radius: 14px; padding: 6px 16px; color: #ffffff; }
 QPushButton:hover { background: rgba(188,180,255,0.28); }
 QPushButton:disabled { color: rgba(215,218,232,0.35); border-color: rgba(255,255,255,0.12); }
+QPushButton#danger { background: transparent; border: 1px solid rgba(255,154,154,0.45); color: #ff9a9a; }
+QPushButton#danger:hover { background: rgba(255,154,154,0.14); }
 QToolButton { background: transparent; border: none; color: rgba(215,218,232,0.6); padding: 2px 8px; }
 QToolButton:hover { color: #ff9a9a; }
 QLabel#section { color: #ffffff; font-size: 15px; font-weight: 600; padding-top: 6px; }
@@ -93,6 +97,34 @@ class DocRow(QWidget):
             lambda _i: dialog.change_document(item.path, kind=self.kind.currentData())
         )
         remove.clicked.connect(lambda: dialog.remove_document(item.path))
+
+
+class AccountRow(QFrame):
+    """One saved API key: its name, the end of the key, whether it is in use, and remove."""
+
+    def __init__(self, dialog: SettingsDialog, account: Account, in_use: bool) -> None:
+        super().__init__()
+        self.setObjectName("row")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 8, 12, 8)
+        name = QLabel(account.name)
+        name.setStyleSheet("font-weight: 600; color: #ffffff;")
+        tail = QLabel(account.tail())
+        tail.setObjectName("hint")
+        row.addWidget(name)
+        row.addWidget(tail, 1)
+        if in_use:
+            state = QLabel(dialog.t("account_in_use"))
+            state.setObjectName("status")
+            row.addWidget(state)
+        else:
+            use = QPushButton(dialog.t("account_use"))
+            use.clicked.connect(lambda: dialog.use_account(account.name))
+            row.addWidget(use)
+        remove = QPushButton(dialog.t("remove"))
+        remove.setObjectName("danger")
+        remove.clicked.connect(lambda: dialog.remove_account(account.name))
+        row.addWidget(remove)
 
 
 class SettingsDialog(QDialog):
@@ -783,10 +815,26 @@ class SettingsDialog(QDialog):
     # ---- model -------------------------------------------------------------
 
     def _build_model(self, page: QWidget) -> None:
-        outer, form = self._form(page)
+        outer, form = self._form(self._scrolled(page))  # a list of keys grows: scroll instead of squeezing the buttons
         self.gateway_url = QLineEdit()
-        self.gateway_key = QLineEdit()
-        self.gateway_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.account_key = QLineEdit()
+        self.account_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.account_save = QPushButton()
+        self.account_list = QVBoxLayout()
+        self.account_list.setSpacing(8)
+        self.account_empty = self._hint()
+        self.accounts_note = self._hint()
+        self.accounts_block = QWidget()
+        block = QVBoxLayout(self.accounts_block)
+        block.setContentsMargins(0, 0, 0, 0)
+        block.setSpacing(8)
+        block.addLayout(self.account_list)
+        block.addWidget(self.account_empty)
+        paste = QHBoxLayout()
+        paste.addWidget(self.account_key, 1)
+        paste.addWidget(self.account_save)
+        block.addLayout(paste)
+        block.addWidget(self.accounts_note)
         self.provider = QComboBox()
         for provider in PROVIDERS:
             self.provider.addItem(provider.label, provider.id)
@@ -805,7 +853,7 @@ class SettingsDialog(QDialog):
         model_row.addWidget(self.load_models)
         form.addRow(self.provider_label, self.provider)
         form.addRow(self.model_labels[0], self.gateway_url)
-        form.addRow(self.model_labels[1], self.gateway_key)
+        form.addRow(self.model_labels[1], self.accounts_block)
         form.addRow(self.model_labels[2], model_row)
         form.addRow(self.model_labels[3], self.vision_id)
         form.addRow("", self.vision_hint)
@@ -819,7 +867,8 @@ class SettingsDialog(QDialog):
         outer.addStretch(1)
         self.gateway_url.editingFinished.connect(self._url_edited)
         self.provider.activated.connect(lambda _i: self._choose_provider())
-        self.gateway_key.editingFinished.connect(lambda: self._set("gateway_key", self.gateway_key.text()))
+        self.account_save.clicked.connect(self._save_account)
+        self.account_key.returnPressed.connect(self._save_account)
         self.model_id.lineEdit().editingFinished.connect(self._set_model)
         self.model_id.activated.connect(lambda _i: self._set_model())
         self.vision_id.lineEdit().editingFinished.connect(self._set_vision_model)
@@ -828,7 +877,12 @@ class SettingsDialog(QDialog):
         self.test_gateway.clicked.connect(self._test_gateway)
 
     def _url_edited(self) -> None:
-        self._set("gateway_url", self.gateway_url.text())
+        try:
+            self.rt.set_gateway(self.gateway_url.text())
+        except ValueError as exc:
+            self.say(self.t("bad_value", error=exc), error=True)
+        else:
+            self.say("")
         self._sync_provider()
 
     def _choose_provider(self) -> None:
@@ -838,10 +892,7 @@ class SettingsDialog(QDialog):
             self._show_provider_note()
             return
         if provider_for(self.rt.gateway()) != provider:
-            # A key and a model id belong to one provider: never send them to another.
-            with QSignalBlocker(self.gateway_key):
-                self.gateway_key.setText("")
-            self._set("gateway_key", "")
+            # A model id belongs to one provider, and so does a key: never send them to another.
             self._set("model", "")
             self._set("vision_model", "")
             with QSignalBlocker(self.model_id):
@@ -850,17 +901,65 @@ class SettingsDialog(QDialog):
                 self.vision_id.setCurrentText("")
         with QSignalBlocker(self.gateway_url):
             self.gateway_url.setText(provider.url)
-        self._set("gateway_url", provider.url)
-        self._sync_provider()
+        self._url_edited()
 
     def _sync_provider(self) -> None:
         """Show the preset the saved address belongs to, or "other"."""
         provider = provider_for(self.rt.gateway())
         with QSignalBlocker(self.provider):
             self._select(self.provider, provider.id if provider else OTHER)
-        self.model_form.setRowVisible(self.gateway_url, provider is None)
-        self.model_form.setRowVisible(self.gateway_key, provider is None or provider.cloud)
+        self.gateway_url.setPlaceholderText(provider.url if provider else self.rt.gateway())
+        self.model_form.setRowVisible(self.accounts_block, provider is None or provider.cloud)
+        self.refresh_accounts()
         self._show_provider_note()
+
+    def refresh_accounts(self) -> None:
+        """The keys saved for the address in use, and which one is in use."""
+        while (item := self.account_list.takeAt(0)) is not None:
+            if (old := item.widget()) is not None:
+                old.hide()  # gone at once, not at the next turn of the event loop
+                old.setParent(None)
+                old.deleteLater()
+        here = self.rt.accounts_here()
+        for account in here:
+            self.account_list.addWidget(AccountRow(self, account, account.key == self.rt.settings.gateway_key))
+        self.account_empty.setText(self.t("account_empty"))
+        self.account_empty.setVisible(not here)
+
+    def _save_account(self) -> None:
+        key = self.account_key.text().strip()
+        if not key:
+            self.say(self.t("account_paste"), error=True)
+            return
+        self.account_save.setEnabled(False)
+        self.run(lambda: self.rt.check_key(key), lambda verified, error: self._account_checked(key, verified, error))
+
+    def _account_checked(self, key: str, verified: bool | None, error: str | None) -> None:
+        self.account_save.setEnabled(True)
+        if error:  # the provider rejected the key: it is not saved
+            self.say(error, error=True)
+            return
+        try:
+            account = self.rt.add_account(key)
+        except AlreadySaved:
+            self.say(self.t("account_duplicate"), error=True)
+            return
+        except ValueError as exc:
+            self.say(self.t("bad_value", error=exc), error=True)
+            return
+        self.account_key.clear()
+        self.refresh_accounts()
+        self.say(self.t("account_saved" if verified else "account_unchecked", name=account.name))
+
+    def use_account(self, name: str) -> None:
+        account = self.rt.use_account(name)
+        self.refresh_accounts()
+        self.say(self.t("account_using", name=account.name))
+
+    def remove_account(self, name: str) -> None:
+        gone = self.rt.remove_account(name)
+        self.refresh_accounts()
+        self.say(self.t("account_removed", name=gone.name))
 
     def _show_project_note(self) -> None:
         provider = provider_for(self.rt.gateway())
@@ -1018,7 +1117,7 @@ class SettingsDialog(QDialog):
             with QSignalBlocker(combo):
                 self._select(combo, value)
         for field, value in (
-            (self.gateway_url, settings.gateway_url), (self.gateway_key, settings.gateway_key),
+            (self.gateway_url, settings.gateway_url),
             (self.deepgram_key, settings.deepgram_key),
         ):
             with QSignalBlocker(field):
@@ -1084,15 +1183,18 @@ class SettingsDialog(QDialog):
         self.stt_engine.setItemText(0, self.t("engine_whisper"))
         self.stt_engine.setItemText(1, self.t("engine_deepgram"))
         self._sync_engine()
-        for label, key in zip(self.model_labels, ("gateway_url", "gateway_key", "model_id", "vision_id")):
+        for label, key in zip(self.model_labels, ("gateway_url", "accounts", "model_id", "vision_id")):
             label.setText(self.t(key))
         self.vision_hint.setText(self.t("vision_hint"))
+        self.account_key.setPlaceholderText(self.t("account_paste"))
+        self.account_save.setText(self.t("account_save"))
+        self.accounts_note.setText(self.t("accounts_note"))
         self.load_models.setText(self.t("load_models"))
         self.test_gateway.setText(self.t("test"))
         self.provider_label.setText(self.t("provider"))
         self.provider.setItemText(self.provider.findData(OTHER), self.t("provider_other"))
         self._show_provider_note()
-        self.gateway_url.setPlaceholderText(self.rt.gateway())
+        self.refresh_accounts()
         self.shot_enabled.setText(self.t("shot_enabled"))
         self.refresh_screenshot()
         self.pinned.setText(self.t("pinned"))

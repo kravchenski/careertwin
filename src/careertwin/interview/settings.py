@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
 from dataclasses import asdict, dataclass, fields
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 
+from careertwin.interview import accounts
+from careertwin.interview.providers import default_gateway
 from careertwin.settings import DATA_DIR
 
 WHISPER_MODELS = ("tiny", "base", "small", "medium", "large-v3-turbo")
@@ -38,7 +42,9 @@ class InterviewSettings:
     deepgram_key: str = ""
     deepgram_model: str = "nova-3"
     gateway_url: str = ""
-    gateway_key: str = ""
+    gateway_key: str = ""  # the account in use; the others for the same address are in `accounts`
+    # [{"name", "url", "key"}]: several keys per address, tried in turn when the one in use is limited
+    accounts: list = dataclass_field(default_factory=list)
     model: str = ""
     vision_model: str = ""
     fallback_models: str = ""  # comma-separated; asked in order when the model is rate limited or down
@@ -72,6 +78,10 @@ class InterviewSettings:
                     continue  # the old default; the window now needs far less time to hide
                 if field.name in data:
                     settings.set(field.name, data[field.name], save=False, strict=False)
+        if settings.gateway_key and not any(a["key"] == settings.gateway_key for a in settings.accounts):
+            # a key saved before accounts existed becomes the first account of its address
+            with contextlib.suppress(ValueError):
+                settings.accounts = accounts.add(settings.accounts, settings.gateway_url or default_gateway(), settings.gateway_key)
         return settings
 
     def set(self, name: str, value: Any, *, save: bool = True, strict: bool = True) -> None:
@@ -102,6 +112,8 @@ class InterviewSettings:
 
 
 def _coerce(name: str, value: Any, current: Any) -> Any:
+    if isinstance(current, list):
+        return accounts.clean(value)
     if isinstance(current, bool):
         if not isinstance(value, bool):
             raise ValueError(f"{name} must be true or false")
