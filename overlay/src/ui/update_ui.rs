@@ -2,7 +2,7 @@
 
 use egui::{RichText, ScrollArea};
 
-use super::theme::{ACCENT, DANGER, GOOD, MUTED, ON_ACCENT, STRONG, semibold};
+use super::theme::{accent, danger, good, muted, on_accent, semibold, strong};
 use super::{App, text};
 use crate::update::{Available, System, pick_asset};
 
@@ -34,8 +34,8 @@ impl App {
         let (mut later, mut skip, mut download, mut page, mut folder) = (false, false, false, false, false);
         egui::Modal::new(egui::Id::unique("update")).show(ctx, |ui| {
             ui.set_width(460.0);
-            ui.label(RichText::new(tf("update_title", &[("version", &version)])).font(semibold(20.0)).color(STRONG));
-            ui.label(RichText::new(tf("update_have", &[("version", &available.current)])).color(MUTED));
+            ui.label(RichText::new(tf("update_title", &[("version", &version)])).font(semibold(20.0)).color(strong()));
+            ui.label(RichText::new(tf("update_have", &[("version", &available.current)])).color(muted()));
             if !available.release.notes.trim().is_empty() {
                 ui.add_space(8.0);
                 ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
@@ -51,23 +51,23 @@ impl App {
                         "update_downloading",
                         &[("done", &megabytes(done)), ("total", &megabytes(total))],
                     ))
-                    .color(ACCENT),
+                    .color(accent()),
                 );
                 ui.add(egui::ProgressBar::new(if total > 0 { done as f32 / total as f32 } else { 0.0 }));
             }
             match &self.update_ui.downloaded {
                 Some(Ok(path)) => {
                     ui.label(
-                        RichText::new(tf("update_verified", &[("path", &path.display().to_string())])).color(GOOD),
+                        RichText::new(tf("update_verified", &[("path", &path.display().to_string())])).color(good()),
                     );
                     folder = ui.button(t("open_folder")).clicked();
                 }
                 Some(Err(why)) => {
-                    ui.label(RichText::new(tf("update_error", &[("why", why)])).color(DANGER));
+                    ui.label(RichText::new(tf("update_error", &[("why", why)])).color(danger()));
                 }
                 None => {
                     if asset.is_none() && System::current() == System::Linux {
-                        ui.label(RichText::new(t("update_linux")).color(MUTED));
+                        ui.label(RichText::new(t("update_linux")).color(muted()));
                     }
                 }
             }
@@ -78,13 +78,13 @@ impl App {
                     download = ui
                         .add_enabled(
                             !downloading,
-                            egui::Button::new(RichText::new(t("update_download")).color(ON_ACCENT)).fill(ACCENT),
+                            egui::Button::new(RichText::new(t("update_download")).color(on_accent())).fill(accent()),
                         )
                         .clicked();
                 }
                 page = ui.button(t("update_page")).clicked();
                 later = ui.button(t("update_later")).clicked();
-                skip = ui.add(egui::Button::new(RichText::new(t("update_skip")).color(MUTED)).frame(false)).clicked();
+                skip = ui.add(egui::Button::new(RichText::new(t("update_skip")).color(muted())).frame(false)).clicked();
             });
         });
         if download {

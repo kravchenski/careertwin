@@ -216,3 +216,111 @@ fn the_window_speaks_russian_when_asked() {
     harness.get_by_label("Скриншот");
     shot(&mut harness, "overlay-ru");
 }
+
+#[test]
+fn the_general_tab_has_the_appearance_section_with_themes_the_equalizer_and_icons() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::General;
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 1000.0);
+    harness.run();
+    for label in [
+        "Appearance",
+        "Theme",
+        "Midnight",
+        "Graphite",
+        "Forest",
+        "Amber",
+        "Rose",
+        "Ocean",
+        "Paper",
+        "Custom",
+        "Equalizer",
+        "Dots at the top",
+        "Animate",
+        "Theme colour",
+    ] {
+        harness.get_by_label(label);
+    }
+    shot(&mut harness, "tab-general-appearance");
+}
+
+#[test]
+fn a_theme_changes_every_colour_and_a_light_one_stays_readable() {
+    for (name, shot_name) in [("paper", "overlay-paper"), ("forest", "overlay-forest"), ("amber", "overlay-amber")] {
+        let mut fixture = fixture("en");
+        fixture.app.app.theme = name.into();
+        fixture.app.entries.push(answered("What is a left join?", REPLY));
+        let palette = theme::from_settings(&fixture.app.app);
+        theme::set_palette(palette);
+        let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 520.0);
+        harness.run();
+        harness.get_by_label_contains("keeps every row");
+        assert_eq!(theme::palette(), palette);
+        shot(&mut harness, shot_name);
+    }
+    theme::set_palette(theme::preset("midnight"));
+}
+
+#[test]
+fn a_custom_theme_uses_the_three_colours() {
+    let mut fixture = fixture("en");
+    fixture.app.app.theme = "custom".into();
+    fixture.app.app.custom_panel = "#101820".into();
+    fixture.app.app.custom_text = "#e8eef4".into();
+    fixture.app.app.custom_accent = "#ff7a59".into();
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::General;
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 1000.0);
+    harness.run();
+    harness.get_by_label("Accent");
+    harness.get_by_label("#ff7a59");
+    assert_eq!(theme::palette().accent, egui::Color32::from_rgb(255, 122, 89));
+    shot(&mut harness, "tab-general-custom");
+    theme::set_palette(theme::preset("midnight"));
+}
+
+#[test]
+fn the_equalizer_can_be_switched_off() {
+    let mut fixture = fixture("en");
+    fixture.app.app.equalizer = "off".into();
+    fixture.app.app.animate = false;
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 420.0);
+    harness.run();
+    harness.get_by_label("Ready");
+    shot(&mut harness, "overlay-no-equalizer");
+}
+
+/// The equalizer at a few moments, to judge how it looks: `UI_SHOTS=dir cargo test --test ui_shots the_equalizer_moves`.
+#[test]
+fn the_equalizer_moves_with_the_level_and_the_mood() {
+    use careertwin_overlay::ui::equalizer::{self, Mood};
+    let cases = [
+        ("listening-loud", Mood::Listening, 0.85, 3.2),
+        ("listening-soft", Mood::Listening, 0.3, 4.1),
+        ("thinking", Mood::Thinking, 0.0, 1.0),
+        ("idle", Mood::Idle, 0.0, 2.0),
+    ];
+    for theme_name in ["midnight", "amber"] {
+        for (name, mood, level, time) in cases {
+            theme::set_palette(theme::preset(theme_name));
+            let mut harness = Harness::builder()
+                .with_size(egui::vec2(900.0, 360.0))
+                .with_accessibility_check(false)
+                .with_context_setup(|ctx| theme::install(ctx, 1.0))
+                .build_ui(move |ui| {
+                    let rect = ui.max_rect();
+                    ui.painter().rect_filled(rect, 14.0, theme::panel());
+                    equalizer::background(ui.painter(), rect.shrink(6.0), level, mood, time);
+                    let strip = egui::Rect::from_min_size(rect.min + egui::vec2(20.0, 14.0), egui::vec2(86.0, 26.0));
+                    ui.painter().rect_filled(strip, 13.0, theme::mix(theme::panel(), theme::text(), 0.09));
+                    equalizer::dots(ui.painter(), strip, level, mood, time);
+                });
+            harness.run();
+            if let Ok(dir) = std::env::var("UI_SHOTS") {
+                harness.render().expect("renders").save(format!("{dir}/eq-{theme_name}-{name}.png")).unwrap();
+            }
+        }
+    }
+    theme::set_palette(theme::preset("midnight"));
+}

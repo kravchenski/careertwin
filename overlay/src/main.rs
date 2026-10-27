@@ -66,6 +66,7 @@ fn main() -> ExitCode {
         "CareerTwin · Interview",
         ui::window_options(&settings, &app_settings),
         Box::new(move |cc| {
+            theme::set_palette(theme::from_settings(&app_settings));
             theme::install(&cc.egui_ctx, settings.font_scale as f32 / 100.0);
             let context = cc.egui_ctx.clone();
             let repaint: Arc<dyn Fn() + Send + Sync> = Arc::new(move || context.request_repaint());

@@ -12,6 +12,7 @@ pub mod export;
 pub mod languages;
 pub mod lexicon;
 pub mod library;
+pub mod look;
 pub mod paths;
 pub mod prepare;
 pub mod prompt_text;

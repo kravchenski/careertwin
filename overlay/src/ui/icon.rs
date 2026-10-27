@@ -91,12 +91,24 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     (channel(h / 360.0 + 1.0 / 3.0), channel(h / 360.0), channel(h / 360.0 - 1.0 / 3.0))
 }
 
-/// The icon a setting asks for: `""` the default, `builtin:<name>`, or the path of an image. A bad image is an
-/// error the window can show; the caller then keeps the default.
-pub fn load(setting: &str) -> Result<IconData, String> {
+/// The hue of the crescent of the icon that ships, in degrees.
+const BASE_HUE: f32 = 38.9;
+
+/// The icon in the colour of a theme's accent; grey for an accent with no colour of its own.
+pub fn in_accent(accent: egui::Color32) -> IconData {
+    let (hue, saturation, _) = rgb_to_hsl(accent.r(), accent.g(), accent.b());
+    recolour(&default_icon(), if saturation < 0.12 { None } else { Some((hue - BASE_HUE).rem_euclid(360.0)) })
+}
+
+/// The icon a setting asks for: `""` the default, `theme` the default in the accent of the theme, `builtin:<name>`,
+/// or the path of an image. A bad image is an error the window can show; the caller then keeps the default.
+pub fn load(setting: &str, accent: egui::Color32) -> Result<IconData, String> {
     let setting = setting.trim();
     if setting.is_empty() {
         return Ok(default_icon());
+    }
+    if setting == "theme" {
+        return Ok(in_accent(accent));
     }
     if let Some(name) = setting.strip_prefix("builtin:") {
         let (_, turn) = VARIANTS
@@ -113,13 +125,15 @@ pub fn load(setting: &str) -> Result<IconData, String> {
     decode(&bytes)
 }
 
-pub fn shared(setting: &str) -> Arc<IconData> {
-    Arc::new(load(setting).unwrap_or_else(|_| default_icon()))
+pub fn shared(setting: &str, accent: egui::Color32) -> Arc<IconData> {
+    Arc::new(load(setting, accent).unwrap_or_else(|_| default_icon()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ACCENT: egui::Color32 = egui::Color32::from_rgb(188, 180, 255);
 
     fn pixel(icon: &IconData, x: u32, y: u32) -> [u8; 4] {
         let at = ((y * icon.width + x) * 4) as usize;
@@ -184,15 +198,15 @@ mod tests {
 
     #[test]
     fn a_setting_names_the_default_a_variant_or_a_file() {
-        assert_eq!(load("").unwrap(), default_icon());
-        assert_ne!(load("builtin:sky").unwrap(), default_icon());
+        assert_eq!(load("", ACCENT).unwrap(), default_icon());
+        assert_ne!(load("builtin:sky", ACCENT).unwrap(), default_icon());
         assert!(
-            load("builtin:nope").is_err()
+            load("builtin:nope", ACCENT).is_err()
                 && is_builtin("builtin:mint")
                 && !is_builtin("builtin:nope")
                 && !is_builtin("")
         );
-        assert!(load("/no/such/file.png").is_err());
+        assert!(load("/no/such/file.png", ACCENT).is_err());
     }
 
     #[test]
@@ -204,11 +218,29 @@ mod tests {
             *px = if (200..400).contains(&x) { image::Rgba([255, 0, 0, 255]) } else { image::Rgba([0, 0, 255, 255]) };
         }
         wide.save(&path).unwrap();
-        let icon = load(path.to_str().unwrap()).unwrap();
+        let icon = load(path.to_str().unwrap(), ACCENT).unwrap();
         assert_eq!((icon.width, icon.height), (SIZE, SIZE));
         assert_eq!(pixel(&icon, SIZE / 2, SIZE / 2), [255, 0, 0, 255]); // the middle third is what is kept
         assert_eq!(pixel(&icon, 2, 2), [255, 0, 0, 255]);
         std::fs::write(dir.path().join("bad.png"), b"not an image").unwrap();
-        assert!(load(dir.path().join("bad.png").to_str().unwrap()).is_err());
+        assert!(load(dir.path().join("bad.png").to_str().unwrap(), ACCENT).is_err());
+    }
+
+    #[test]
+    fn the_icon_can_take_the_colour_of_the_theme() {
+        let themed = load("theme", ACCENT).unwrap();
+        assert_ne!(themed, default_icon());
+        let grey = load("theme", egui::Color32::from_rgb(200, 200, 200)).unwrap();
+        assert!(grey.rgba.as_chunks::<4>().0.iter().all(|px| px[0] == px[1] && px[1] == px[2]));
+        let amber = in_accent(egui::Color32::from_rgb(255, 181, 58));
+        let differing = amber
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(default_icon().rgba.as_chunks::<4>().0.iter())
+            .filter(|(a, b)| a[..3].iter().zip(b[..3].iter()).any(|(x, y)| x.abs_diff(*y) > 8))
+            .count();
+        assert!(differing < 200, "the base hue changes (almost) nothing: {differing}");
     }
 }

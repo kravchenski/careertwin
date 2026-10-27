@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use egui::{ComboBox, RichText, ScrollArea, TextEdit, Ui};
 use serde_json::json;
 
-use super::theme::{ACCENT, DANGER, GOOD, MUTED, ON_ACCENT, STRONG, WARN, semibold};
-use super::{App, Event, text};
+use super::theme::{accent, danger, good, muted, on_accent, semibold, strong, warn};
+use super::{App, Event, text, theme};
 use crate::accounts::Account;
 use crate::coach::Request;
 use crate::export::{self, Format};
@@ -88,18 +88,18 @@ impl State {
 
 fn section(ui: &mut Ui, title: &str) {
     ui.add_space(10.0);
-    ui.label(RichText::new(title).font(semibold(16.0)).color(STRONG));
+    ui.label(RichText::new(title).font(semibold(16.0)).color(strong()));
     ui.add_space(2.0);
 }
 
 fn note(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text).color(MUTED).small());
+    ui.label(RichText::new(text).color(muted()).small());
 }
 
 fn row<R>(ui: &mut Ui, label: &str, content: impl FnOnce(&mut Ui) -> R) -> R {
     ui.horizontal(|ui| {
         ui.allocate_ui_with_layout(egui::vec2(150.0, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.label(RichText::new(label).color(MUTED));
+            ui.label(RichText::new(label).color(muted()));
         });
         content(ui)
     })
@@ -114,7 +114,7 @@ fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str) 
         changed |= ui.add(edit).changed();
         ComboBox::from_id_salt(("models", hint)).selected_text("").width(24.0).show_ui(ui, |ui| {
             if models.is_empty() {
-                ui.label(RichText::new("—").color(MUTED));
+                ui.label(RichText::new("—").color(muted()));
             }
             ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
                 for model in models {
@@ -157,7 +157,7 @@ impl App {
                     ] {
                         let selected = self.settings_ui.tab == tab;
                         let label =
-                            RichText::new(t(key)).font(semibold(15.0)).color(if selected { ACCENT } else { MUTED });
+                            RichText::new(t(key)).font(semibold(15.0)).color(if selected { accent() } else { muted() });
                         if ui.add(egui::Button::new(label).frame(false).selected(selected)).clicked() {
                             self.settings_ui.tab = tab;
                         }
@@ -208,7 +208,7 @@ impl App {
             if ui.button(t("rename")).clicked() {
                 self.settings_ui.rename = Some(self.library.current().name.clone());
             }
-            delete = ui.button(RichText::new(t("delete")).color(DANGER)).clicked();
+            delete = ui.button(RichText::new(t("delete")).color(danger())).clicked();
         });
         if let Some(name) = self.settings_ui.rename.as_mut() {
             ui.horizontal(|ui| {
@@ -285,7 +285,8 @@ impl App {
                         documents_changed |= ui.selectable_value(&mut doc.kind, kind.to_owned(), kind).changed();
                     }
                 });
-                if ui.add(egui::Button::new(RichText::new(t("remove")).color(DANGER).small()).frame(false)).clicked() {
+                if ui.add(egui::Button::new(RichText::new(t("remove")).color(danger()).small()).frame(false)).clicked()
+                {
                     remove = Some(index);
                 }
             });
@@ -321,16 +322,16 @@ impl App {
             self.library_changed();
         }
         for problem in self.problems.clone() {
-            ui.label(RichText::new(problem).color(DANGER).small());
+            ui.label(RichText::new(problem).color(danger()).small());
         }
 
         section(ui, &t("about_file"));
         let about = self.paths.about.clone();
         let size = std::fs::read_to_string(&about).map(|text| text.chars().count()).ok();
         ui.horizontal(|ui| {
-            ui.label(RichText::new(about.display().to_string()).color(MUTED).small());
+            ui.label(RichText::new(about.display().to_string()).color(muted()).small());
             if let Some(size) = size {
-                ui.label(RichText::new(format!("{:.1}k", size as f64 / 1000.0)).color(GOOD).small());
+                ui.label(RichText::new(format!("{:.1}k", size as f64 / 1000.0)).color(good()).small());
             }
             if ui.add(egui::Button::new(RichText::new(t("open_folder")).small()).frame(false)).clicked() {
                 open_path(about.parent().unwrap_or(&about));
@@ -355,14 +356,14 @@ impl App {
         let _ = (&t, &tf);
         ui.horizontal(|ui| {
             super::theme::step_mark(ui, done);
-            ui.label(RichText::new(format!("{number}. {title}")).font(semibold(15.0)).color(STRONG));
+            ui.label(RichText::new(format!("{number}. {title}")).font(semibold(15.0)).color(strong()));
             if optional {
-                ui.label(RichText::new(t("optional")).color(MUTED).small());
+                ui.label(RichText::new(t("optional")).color(muted()).small());
             }
         });
         ui.horizontal(|ui| {
             ui.add_space(26.0);
-            ui.label(RichText::new(detail).color(if done { MUTED } else { WARN }).small());
+            ui.label(RichText::new(detail).color(if done { muted() } else { warn() }).small());
         });
         ui.add_space(-4.0);
     }
@@ -372,7 +373,7 @@ impl App {
         let t = |key: &str| text::t(&lang, key, &[]);
         let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
         let _ = (&t, &tf);
-        ui.label(RichText::new(t("practice_title")).font(semibold(18.0)).color(STRONG));
+        ui.label(RichText::new(t("practice_title")).font(semibold(18.0)).color(strong()));
         note(ui, &t("practice_intro"));
         ui.add_space(8.0);
         let interview = self.library.current().clone();
@@ -411,7 +412,7 @@ impl App {
         let ready = !self.brief.is_empty();
         section(ui, &format!("5. {}", t("step_bank")));
         ui.horizontal(|ui| {
-            let label = ui.label(RichText::new(t("how_many")).color(MUTED));
+            let label = ui.label(RichText::new(t("how_many")).color(muted()));
             ui.add(egui::DragValue::new(&mut self.settings_ui.bank_count).range(3..=20)).labelled_by(label.id);
             ui.add(
                 TextEdit::singleline(&mut self.settings_ui.focus)
@@ -423,7 +424,7 @@ impl App {
             let busy = self.settings_ui.bank_busy;
             let label = if busy { t("working") } else { t("build_bank") };
             if ui
-                .add_enabled(ready && !busy, egui::Button::new(RichText::new(label).color(ON_ACCENT)).fill(ACCENT))
+                .add_enabled(ready && !busy, egui::Button::new(RichText::new(label).color(on_accent())).fill(accent()))
                 .clicked()
             {
                 self.build_bank();
@@ -432,21 +433,21 @@ impl App {
         match &self.settings_ui.bank {
             None => note(ui, &t("nothing_yet")),
             Some(Err(error)) => {
-                ui.label(RichText::new(error).color(DANGER));
+                ui.label(RichText::new(error).color(danger()));
             }
             Some(Ok(questions)) => {
                 for (index, item) in questions.iter().enumerate() {
                     ui.add_space(4.0);
                     ui.label(
-                        RichText::new(format!("{}. {}", index + 1, item.question)).font(semibold(15.0)).color(STRONG),
+                        RichText::new(format!("{}. {}", index + 1, item.question)).font(semibold(15.0)).color(strong()),
                     );
                     if !item.kind.is_empty() {
-                        ui.label(RichText::new(&item.kind).color(MUTED).small());
+                        ui.label(RichText::new(&item.kind).color(muted()).small());
                     }
                     for line in &item.outline {
                         ui.horizontal_top(|ui| {
-                            ui.label(RichText::new("–").color(ACCENT));
-                            super::answer::rich_line(ui, line, 14.5, super::theme::TEXT);
+                            ui.label(RichText::new("–").color(accent()));
+                            super::answer::rich_line(ui, line, 14.5, super::theme::text());
                         });
                     }
                 }
@@ -462,7 +463,7 @@ impl App {
         match &self.settings_ui.review {
             None => note(ui, &t("nothing_yet")),
             Some(Err(error)) => {
-                ui.label(RichText::new(error).color(DANGER));
+                ui.label(RichText::new(error).color(danger()));
             }
             Some(Ok(analysis)) => {
                 if !analysis.summary.is_empty() {
@@ -473,10 +474,10 @@ impl App {
                         return;
                     }
                     ui.add_space(6.0);
-                    ui.label(RichText::new(title).font(semibold(14.0)).color(MUTED));
+                    ui.label(RichText::new(title).font(semibold(14.0)).color(muted()));
                     for item in items {
                         ui.horizontal_top(|ui| {
-                            ui.label(RichText::new("–").color(ACCENT));
+                            ui.label(RichText::new("–").color(accent()));
                             ui.label(item);
                         });
                     }
@@ -484,10 +485,10 @@ impl App {
                 list(ui, t("strengths"), &analysis.strengths);
                 if !analysis.gaps.is_empty() {
                     ui.add_space(6.0);
-                    ui.label(RichText::new(t("gaps")).font(semibold(14.0)).color(MUTED));
+                    ui.label(RichText::new(t("gaps")).font(semibold(14.0)).color(muted()));
                     for gap in &analysis.gaps {
-                        ui.label(RichText::new(&gap.gap).color(STRONG));
-                        ui.label(RichText::new(&gap.how_to_address).color(MUTED));
+                        ui.label(RichText::new(&gap.gap).color(strong()));
+                        ui.label(RichText::new(&gap.how_to_address).color(muted()));
                     }
                 }
                 list(ui, t("likely"), &analysis.likely_questions);
@@ -501,7 +502,7 @@ impl App {
         let rows = export::rows(&records);
         ui.label(
             RichText::new(tf("questions_found", &[("n", &rows.len().to_string()), ("m", &records.len().to_string())]))
-                .color(MUTED),
+                .color(muted()),
         );
         ui.horizontal(|ui| {
             for (index, format) in Format::ALL.iter().enumerate() {
@@ -525,7 +526,7 @@ impl App {
                         "export_done",
                         &[("n", &files.len().to_string()), ("folder", &folder.display().to_string())],
                     ))
-                    .color(GOOD)
+                    .color(good())
                     .small(),
                 );
                 if ui.add(egui::Button::new(t("open_folder")).frame(false)).clicked() {
@@ -533,7 +534,7 @@ impl App {
                 }
             }
             Some(Err(error)) => {
-                ui.label(RichText::new(error).color(DANGER).small());
+                ui.label(RichText::new(error).color(danger()).small());
             }
             None => {}
         }
@@ -648,19 +649,19 @@ impl App {
             let (mut use_name, mut remove_name) = (None, None);
             for account in &here {
                 egui::Frame::new()
-                    .fill(super::theme::FIELD)
+                    .fill(super::theme::field())
                     .corner_radius(8)
                     .inner_margin(egui::Margin::symmetric(12, 8))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(&account.name).font(semibold(15.0)).color(STRONG));
-                            ui.label(RichText::new(account.tail()).color(MUTED).small());
+                            ui.label(RichText::new(&account.name).font(semibold(15.0)).color(strong()));
+                            ui.label(RichText::new(account.tail()).color(muted()).small());
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.add(egui::Button::new(RichText::new(t("remove")).color(DANGER))).clicked() {
+                                if ui.add(egui::Button::new(RichText::new(t("remove")).color(danger()))).clicked() {
                                     remove_name = Some(account.name.clone());
                                 }
                                 if account.key == self.settings.gateway_key {
-                                    ui.label(RichText::new(t("in_use")).color(ACCENT));
+                                    ui.label(RichText::new(t("in_use")).color(accent()));
                                 } else if ui.button(t("use")).clicked() {
                                     use_name = Some(account.name.clone());
                                 }
@@ -707,7 +708,7 @@ impl App {
 
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
-        ui.label(RichText::new(t("model_ask")).font(semibold(15.0)).color(STRONG));
+        ui.label(RichText::new(t("model_ask")).font(semibold(15.0)).color(strong()));
         changed |= model_picker(ui, &mut self.settings.model, &models, "auto");
         note(ui, &t("model_ask_note"));
         row(ui, &t("fallbacks"), |ui| {
@@ -720,11 +721,11 @@ impl App {
                 .changed();
         });
         ui.add_space(10.0);
-        ui.label(RichText::new(t("model_screenshot")).font(semibold(15.0)).color(STRONG));
+        ui.label(RichText::new(t("model_screenshot")).font(semibold(15.0)).color(strong()));
         changed |= model_picker(ui, &mut self.settings.vision_model, &models, "");
         note(ui, &t("model_shot_note"));
         ui.add_space(10.0);
-        ui.label(RichText::new(t("model_audio")).font(semibold(15.0)).color(STRONG));
+        ui.label(RichText::new(t("model_audio")).font(semibold(15.0)).color(strong()));
         row(ui, &t("engine"), |ui| {
             let label = if self.settings.stt_engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
             ComboBox::from_id_salt("engine").selected_text(label).width(260.0).show_ui(ui, |ui| {
@@ -791,14 +792,14 @@ impl App {
             }
         });
         if let Some(error) = &self.settings_ui.models_error {
-            ui.label(RichText::new(error).color(DANGER).small());
+            ui.label(RichText::new(error).color(danger()).small());
         }
         match &self.settings_ui.connected {
             Some(Ok(count)) => {
-                ui.label(RichText::new(tf("connected", &[("n", &count.to_string())])).color(GOOD).small());
+                ui.label(RichText::new(tf("connected", &[("n", &count.to_string())])).color(good()).small());
             }
             Some(Err(error)) => {
-                ui.label(RichText::new(error).color(DANGER).small());
+                ui.label(RichText::new(error).color(danger()).small());
             }
             None => {}
         }
@@ -814,7 +815,7 @@ impl App {
         let t = |key: &str| text::t(&lang, key, &[]);
         let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
         let _ = (&t, &tf);
-        let mut changed = false;
+        let mut changed = self.appearance(ui);
         section(ui, &t("language"));
         row(ui, &t("interview_language"), |ui| {
             let current = self.settings.language.clone();
@@ -874,16 +875,6 @@ impl App {
             }
         });
 
-        section(ui, &t("window"));
-        changed |= ui.checkbox(&mut self.settings.pinned, t("keep_on_top")).changed();
-        changed |= ui.checkbox(&mut self.settings.frameless, t("frameless")).changed();
-        row(ui, &t("opacity"), |ui| {
-            changed |= ui.add(egui::Slider::new(&mut self.settings.opacity, 35..=100).suffix("%")).changed()
-        });
-        row(ui, &t("text_size"), |ui| {
-            changed |= ui.add(egui::Slider::new(&mut self.settings.font_scale, 70..=180).suffix("%")).changed()
-        });
-
         section(ui, &t("screenshot_section"));
         changed |= ui.checkbox(&mut self.settings.screenshot_enabled, t("screenshot_enabled")).changed();
         let tools = crate::screenshot::available_tools();
@@ -907,9 +898,6 @@ impl App {
         });
         note(ui, &t("screenshot_note"));
 
-        section(ui, &t("app_icon"));
-        self.icon_picker(ui);
-
         section(ui, &t("updates"));
         let mut check = self.app.check_updates;
         if ui.checkbox(&mut check, t("check_updates")).changed() {
@@ -922,10 +910,10 @@ impl App {
             }
             match &self.update_ui.last {
                 Some(Ok(version)) => {
-                    ui.label(RichText::new(tf("up_to_date", &[("version", version)])).color(GOOD).small());
+                    ui.label(RichText::new(tf("up_to_date", &[("version", version)])).color(good()).small());
                 }
                 Some(Err(why)) => {
-                    ui.label(RichText::new(tf("update_failed", &[("why", why)])).color(DANGER).small());
+                    ui.label(RichText::new(tf("update_failed", &[("why", why)])).color(danger()).small());
                 }
                 None => {}
             }
@@ -937,7 +925,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new(tf("data_folder", &[("path", &self.paths.data.display().to_string())]))
-                    .color(MUTED)
+                    .color(muted())
                     .small(),
             );
             if ui.add(egui::Button::new(RichText::new(t("open_folder")).small()).frame(false)).clicked() {
@@ -945,13 +933,13 @@ impl App {
             }
         });
         ui.add_space(8.0);
-        let reset = ui.button(RichText::new(t("reset")).color(DANGER));
+        let reset = ui.button(RichText::new(t("reset")).color(danger()));
         if reset.clicked() {
             self.settings_ui.confirm_reset = true;
         }
         if self.settings_ui.confirm_reset {
             ui.horizontal(|ui| {
-                if ui.button(RichText::new("OK").color(DANGER)).clicked() {
+                if ui.button(RichText::new("OK").color(danger())).clicked() {
                     let keep = self.settings.clone();
                     self.settings = crate::settings::Settings::default();
                     let _ = keep;
@@ -968,6 +956,86 @@ impl App {
         }
     }
 
+    /// Theme, equalizer, icon and the window itself: everything about how it looks.
+    fn appearance(&mut self, ui: &mut Ui) -> bool {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let mut changed = false;
+        section(ui, &t("appearance"));
+        ui.label(RichText::new(t("theme")).color(muted()));
+        let mut chosen: Option<String> = None;
+        let current = self.app.theme.clone();
+        ui.horizontal_wrapped(|ui| {
+            for (name, panel, _, accent_color) in super::theme::PRESETS {
+                if swatch(ui, &t(&format!("theme_{name}")), panel, accent_color, current == name) {
+                    chosen = Some(name.to_owned());
+                }
+            }
+            let (panel, _, accent_color) = crate::look::colors(&self.app);
+            if swatch(ui, &t("theme_custom"), panel, accent_color, current == "custom") {
+                chosen = Some("custom".to_owned());
+            }
+        });
+        if let Some(name) = chosen {
+            self.app.theme = name;
+            self.app_changed();
+        }
+        if self.app.theme == "custom" {
+            let mut edited = false;
+            for (key, slot) in [("theme_background", 0), ("theme_text", 1), ("theme_accent", 2)] {
+                row(ui, &t(key), |ui| {
+                    let field = match slot {
+                        0 => &mut self.app.custom_panel,
+                        1 => &mut self.app.custom_text,
+                        _ => &mut self.app.custom_accent,
+                    };
+                    let mut rgb = crate::look::parse_hex(field).unwrap_or([128, 128, 128]);
+                    if ui.color_edit_button_srgb(&mut rgb).changed() {
+                        *field = crate::look::hex(rgb);
+                        edited = true;
+                    }
+                    ui.label(RichText::new(field.clone()).color(muted()).small());
+                });
+            }
+            if edited {
+                self.app_changed();
+            }
+        }
+
+        ui.add_space(8.0);
+        row(ui, &t("equalizer"), |ui| {
+            let mut style = self.app.equalizer.clone();
+            for choice in crate::settings::EQUALIZER_STYLES {
+                ui.selectable_value(&mut style, choice.to_owned(), t(&format!("eq_{choice}")));
+            }
+            if style != self.app.equalizer {
+                self.app.equalizer = style;
+                self.app_changed();
+            }
+        });
+        let mut animate = self.app.animate;
+        if ui.checkbox(&mut animate, t("animate")).changed() {
+            self.app.animate = animate;
+            self.app_changed();
+        }
+        note(ui, &t("eq_note"));
+
+        ui.add_space(8.0);
+        ui.label(RichText::new(t("app_icon")).color(muted()));
+        self.icon_picker(ui);
+
+        ui.add_space(8.0);
+        changed |= ui.checkbox(&mut self.settings.pinned, t("keep_on_top")).changed();
+        changed |= ui.checkbox(&mut self.settings.frameless, t("frameless")).changed();
+        row(ui, &t("opacity"), |ui| {
+            changed |= ui.add(egui::Slider::new(&mut self.settings.opacity, 35..=100).suffix("%")).changed()
+        });
+        row(ui, &t("text_size"), |ui| {
+            changed |= ui.add(egui::Slider::new(&mut self.settings.font_scale, 70..=180).suffix("%")).changed()
+        });
+        changed
+    }
+
     fn icon_picker(&mut self, ui: &mut Ui) {
         let lang = self.settings.ui_code();
         let t = |key: &str| text::t(&lang, key, &[]);
@@ -978,7 +1046,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             let mut tile = |ui: &mut Ui, setting: &str, label: &str| {
                 let selected = current == setting;
-                let icon = super::icon::load(setting).unwrap_or_default();
+                let icon = super::icon::load(setting, accent()).unwrap_or_default();
                 let image =
                     egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
                 let texture = ui.ctx().load_texture(format!("icon-{setting}"), image, egui::TextureOptions::LINEAR);
@@ -987,19 +1055,20 @@ impl App {
                         egui::Button::image(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(52.0, 52.0)))
                             .selected(selected),
                     );
-                    ui.label(RichText::new(label).small().color(if selected { ACCENT } else { MUTED }));
+                    ui.label(RichText::new(label).small().color(if selected { accent() } else { muted() }));
                     if response.clicked() {
                         chosen = Some(setting.to_owned());
                     }
                 });
             };
             tile(ui, "", &t("icon_default"));
+            tile(ui, "theme", &t("icon_theme"));
             for (name, _) in super::icon::VARIANTS.iter().skip(1) {
                 tile(ui, &format!("builtin:{name}"), name);
             }
         });
         ui.add_space(4.0);
-        ui.label(RichText::new(t("icon_custom")).color(MUTED));
+        ui.label(RichText::new(t("icon_custom")).color(muted()));
         ui.horizontal(|ui| {
             let width = (ui.available_width() - 170.0).max(120.0);
             ui.add(
@@ -1010,14 +1079,14 @@ impl App {
                 .clicked()
             {
                 let path = self.settings_ui.icon_path.trim().trim_matches('"').to_owned();
-                match super::icon::load(&path) {
+                match super::icon::load(&path, accent()) {
                     Ok(_) => chosen = Some(path),
                     Err(why) => self.settings_ui.icon_error = Some(why),
                 }
             }
         });
         if let Some(why) = &self.settings_ui.icon_error {
-            ui.label(RichText::new(tf("icon_bad", &[("why", why)])).color(DANGER).small());
+            ui.label(RichText::new(tf("icon_bad", &[("why", why)])).color(danger()).small());
         }
         note(ui, &t("icon_note"));
         if let Some(setting) = chosen {
@@ -1026,6 +1095,43 @@ impl App {
             self.app_changed();
         }
     }
+}
+
+/// A theme as a small card: its background with its accent on it, and its name. True when it was clicked.
+fn swatch(ui: &mut Ui, name: &str, panel: [u8; 3], accent_color: [u8; 3], selected: bool) -> bool {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(74.0, 62.0), egui::Sense::click());
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, name));
+    let painter = ui.painter();
+    let fill = egui::Color32::from_rgb(panel[0], panel[1], panel[2]);
+    painter.rect_filled(rect, 8.0, fill);
+    let border = if selected {
+        accent()
+    } else if response.hovered() {
+        muted()
+    } else {
+        super::theme::line()
+    };
+    painter.rect_stroke(
+        rect,
+        8.0,
+        egui::Stroke::new(if selected { 2.0 } else { 1.0 }, border),
+        egui::StrokeKind::Inside,
+    );
+    painter.circle_filled(
+        rect.center() - egui::vec2(0.0, 8.0),
+        10.0,
+        egui::Color32::from_rgb(accent_color[0], accent_color[1], accent_color[2]),
+    );
+    let label =
+        if super::theme::luminance(fill) < 0.5 { egui::Color32::from_gray(210) } else { egui::Color32::from_gray(50) };
+    painter.text(
+        rect.center_bottom() - egui::vec2(0.0, 9.0),
+        egui::Align2::CENTER_CENTER,
+        name,
+        theme::sans(11.5),
+        label,
+    );
+    response.clicked()
 }
 
 /// Open a folder or a file in the system's own program.

@@ -3,7 +3,7 @@
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Frame, Margin, RichText, ScrollArea, Ui};
 
-use super::theme::{ACCENT, CODE, LINE, MUTED, STRONG, TEXT, mono, sans, semibold};
+use super::theme::{accent, code, line, mono, muted, sans, semibold, strong, text};
 use crate::prompts::Sections;
 
 /// One line with `**bold**` and `` `code` `` in it.
@@ -11,8 +11,8 @@ pub fn rich_line(ui: &mut Ui, text: &str, size: f32, color: egui::Color32) {
     let mut job = LayoutJob::default();
     job.wrap.max_width = ui.available_width();
     let plain = TextFormat { font_id: sans(size), color, ..TextFormat::default() };
-    let bold = TextFormat { font_id: semibold(size), color: STRONG, ..TextFormat::default() };
-    let code = TextFormat { font_id: mono(size * 0.94), color: ACCENT, ..TextFormat::default() };
+    let bold = TextFormat { font_id: semibold(size), color: strong(), ..TextFormat::default() };
+    let code = TextFormat { font_id: mono(size * 0.94), color: accent(), ..TextFormat::default() };
     for (kind, piece) in tokens(text) {
         let format = match kind {
             Token::Plain => &plain,
@@ -67,12 +67,12 @@ pub fn tokens(text: &str) -> Vec<(Token, &str)> {
 }
 
 /// The answer text with its fenced code blocks drawn as code.
-pub fn answer_text(ui: &mut Ui, text: &str, size: f32) {
-    for piece in split_fences(text) {
+pub fn answer_text(ui: &mut Ui, body: &str, size: f32) {
+    for piece in split_fences(body) {
         match piece {
             Piece::Prose(prose) => {
                 for paragraph in prose.split("\n\n").map(str::trim).filter(|paragraph| !paragraph.is_empty()) {
-                    rich_line(ui, paragraph, size, TEXT);
+                    rich_line(ui, paragraph, size, text());
                 }
             }
             Piece::Code { language, body } => code_block(ui, &language, &body, size),
@@ -120,17 +120,17 @@ pub fn split_fences(text: &str) -> Vec<Piece> {
 
 pub fn code_block(ui: &mut Ui, language: &str, body: &str, size: f32) {
     Frame::new()
-        .fill(CODE)
-        .stroke(egui::Stroke::new(1.0, LINE))
+        .fill(code())
+        .stroke(egui::Stroke::new(1.0, line()))
         .corner_radius(8)
         .inner_margin(Margin::symmetric(12, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             if !language.is_empty() {
-                ui.label(RichText::new(language).font(sans(size * 0.8)).color(MUTED));
+                ui.label(RichText::new(language).font(sans(size * 0.8)).color(muted()));
             }
             ScrollArea::horizontal().id_salt(("code", body.len(), language)).show(ui, |ui| {
-                ui.label(RichText::new(body).font(mono(size * 0.94)).color(TEXT));
+                ui.label(RichText::new(body).font(mono(size * 0.94)).color(text()));
             });
         });
 }
@@ -147,8 +147,8 @@ pub fn show(
     if !main_only && !sections.points.is_empty() {
         for (number, point) in sections.points.iter().enumerate() {
             ui.horizontal_top(|ui| {
-                ui.label(RichText::new(format!("{}", number + 1)).font(semibold(size * 0.9)).color(ACCENT));
-                ui.vertical(|ui| rich_line(ui, point, size + 1.0, TEXT));
+                ui.label(RichText::new(format!("{}", number + 1)).font(semibold(size * 0.9)).color(accent()));
+                ui.vertical(|ui| rich_line(ui, point, size + 1.0, text()));
             });
         }
         ui.add_space(6.0);
@@ -162,15 +162,15 @@ pub fn show(
             heading_and_lines(ui, &t("key_terms"), &sections.key, size);
             if !sections.context.is_empty() {
                 ui.add_space(6.0);
-                ui.label(RichText::new(t("context")).font(semibold(size * 0.9)).color(MUTED));
-                rich_line(ui, &sections.context, size, TEXT);
+                ui.label(RichText::new(t("context")).font(semibold(size * 0.9)).color(muted()));
+                rich_line(ui, &sections.context, size, text());
             }
             heading_and_lines(ui, &t("next_questions"), &sections.follow_ups, size);
         }
     }
     if !main_only && details && !sections.points.is_empty() {
         let label = t(if *details_open { "hide_details" } else { "details" });
-        if ui.add(egui::Button::new(RichText::new(label).color(ACCENT)).frame(false)).clicked() {
+        if ui.add(egui::Button::new(RichText::new(label).color(accent())).frame(false)).clicked() {
             *details_open = !*details_open;
         }
     }
@@ -181,9 +181,9 @@ fn heading_and_lines(ui: &mut Ui, heading: &str, lines: &[String], size: f32) {
         return;
     }
     ui.add_space(6.0);
-    ui.label(RichText::new(heading).font(semibold(size * 0.9)).color(MUTED));
+    ui.label(RichText::new(heading).font(semibold(size * 0.9)).color(muted()));
     for line in lines {
-        rich_line(ui, line, size, TEXT);
+        rich_line(ui, line, size, text());
     }
 }
 

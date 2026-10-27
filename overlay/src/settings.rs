@@ -357,11 +357,34 @@ pub struct AppSettings {
     pub skipped_version: String,
     /// Seconds since the epoch of the last look for a new version.
     pub last_update_check: i64,
+    /// A theme that comes with the window, or `custom`.
+    pub theme: String,
+    /// The three colours of the custom theme, as `#rrggbb`.
+    pub custom_panel: String,
+    pub custom_text: String,
+    pub custom_accent: String,
+    /// `both`, `dots` (next to the status), `background` or `off`.
+    pub equalizer: String,
+    /// The equalizer and its background move.
+    pub animate: bool,
 }
+
+pub const EQUALIZER_STYLES: [&str; 4] = ["both", "dots", "background", "off"];
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { app_icon: String::new(), check_updates: true, skipped_version: String::new(), last_update_check: 0 }
+        Self {
+            app_icon: String::new(),
+            check_updates: true,
+            skipped_version: String::new(),
+            last_update_check: 0,
+            theme: "midnight".to_owned(),
+            custom_panel: "#13141e".to_owned(),
+            custom_text: "#d7dae8".to_owned(),
+            custom_accent: "#bcb4ff".to_owned(),
+            equalizer: "both".to_owned(),
+            animate: true,
+        }
     }
 }
 
@@ -382,6 +405,25 @@ impl AppSettings {
         if let Some(seconds) = data.get("last_update_check").and_then(Value::as_i64) {
             settings.last_update_check = seconds;
         }
+        let text = |key: &str| data.get(key).and_then(Value::as_str).map(|value| value.trim().to_owned());
+        if let Some(theme) = text("theme").filter(|theme| theme == "custom" || crate::look::is_preset(theme)) {
+            settings.theme = theme;
+        }
+        for (key, slot) in [
+            ("custom_panel", &mut settings.custom_panel),
+            ("custom_text", &mut settings.custom_text),
+            ("custom_accent", &mut settings.custom_accent),
+        ] {
+            if let Some(color) = text(key).filter(|color| crate::look::parse_hex(color).is_some()) {
+                *slot = color;
+            }
+        }
+        if let Some(style) = text("equalizer").filter(|style| EQUALIZER_STYLES.contains(&style.as_str())) {
+            settings.equalizer = style;
+        }
+        if let Some(Value::Bool(flag)) = data.get("animate") {
+            settings.animate = *flag;
+        }
         settings
     }
 
@@ -391,6 +433,12 @@ impl AppSettings {
             "check_updates": self.check_updates,
             "skipped_version": self.skipped_version,
             "last_update_check": self.last_update_check,
+            "theme": self.theme,
+            "custom_panel": self.custom_panel,
+            "custom_text": self.custom_text,
+            "custom_accent": self.custom_accent,
+            "equalizer": self.equalizer,
+            "animate": self.animate,
         });
         write_private(path, &serde_json::to_string_pretty(&value).unwrap_or_default())
     }
@@ -539,12 +587,27 @@ mod tests {
         let path = dir.path().join("app.json");
         assert_eq!(AppSettings::load(&path), AppSettings::default());
         let settings = AppSettings {
-            app_icon: "builtin:green".into(),
+            app_icon: "builtin:mint".into(),
             check_updates: false,
             skipped_version: "0.5.1".into(),
             last_update_check: 1_700_000_000,
+            theme: "custom".into(),
+            custom_panel: "#101820".into(),
+            custom_text: "#e0e8f0".into(),
+            custom_accent: "#ff7a59".into(),
+            equalizer: "background".into(),
+            animate: false,
         };
         settings.save(&path).unwrap();
         assert_eq!(AppSettings::load(&path), settings);
+    }
+
+    #[test]
+    fn a_look_that_cannot_be_read_is_the_default_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("app.json");
+        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes"}"##)
+            .unwrap();
+        assert_eq!(AppSettings::load(&path), AppSettings::default());
     }
 }

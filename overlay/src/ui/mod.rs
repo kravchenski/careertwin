@@ -1,6 +1,7 @@
 //! The window: the answer on top, a line to ask on, and Settings in a window of their own.
 
 pub mod answer;
+pub mod equalizer;
 pub mod icon;
 pub mod settings_ui;
 pub mod text;
@@ -28,7 +29,7 @@ use crate::settings::{AppSettings, Settings, load_all};
 use crate::transcript::{INTERVIEWER, SCREENSHOT, TranscriptLog};
 use crate::update::{self, Available, Release};
 
-use theme::{ACCENT, DANGER, MUTED, ON_ACCENT, STRONG};
+use theme::{accent, danger, muted, on_accent, strong};
 
 /// What the tasks that run off the window tell it.
 pub enum Event {
@@ -96,6 +97,7 @@ pub struct App {
     pub settings_open: bool,
     pub settings_ui: settings_ui::State,
     pub update_ui: update_ui::State,
+    pub level: equalizer::Level,
     /// What the window was last told, so a change is applied once.
     applied: Applied,
 }
@@ -103,6 +105,7 @@ pub struct App {
 #[derive(Default, PartialEq)]
 struct Applied {
     icon: String,
+    palette: Option<theme::Palette>,
     scale: i64,
     pinned: Option<bool>,
     frameless: Option<bool>,
@@ -139,6 +142,7 @@ impl App {
             settings_open: false,
             settings_ui: settings_ui::State::default(),
             update_ui: update_ui::State::default(),
+            level: equalizer::Level::default(),
             applied: Applied::default(),
         };
         this.apply_coach();
@@ -469,14 +473,24 @@ impl App {
     // ---- the window itself -----------------------------------------------------------------------------------
 
     fn apply_window(&mut self, ctx: &egui::Context) {
-        if self.applied.icon != self.app.app_icon || self.applied.icon.is_empty() && self.applied == Applied::default()
-        {
-            self.applied.icon = self.app.app_icon.clone();
-            ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon::shared(&self.app.app_icon))));
+        let palette = theme::from_settings(&self.app);
+        let palette_changed = self.applied.palette != Some(palette);
+        if palette_changed {
+            self.applied.palette = Some(palette);
+            theme::set_palette(palette);
         }
-        if self.applied.scale != self.settings.font_scale {
+        if palette_changed || self.applied.scale != self.settings.font_scale {
             self.applied.scale = self.settings.font_scale;
             theme::apply(ctx, self.settings.font_scale as f32 / 100.0);
+        }
+        let icon_key = format!(
+            "{}|{}",
+            self.app.app_icon,
+            if self.app.app_icon == "theme" { theme::hex_of(palette.accent) } else { String::new() }
+        );
+        if self.applied.icon != icon_key {
+            self.applied.icon = icon_key;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon::shared(&self.app.app_icon, palette.accent))));
         }
         if self.applied.pinned != Some(self.settings.pinned) {
             self.applied.pinned = Some(self.settings.pinned);
@@ -489,6 +503,27 @@ impl App {
         }
     }
 
+    /// What the dots show: an error, the model at work, the call being heard, or nothing.
+    pub fn mood(&self) -> equalizer::Mood {
+        if self.running.is_some() || self.capturing.is_some() {
+            equalizer::Mood::Thinking
+        } else if self.entries.last().is_some_and(|entry| entry.error.is_some()) {
+            equalizer::Mood::Error
+        } else if self.level.value() > 0.02 {
+            equalizer::Mood::Listening
+        } else {
+            equalizer::Mood::Idle
+        }
+    }
+
+    fn equalizer_dots(&self) -> bool {
+        matches!(self.app.equalizer.as_str(), "both" | "dots")
+    }
+
+    fn equalizer_background(&self) -> bool {
+        matches!(self.app.equalizer.as_str(), "both" | "background")
+    }
+
     fn header(&mut self, ui: &mut Ui) {
         let busy = self.running.is_some();
         let bar = ui.horizontal(|ui| {
@@ -499,12 +534,19 @@ impl App {
             } else {
                 self.t("ready")
             };
-            let dot = if busy || self.capturing.is_some() { ACCENT } else { theme::GOOD };
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-            ui.painter().circle_filled(rect.center(), 4.0, dot);
-            ui.label(RichText::new(status).color(MUTED));
+            if self.equalizer_dots() {
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(86.0, 26.0), egui::Sense::hover());
+                let time = ui.input(|input| input.time);
+                ui.painter().rect_filled(rect, 13.0, theme::mix(theme::panel(), theme::text(), 0.09));
+                equalizer::dots(&ui.painter().with_clip_rect(rect), rect, self.level.value(), self.mood(), time);
+            } else {
+                let dot = if busy || self.capturing.is_some() { accent() } else { theme::good() };
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                ui.painter().circle_filled(rect.center(), 4.0, dot);
+            }
+            ui.label(RichText::new(status).color(muted()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new(self.t("settings")).color(MUTED)).frame(false)).clicked() {
+                if ui.add(egui::Button::new(RichText::new(self.t("settings")).color(muted())).frame(false)).clicked() {
                     self.settings_open = !self.settings_open;
                 }
                 let shot = egui::Button::new(self.t("screenshot")).min_size(egui::vec2(0.0, 34.0));
@@ -540,8 +582,8 @@ impl App {
                     self.stop();
                 }
             } else {
-                let ask = egui::Button::new(RichText::new(self.t("ask")).color(ON_ACCENT))
-                    .fill(ACCENT)
+                let ask = egui::Button::new(RichText::new(self.t("ask")).color(on_accent()))
+                    .fill(accent())
                     .min_size(egui::vec2(ask_width, 34.0));
                 let can = !self.input.trim().is_empty() && !self.busy();
                 if (ui.add_enabled(can, ask).clicked() || (enter && can)) && can {
@@ -558,11 +600,11 @@ impl App {
         let main_only = self.settings.answer_layout == "main";
         if self.entries.is_empty() {
             ui.add_space(14.0);
-            ui.label(RichText::new(self.t("empty_title")).font(theme::semibold(size + 3.0)).color(STRONG));
-            ui.label(RichText::new(self.t("empty_body")).color(MUTED));
+            ui.label(RichText::new(self.t("empty_title")).font(theme::semibold(size + 3.0)).color(strong()));
+            ui.label(RichText::new(self.t("empty_body")).color(muted()));
             if self.brief.is_empty() {
                 ui.add_space(8.0);
-                ui.label(RichText::new(self.t("no_context")).color(MUTED));
+                ui.label(RichText::new(self.t("no_context")).color(muted()));
             }
             return;
         }
@@ -573,12 +615,12 @@ impl App {
             let entry = &self.entries[index];
             let title =
                 if entry.source == Source::Screenshot { translate("screenshot") } else { entry.question.clone() };
-            ui.label(RichText::new(title).font(theme::semibold(size)).color(MUTED));
+            ui.label(RichText::new(title).font(theme::semibold(size)).color(muted()));
             ui.add_space(4.0);
             if let Some(error) = &entry.error {
-                ui.label(RichText::new(error).color(DANGER));
+                ui.label(RichText::new(error).color(danger()));
             } else if entry.raw.is_empty() {
-                ui.label(RichText::new(if entry.done { "—" } else { "…" }).color(MUTED));
+                ui.label(RichText::new(if entry.done { "—" } else { "…" }).color(muted()));
             } else {
                 answer::show(ui, &sections(&entry.raw), main_only, &mut details_open, size, &translate);
             }
@@ -603,7 +645,7 @@ impl App {
                             "history",
                             &[("n", &(shown + 1).to_string()), ("total", &self.entries.len().to_string())],
                         ))
-                        .color(MUTED)
+                        .color(muted())
                         .small(),
                     );
                     if ui.add_enabled(shown > 0, egui::Button::new("‹").frame(false)).clicked() {
@@ -613,7 +655,7 @@ impl App {
                 if let Some(entry) = self.entries.get(shown) {
                     if !entry.raw.is_empty()
                         && ui
-                            .add(egui::Button::new(RichText::new(self.t("copy")).color(MUTED).small()).frame(false))
+                            .add(egui::Button::new(RichText::new(self.t("copy")).color(muted()).small()).frame(false))
                             .clicked()
                     {
                         let parts = sections(&entry.raw);
@@ -625,19 +667,19 @@ impl App {
                         ui.ctx().copy_text(text);
                     }
                     if let Some(model) = &entry.fell_back {
-                        ui.label(RichText::new(self.tf("answered_by", &[("model", model)])).color(MUTED).small());
+                        ui.label(RichText::new(self.tf("answered_by", &[("model", model)])).color(muted()).small());
                     }
                 }
                 // what is left to the left of those: the interview and what the answers know, cut to fit
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                    ui.add(egui::Label::new(RichText::new(line).color(MUTED).small()).truncate());
+                    ui.add(egui::Label::new(RichText::new(line).color(muted()).small()).truncate());
                 });
             });
         });
         if let Some((message, error)) = self.notice.clone() {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(message).color(if error { DANGER } else { ACCENT }).small());
-                if ui.add(egui::Button::new(RichText::new("×").color(MUTED)).frame(false)).clicked() {
+                ui.label(RichText::new(message).color(if error { danger() } else { accent() }).small());
+                if ui.add(egui::Button::new(RichText::new("×").color(muted())).frame(false)).clicked() {
                     self.notice = None;
                 }
             });
@@ -657,6 +699,19 @@ impl App {
         let opacity = if hidden { 0.0 } else { self.settings.opacity as f32 / 100.0 };
         if !hidden {
             egui::CentralPanel::default().frame(theme::panel_frame(opacity)).show(ui, |ui| {
+                if self.equalizer_background() {
+                    let time = if self.app.animate { ctx.input(|input| input.time) } else { 0.0 };
+                    // above the line with the interview and the history, so no dot sits under that text
+                    let mut rect = ui.max_rect().expand(8.0);
+                    rect.set_bottom(rect.bottom() - 44.0);
+                    equalizer::background(
+                        &ui.painter().with_clip_rect(rect.shrink(6.0)),
+                        rect,
+                        self.level.value(),
+                        self.mood(),
+                        time,
+                    );
+                }
                 self.header(ui);
                 ui.add_space(4.0);
                 self.question_row(ui);
@@ -678,7 +733,12 @@ impl App {
             self.update_ui.requested = true;
             self.check_for_update(false);
         }
-        if self.running.is_some() {
+        let now = ctx.input(|input| input.time);
+        self.level.tick(now);
+        let moving = self.app.animate && self.app.equalizer != "off";
+        if moving {
+            ctx.request_repaint_after(Duration::from_millis(33));
+        } else if self.running.is_some() {
             ctx.request_repaint_after(Duration::from_millis(60));
         }
     }
@@ -705,7 +765,7 @@ pub fn window_options(settings: &Settings, app: &AppSettings) -> eframe::NativeO
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("CareerTwin · Interview")
         .with_app_id("careertwin-interview")
-        .with_icon(icon::shared(&app.app_icon))
+        .with_icon(icon::shared(&app.app_icon, theme::from_settings(app).accent))
         .with_inner_size([900.0, 420.0])
         .with_min_inner_size([560.0, 280.0])
         .with_transparent(true)
