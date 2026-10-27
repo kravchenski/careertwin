@@ -233,3 +233,4 @@ data/
 # Personal candidate context and generated application artifacts.
 ABOUT.md
 node_modules/
+overlay/target
