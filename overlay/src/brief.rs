@@ -41,7 +41,11 @@ impl Document {
 /// CVs are recognised by name; anything else is treated as extra facts about you.
 pub fn guess_kind(name: &str) -> &'static str {
     let lower = name.to_lowercase();
-    if ["cv", "resume", "резюме", "curriculum", "životopis"].iter().any(|word| lower.contains(word)) { "cv" } else { "about" }
+    if ["cv", "resume", "резюме", "curriculum", "životopis"].iter().any(|word| lower.contains(word)) {
+        "cv"
+    } else {
+        "about"
+    }
 }
 
 /// The project the candidate defends: its dossier goes with every question.
@@ -115,7 +119,12 @@ impl InterviewBrief {
             parts.push("CANDIDATE CONTEXT: (none provided)".to_owned());
         }
         if !self.job_description.is_empty() || !self.job_title.is_empty() {
-            let head = [self.job_title.as_str(), self.company.as_str()].iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join(" at ");
+            let head = [self.job_title.as_str(), self.company.as_str()]
+                .iter()
+                .filter(|part| !part.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join(" at ");
             parts.push(format!("VACANCY: {head}\n{}", chars(&self.job_description, JOB_CHARS)).trim().to_owned());
         }
         parts.push(format!("SALARY POLICY: {}", self.salary));
@@ -148,7 +157,8 @@ impl InterviewBrief {
         for doc in self.documents.iter().filter(|doc| doc.enabled) {
             words.extend(skill_terms(&doc.text));
         }
-        let mut names: Vec<String> = unique(words.into_iter().filter(|word| !word.is_empty()).collect()).into_iter().take(24).collect();
+        let mut names: Vec<String> =
+            unique(words.into_iter().filter(|word| !word.is_empty()).collect()).into_iter().take(24).collect();
         let topics = format!("{} {}", self.job_title, self.job_description).to_lowercase();
         for (topic, terms) in TOPIC_TERMS {
             if topics.contains(topic) {
@@ -166,13 +176,21 @@ impl InterviewBrief {
     pub fn sources(&self) -> Vec<(String, String)> {
         let mut items = Vec::new();
         if !self.candidate.trim().is_empty() {
-            items.push(("about".to_owned(), format!("ABOUT.md · {:.1}k", self.candidate.chars().count() as f64 / 1000.0)));
+            items.push((
+                "about".to_owned(),
+                format!("ABOUT.md · {:.1}k", self.candidate.chars().count() as f64 / 1000.0),
+            ));
         }
         for doc in self.documents.iter().filter(|doc| doc.enabled) {
             items.push((doc.kind.clone(), format!("{} · {:.1}k", doc.name, doc.text.chars().count() as f64 / 1000.0)));
         }
         if !self.job_title.is_empty() || !self.job_description.is_empty() {
-            let head = [self.job_title.as_str(), self.company.as_str()].iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join(" at ");
+            let head = [self.job_title.as_str(), self.company.as_str()]
+                .iter()
+                .filter(|part| !part.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join(" at ");
             items.push(("job".to_owned(), if head.is_empty() { "vacancy".to_owned() } else { head }));
         }
         if let Some(project) = self.project.as_ref().filter(|project| !project.dossier.trim().is_empty()) {
@@ -209,7 +227,10 @@ pub fn slim_for_answers(text: &str, knowledge: bool) -> String {
         .chain(if knowledge { SKIP_FOR_KNOWLEDGE.iter() } else { [].iter() })
         .map(|name| format!("## {name}"))
         .collect();
-    let kept: String = split_sections(text).into_iter().filter(|part| !skip.iter().any(|name| part.to_lowercase().starts_with(name))).collect();
+    let kept: String = split_sections(text)
+        .into_iter()
+        .filter(|part| !skip.iter().any(|name| part.to_lowercase().starts_with(name)))
+        .collect();
     drop_project_catalog(&kept)
 }
 
@@ -248,14 +269,17 @@ pub fn fit_context(text: &str, budget: usize) -> String {
     if joined.chars().count() <= budget { joined } else { chars(&joined, budget) }
 }
 
-static SKILLS_SECTION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?mi)^##[ \t]+Skills[ \t]*$([\s\S]*?)(?=^##\s|\z)").expect("a fixed pattern"));
+static SKILLS_SECTION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?mi)^##[ \t]+Skills[ \t]*$([\s\S]*?)(?=^##\s|\z)").expect("a fixed pattern"));
 static TABLE_RULE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^:?-{3,}:?$").expect("a fixed pattern"));
 static TABLE_RULE_ROW: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\|[\s:|-]+\|?$").expect("a fixed pattern"));
 static UPPER_OR_DIGIT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[A-Z0-9]").expect("a fixed pattern"));
 
 /// Technology names from the `## Skills` section of the candidate context.
 pub fn skill_terms(candidate: &str) -> Vec<String> {
-    let Some(section) = SKILLS_SECTION.captures(candidate).ok().flatten().and_then(|found| found.get(1)) else { return Vec::new() };
+    let Some(section) = SKILLS_SECTION.captures(candidate).ok().flatten().and_then(|found| found.get(1)) else {
+        return Vec::new();
+    };
     let lines: Vec<&str> = section.as_str().lines().collect();
     let mut terms = Vec::new();
     for (number, raw) in lines.iter().enumerate() {
@@ -264,7 +288,8 @@ pub fn skill_terms(candidate: &str) -> Vec<String> {
         if stripped.starts_with('|') {
             let cells: Vec<String> = stripped.trim_matches('|').split('|').map(|cell| cell.trim().to_owned()).collect();
             let separator = cells.iter().all(|cell| TABLE_RULE.is_match(cell).unwrap_or(false));
-            let before_separator = lines.get(number + 1).is_some_and(|next| TABLE_RULE_ROW.is_match(next.trim()).unwrap_or(false));
+            let before_separator =
+                lines.get(number + 1).is_some_and(|next| TABLE_RULE_ROW.is_match(next.trim()).unwrap_or(false));
             if separator || before_separator {
                 continue; // the rule and the header row of a Markdown table
             }
@@ -284,7 +309,8 @@ pub fn skill_terms(candidate: &str) -> Vec<String> {
     terms
 }
 
-static VACANCY_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?<![\w])[A-Z][A-Za-z0-9+#.]+(?![\w])").expect("a fixed pattern"));
+static VACANCY_WORD: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?<![\w])[A-Z][A-Za-z0-9+#.]+(?![\w])").expect("a fixed pattern"));
 
 /// Names of technologies in a vacancy: words with a capital that do not simply begin a sentence or a line
 /// ("What", "Our", "Build"), unless they have a capital inside, a digit or a symbol (PySpark, C#). Every word
@@ -380,8 +406,13 @@ mod tests {
 
     #[test]
     fn vacancy_terms_are_technologies_not_sentence_starts() {
-        let terms = vacancy_terms("What you do: build pipelines in PySpark and Python. Our stack: C#, Kafka and Airflow.");
-        assert!(terms.contains(&"PySpark".to_owned()) && terms.contains(&"C#".to_owned()) && terms.contains(&"Kafka".to_owned()));
+        let terms =
+            vacancy_terms("What you do: build pipelines in PySpark and Python. Our stack: C#, Kafka and Airflow.");
+        assert!(
+            terms.contains(&"PySpark".to_owned())
+                && terms.contains(&"C#".to_owned())
+                && terms.contains(&"Kafka".to_owned())
+        );
         assert!(!terms.contains(&"What".to_owned()) && !terms.contains(&"Our".to_owned()));
     }
 
@@ -403,7 +434,10 @@ mod tests {
         brief.notes = "I study in the evenings".into();
         brief.project = Some(ProjectDossier { name: "bot".into(), dossier: "A Telegram bot.".into() });
         let text = brief.render(Some(Kind::Intro));
-        assert!(text.contains("CANDIDATE CONTEXT: (none provided)") && text.contains("VACANCY: Data Engineer at Vention\nPython and SQL"));
+        assert!(
+            text.contains("CANDIDATE CONTEXT: (none provided)")
+                && text.contains("VACANCY: Data Engineer at Vention\nPython and SQL")
+        );
         assert!(text.contains("CANDIDATE NOTES FOR THIS INTERVIEW\nI study in the evenings"));
         assert!(text.contains("PROJECT THE CANDIDATE WILL DEFEND: bot\nA Telegram bot."));
         assert_eq!(brief.sources().last().unwrap().1, "project bot");
@@ -411,7 +445,9 @@ mod tests {
 
     #[test]
     fn a_fixed_salary_comes_from_the_studio_snapshot() {
-        let about = format!("{MARKER}\n```json\n{{\"preferences\": {{\"salary\": {{\"mode\": \"fixed\", \"min\": 5000, \"currency\": \"PLN\"}}}}}}\n```\n");
+        let about = format!(
+            "{MARKER}\n```json\n{{\"preferences\": {{\"salary\": {{\"mode\": \"fixed\", \"min\": 5000, \"currency\": \"PLN\"}}}}}}\n```\n"
+        );
         assert_eq!(describe_salary(&salary_policy(&about)), "fixed: min=5000, currency=PLN");
         assert!(describe_salary(&salary_policy("nothing")).starts_with("auto"));
     }

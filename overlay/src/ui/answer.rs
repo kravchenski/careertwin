@@ -3,7 +3,7 @@
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Frame, Margin, RichText, ScrollArea, Ui};
 
-use super::theme::{ACCENT, CODE, LINE, MUTED, STRONG, TEXT, mono, semibold, sans};
+use super::theme::{ACCENT, CODE, LINE, MUTED, STRONG, TEXT, mono, sans, semibold};
 use crate::prompts::Sections;
 
 /// One line with `**bold**` and `` `code` `` in it.
@@ -39,7 +39,13 @@ pub fn tokens(text: &str) -> Vec<(Token, &str)> {
     let mut position = 0usize;
     while position < text.len() {
         let here = &text[position..];
-        let marker = if here.starts_with("**") { Some(("**", Token::Bold)) } else if here.starts_with('`') { Some(("`", Token::Code)) } else { None };
+        let marker = if here.starts_with("**") {
+            Some(("**", Token::Bold))
+        } else if here.starts_with('`') {
+            Some(("`", Token::Code))
+        } else {
+            None
+        };
         if let Some((mark, kind)) = marker {
             let inner = position + mark.len();
             if let Some(close) = text[inner..].find(mark).filter(|close| *close > 0) {
@@ -113,19 +119,31 @@ pub fn split_fences(text: &str) -> Vec<Piece> {
 }
 
 pub fn code_block(ui: &mut Ui, language: &str, body: &str, size: f32) {
-    Frame::new().fill(CODE).stroke(egui::Stroke::new(1.0, LINE)).corner_radius(8).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        if !language.is_empty() {
-            ui.label(RichText::new(language).font(sans(size * 0.8)).color(MUTED));
-        }
-        ScrollArea::horizontal().id_salt(("code", body.len(), language)).show(ui, |ui| {
-            ui.label(RichText::new(body).font(mono(size * 0.94)).color(TEXT));
+    Frame::new()
+        .fill(CODE)
+        .stroke(egui::Stroke::new(1.0, LINE))
+        .corner_radius(8)
+        .inner_margin(Margin::symmetric(12, 10))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if !language.is_empty() {
+                ui.label(RichText::new(language).font(sans(size * 0.8)).color(MUTED));
+            }
+            ScrollArea::horizontal().id_salt(("code", body.len(), language)).show(ui, |ui| {
+                ui.label(RichText::new(body).font(mono(size * 0.94)).color(TEXT));
+            });
         });
-    });
 }
 
 /// The whole reply: lines to say (when the layout has them), the answer, and the details.
-pub fn show(ui: &mut Ui, sections: &Sections, main_only: bool, details_open: &mut bool, size: f32, t: &dyn Fn(&str) -> String) {
+pub fn show(
+    ui: &mut Ui,
+    sections: &Sections,
+    main_only: bool,
+    details_open: &mut bool,
+    size: f32,
+    t: &dyn Fn(&str) -> String,
+) {
     if !main_only && !sections.points.is_empty() {
         for (number, point) in sections.points.iter().enumerate() {
             ui.horizontal_top(|ui| {
@@ -175,7 +193,16 @@ mod tests {
 
     #[test]
     fn bold_and_code_are_found_and_the_text_between_stays() {
-        assert_eq!(tokens("I build **APIs** with `FastAPI` daily"), [(Token::Plain, "I build "), (Token::Bold, "APIs"), (Token::Plain, " with "), (Token::Code, "FastAPI"), (Token::Plain, " daily")]);
+        assert_eq!(
+            tokens("I build **APIs** with `FastAPI` daily"),
+            [
+                (Token::Plain, "I build "),
+                (Token::Bold, "APIs"),
+                (Token::Plain, " with "),
+                (Token::Code, "FastAPI"),
+                (Token::Plain, " daily")
+            ]
+        );
         assert_eq!(tokens("plain only"), [(Token::Plain, "plain only")]);
         assert_eq!(tokens("**a****b**"), [(Token::Bold, "a"), (Token::Bold, "b")]);
     }

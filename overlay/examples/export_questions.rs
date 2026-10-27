@@ -11,7 +11,11 @@ fn main() -> anyhow::Result<()> {
         anyhow::bail!("usage: export_questions <transcripts folder> <folder to write into>");
     };
     let all = rows(&read_all(&PathBuf::from(from)));
-    println!("{} questions in {} kinds", all.len(), all.iter().map(|row| row.kind.as_str()).collect::<std::collections::BTreeSet<_>>().len());
+    println!(
+        "{} questions in {} kinds",
+        all.len(),
+        all.iter().map(|row| row.kind.as_str()).collect::<std::collections::BTreeSet<_>>().len()
+    );
     let stamp = chrono::Local::now().format("%Y-%m-%d").to_string();
     for path in export_questions(&PathBuf::from(from), &PathBuf::from(into), &Format::ALL, &stamp)? {
         println!("{}", path.display());

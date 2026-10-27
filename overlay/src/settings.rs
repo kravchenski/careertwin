@@ -113,14 +113,14 @@ impl Settings {
             if name == "screenshot_delay_ms" && value == json!(250) {
                 continue; // the old default; the window now needs far less time to hide
             }
-            match settings.set(&name, value.clone()) {
-                Err(SettingsError::Unknown(_)) => {
-                    settings.extra.insert(name, value);
-                }
-                _ => {} // a bad value keeps the default
+            // a bad value keeps the default; a key this program does not know is kept to be written back
+            if let Err(SettingsError::Unknown(_)) = settings.set(&name, value.clone()) {
+                settings.extra.insert(name, value);
             }
         }
-        if !settings.gateway_key.is_empty() && !settings.accounts.iter().any(|account| account.key == settings.gateway_key) {
+        if !settings.gateway_key.is_empty()
+            && !settings.accounts.iter().any(|account| account.key == settings.gateway_key)
+        {
             // a key saved before accounts existed becomes the first account of its address
             let url = if settings.gateway_url.is_empty() { default_gateway() } else { settings.gateway_url.clone() };
             if let Ok(next) = accounts::add(&settings.accounts, &url, &settings.gateway_key) {
@@ -142,12 +142,22 @@ impl Settings {
         };
         let choice = |value: &Value, choices: &[&str]| -> Result<String, SettingsError> {
             let value = text(value)?;
-            if choices.contains(&value.as_str()) { Ok(value) } else { bad(format!("{name} must be one of {}", choices.join(", "))) }
+            if choices.contains(&value.as_str()) {
+                Ok(value)
+            } else {
+                bad(format!("{name} must be one of {}", choices.join(", ")))
+            }
         };
         let number = |value: &Value, low: i64, high: i64| -> Result<i64, SettingsError> {
-            let Some(number) = value.as_f64().filter(|_| !value.is_boolean()) else { return bad(format!("{name} must be a number")) };
+            let Some(number) = value.as_f64().filter(|_| !value.is_boolean()) else {
+                return bad(format!("{name} must be a number"));
+            };
             let number = number as i64;
-            if (low..=high).contains(&number) { Ok(number) } else { bad(format!("{name} must be between {low} and {high}")) }
+            if (low..=high).contains(&number) {
+                Ok(number)
+            } else {
+                bad(format!("{name} must be between {low} and {high}"))
+            }
         };
         match name {
             "language" => self.language = text(&value)?,
@@ -170,7 +180,8 @@ impl Settings {
             }
             "gateway_key" => self.gateway_key = text(&value)?,
             "accounts" => {
-                let items: Vec<Account> = serde_json::from_value(value).map_err(|_| SettingsError::Bad("accounts must be a list".into()))?;
+                let items: Vec<Account> =
+                    serde_json::from_value(value).map_err(|_| SettingsError::Bad("accounts must be a list".into()))?;
                 self.accounts = accounts::clean(items).map_err(|error| SettingsError::Bad(error.to_string()))?;
             }
             "model" => self.model = text(&value)?,
@@ -249,7 +260,11 @@ impl Settings {
     /// The window language to show: the chosen one, or the system's when it is "auto".
     pub fn ui_code(&self) -> String {
         match self.ui_language.as_str() {
-            "auto" | "" => std::env::var("LANG").ok().and_then(|lang| lang.split(['_', '.', '-']).next().map(str::to_lowercase)).filter(|code| crate::languages::UI_LANGUAGES.iter().any(|(known, _)| known == code)).unwrap_or_else(|| "en".to_owned()),
+            "auto" | "" => std::env::var("LANG")
+                .ok()
+                .and_then(|lang| lang.split(['_', '.', '-']).next().map(str::to_lowercase))
+                .filter(|code| crate::languages::UI_LANGUAGES.iter().any(|(known, _)| known == code))
+                .unwrap_or_else(|| "en".to_owned()),
             code => code.to_owned(),
         }
     }
@@ -285,7 +300,10 @@ impl Settings {
     /// tried in turn when it is limited.
     pub fn add_account(&mut self, key: &str) -> Result<AccountChange, accounts::AccountError> {
         let saved = accounts::add(&self.accounts, &self.gateway(), key)?;
-        let account = accounts::for_url(&saved, &self.gateway()).into_iter().find(|account| account.key == key.trim()).expect("the key was just added");
+        let account = accounts::for_url(&saved, &self.gateway())
+            .into_iter()
+            .find(|account| account.key == key.trim())
+            .expect("the key was just added");
         self.accounts = saved;
         if self.gateway_key.is_empty() {
             self.gateway_key = account.key.clone();
@@ -393,7 +411,10 @@ mod tests {
     fn the_defaults_match_the_python_overlay() {
         let settings = Settings::default();
         assert_eq!((settings.answer_style.as_str(), settings.answer_layout.as_str()), ("standard", "lines"));
-        assert_eq!((settings.whisper_model.as_str(), settings.deepgram_model.as_str(), settings.screenshot_delay_ms), ("small", "nova-3", 60));
+        assert_eq!(
+            (settings.whisper_model.as_str(), settings.deepgram_model.as_str(), settings.screenshot_delay_ms),
+            ("small", "nova-3", 60)
+        );
         assert!(settings.pinned && settings.frameless && settings.save_transcripts && settings.accounts.is_empty());
     }
 
@@ -401,11 +422,23 @@ mod tests {
     fn a_value_is_checked_before_it_is_stored() {
         let mut settings = Settings::default();
         assert!(settings.set("answer_style", json!("detailed")).is_ok());
-        assert_eq!(settings.set("answer_style", json!("loud")), Err(SettingsError::Bad("answer_style must be one of concise, standard, detailed".into())));
-        assert_eq!(settings.set("opacity", json!(10)), Err(SettingsError::Bad("opacity must be between 35 and 100".into())));
-        assert_eq!(settings.set("pinned", json!("yes")), Err(SettingsError::Bad("pinned must be true or false".into())));
+        assert_eq!(
+            settings.set("answer_style", json!("loud")),
+            Err(SettingsError::Bad("answer_style must be one of concise, standard, detailed".into()))
+        );
+        assert_eq!(
+            settings.set("opacity", json!(10)),
+            Err(SettingsError::Bad("opacity must be between 35 and 100".into()))
+        );
+        assert_eq!(
+            settings.set("pinned", json!("yes")),
+            Err(SettingsError::Bad("pinned must be true or false".into()))
+        );
         assert_eq!(settings.set("opacity", json!(true)), Err(SettingsError::Bad("opacity must be a number".into())));
-        assert_eq!(settings.set("gateway_url", json!("not a url")), Err(SettingsError::Bad("The gateway URL must start with http:// or https://".into())));
+        assert_eq!(
+            settings.set("gateway_url", json!("not a url")),
+            Err(SettingsError::Bad("The gateway URL must start with http:// or https://".into()))
+        );
         assert_eq!(settings.set("nope", json!(1)), Err(SettingsError::Unknown("nope".into())));
         assert_eq!(settings.answer_style, "detailed");
     }
@@ -425,7 +458,10 @@ mod tests {
         }
         let loaded = Settings::load(&path);
         assert_eq!(loaded.model, "groq/openai/gpt-oss-120b");
-        assert_eq!(loaded.accounts, [Account { name: "default".into(), url: GROQ.into(), key: "gsk_secret_one".into() }]);
+        assert_eq!(
+            loaded.accounts,
+            [Account { name: "default".into(), url: GROQ.into(), key: "gsk_secret_one".into() }]
+        );
     }
 
     #[test]
@@ -434,7 +470,8 @@ mod tests {
         let path = dir.path().join("settings.json");
         std::fs::write(&path, "not json").unwrap();
         assert_eq!(Settings::load(&path), Settings::default());
-        std::fs::write(&path, r#"{"opacity": 5, "model": "m", "future_flag": [1, 2], "screenshot_delay_ms": 250}"#).unwrap();
+        std::fs::write(&path, r#"{"opacity": 5, "model": "m", "future_flag": [1, 2], "screenshot_delay_ms": 250}"#)
+            .unwrap();
         let loaded = Settings::load(&path);
         assert_eq!((loaded.opacity, loaded.model.as_str(), loaded.screenshot_delay_ms), (100, "m", 60));
         loaded.save(&path).unwrap();
@@ -470,7 +507,9 @@ mod tests {
         }
         assert_eq!((settings.gateway_key.as_str(), settings.accounts.len()), ("gsk_one_0001", 2)); // the first is the one in use
         assert_eq!(settings.add_account("gsk_one_0001"), Err(accounts::AccountError::AlreadySaved));
-        assert!(matches!(settings.use_account("default-2"), Some(AccountChange::Used(account)) if account.key == "gsk_two_0002"));
+        assert!(
+            matches!(settings.use_account("default-2"), Some(AccountChange::Used(account)) if account.key == "gsk_two_0002")
+        );
         assert_eq!(settings.gateway_key, "gsk_two_0002");
         settings.remove_account("default-2"); // the one in use: the other takes over
         assert_eq!(settings.gateway_key, "gsk_one_0001");
@@ -488,7 +527,10 @@ mod tests {
         settings.add_account("proxy-key-bbbb").unwrap();
         settings.set_gateway(GROQ).unwrap();
         assert_eq!(settings.gateway_key, "groq-key-aaaa");
-        assert_eq!(settings.set_gateway("not a url"), Err(SettingsError::Bad("The gateway URL must start with http:// or https://".into())));
+        assert_eq!(
+            settings.set_gateway("not a url"),
+            Err(SettingsError::Bad("The gateway URL must start with http:// or https://".into()))
+        );
     }
 
     #[test]
@@ -496,7 +538,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
         assert_eq!(AppSettings::load(&path), AppSettings::default());
-        let settings = AppSettings { app_icon: "builtin:green".into(), check_updates: false, skipped_version: "0.5.1".into(), last_update_check: 1_700_000_000 };
+        let settings = AppSettings {
+            app_icon: "builtin:green".into(),
+            check_updates: false,
+            skipped_version: "0.5.1".into(),
+            last_update_check: 1_700_000_000,
+        };
         settings.save(&path).unwrap();
         assert_eq!(AppSettings::load(&path), settings);
     }

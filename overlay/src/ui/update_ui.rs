@@ -46,12 +46,20 @@ impl App {
             }
             ui.add_space(10.0);
             if let Some((done, total)) = self.update_ui.progress {
-                ui.label(RichText::new(tf("update_downloading", &[("done", &megabytes(done)), ("total", &megabytes(total))])).color(ACCENT));
+                ui.label(
+                    RichText::new(tf(
+                        "update_downloading",
+                        &[("done", &megabytes(done)), ("total", &megabytes(total))],
+                    ))
+                    .color(ACCENT),
+                );
                 ui.add(egui::ProgressBar::new(if total > 0 { done as f32 / total as f32 } else { 0.0 }));
             }
             match &self.update_ui.downloaded {
                 Some(Ok(path)) => {
-                    ui.label(RichText::new(tf("update_verified", &[("path", &path.display().to_string())])).color(GOOD));
+                    ui.label(
+                        RichText::new(tf("update_verified", &[("path", &path.display().to_string())])).color(GOOD),
+                    );
                     folder = ui.button(t("open_folder")).clicked();
                 }
                 Some(Err(why)) => {
@@ -67,7 +75,12 @@ impl App {
             ui.horizontal(|ui| {
                 let downloading = self.update_ui.progress.is_some();
                 if asset.is_some() && !matches!(self.update_ui.downloaded, Some(Ok(_))) {
-                    download = ui.add_enabled(!downloading, egui::Button::new(RichText::new(t("update_download")).color(ON_ACCENT)).fill(ACCENT)).clicked();
+                    download = ui
+                        .add_enabled(
+                            !downloading,
+                            egui::Button::new(RichText::new(t("update_download")).color(ON_ACCENT)).fill(ACCENT),
+                        )
+                        .clicked();
                 }
                 page = ui.button(t("update_page")).clicked();
                 later = ui.button(t("update_later")).clicked();
@@ -80,10 +93,8 @@ impl App {
         if page && !available.release.page.is_empty() {
             ctx.open_url(egui::OpenUrl::new_tab(&available.release.page));
         }
-        if folder {
-            if let Some(Ok(path)) = &self.update_ui.downloaded {
-                super::settings_ui::open_path(path.parent().unwrap_or(path));
-            }
+        if folder && let Some(Ok(path)) = &self.update_ui.downloaded {
+            super::settings_ui::open_path(path.parent().unwrap_or(path));
         }
         if later {
             self.update_ui.dismissed = true;
@@ -119,6 +130,9 @@ mod tests {
 
     #[test]
     fn markdown_marks_are_taken_off_the_notes() {
-        assert_eq!(notes_lines("## What is new\n- A key\n* Another\nPlain line\n\n### Fixes"), ["What is new", "– A key", "– Another", "Plain line", "", "Fixes"]);
+        assert_eq!(
+            notes_lines("## What is new\n- A key\n* Another\nPlain line\n\n### Fixes"),
+            ["What is new", "– A key", "– Another", "Plain line", "", "Fixes"]
+        );
     }
 }

@@ -6,8 +6,8 @@ use std::sync::LazyLock;
 use fancy_regex::Regex;
 
 use crate::brief::InterviewBrief;
-pub use crate::prompt_text::{SCREENSHOT_SYSTEM, SYSTEM};
 use crate::prompt_text::{KIND_HINTS, LAYOUT_HINTS, LISTENING_HINTS, STYLE_HINTS};
+pub use crate::prompt_text::{SCREENSHOT_SYSTEM, SYSTEM};
 use crate::questions::{Kind, detect_language};
 use crate::{languages, questions};
 
@@ -49,14 +49,18 @@ pub fn user_prompt(
     code: &str,
     listening: Option<&str>,
 ) -> String {
-    let name = languages::name(Some(language.filter(|code| !code.is_empty()).unwrap_or_else(|| detect_language(question))));
+    let name =
+        languages::name(Some(language.filter(|code| !code.is_empty()).unwrap_or_else(|| detect_language(question))));
     let recent = if history.is_empty() {
         "(start of the interview)".to_owned()
     } else {
         history[history.len().saturating_sub(6)..].join("\n")
     };
-    let excerpts = if code.is_empty() { String::new() } else { format!("RELEVANT CODE FROM THE PROJECT (excerpts)\n{code}\n\n") };
-    let heard = listening.and_then(|key| LISTENING_HINTS.iter().find(|(name, _)| *name == key)).map_or(String::new(), |(_, text)| format!("{text}\n"));
+    let excerpts =
+        if code.is_empty() { String::new() } else { format!("RELEVANT CODE FROM THE PROJECT (excerpts)\n{code}\n\n") };
+    let heard = listening
+        .and_then(|key| LISTENING_HINTS.iter().find(|(name, _)| *name == key))
+        .map_or(String::new(), |(_, text)| format!("{text}\n"));
     format!(
         "{}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\nINTERVIEWER'S QUESTION: {question}\nTYPE: {}. {}\n\
 INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n{}\n{}\n{heard}",
@@ -116,9 +120,11 @@ impl Suggestion {
     }
 }
 
-static BULLET: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(?:[-•]|\*(?!\*)|\d+[.)])\s*").expect("a fixed pattern"));
+static BULLET: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(?:[-•]|\*(?!\*)|\d+[.)])\s*").expect("a fixed pattern"));
 static MARKER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?mi)^[ \t]*(?:\*\*)?(POINTS|ANSWER|KEY|CONTEXT|(?-i:NEXT))(?:\*\*)?[ \t]*:(?:\*\*)?").expect("a fixed pattern")
+    Regex::new(r"(?mi)^[ \t]*(?:\*\*)?(POINTS|ANSWER|KEY|CONTEXT|(?-i:NEXT))(?:\*\*)?[ \t]*:(?:\*\*)?")
+        .expect("a fixed pattern")
 });
 
 fn strip_bullet(line: &str) -> String {
@@ -211,26 +217,63 @@ mod tests {
 
     #[test]
     fn the_prompt_names_the_kind_the_language_and_the_question() {
-        let text = user_prompt(&brief(), "Чому ви хочете працювати в нас?", Kind::Motivation, &[], None, "standard", "lines", "", None);
+        let text = user_prompt(
+            &brief(),
+            "Чому ви хочете працювати в нас?",
+            Kind::Motivation,
+            &[],
+            None,
+            "standard",
+            "lines",
+            "",
+            None,
+        );
         assert!(text.contains("INTERVIEWER'S QUESTION: Чому ви хочете працювати в нас?"));
         assert!(text.contains("TYPE: motivation. Motivation: say how real interests connect"));
-        assert!(text.contains("INTERVIEW LANGUAGE: Ukrainian. Write your reply in Ukrainian.") && !text.contains("Russian"));
+        assert!(
+            text.contains("INTERVIEW LANGUAGE: Ukrainian. Write your reply in Ukrainian.") && !text.contains("Russian")
+        );
         assert!(text.contains("RECENT CONVERSATION\n(start of the interview)"));
         assert!(text.contains("ANSWER STYLE: standard") && text.contains("ANSWER LAYOUT: lines to say"));
-        let russian = user_prompt(&brief(), "Почему вы хотите у нас работать?", Kind::Motivation, &[], None, "standard", "lines", "", None);
+        let russian = user_prompt(
+            &brief(),
+            "Почему вы хотите у нас работать?",
+            Kind::Motivation,
+            &[],
+            None,
+            "standard",
+            "lines",
+            "",
+            None,
+        );
         assert!(russian.contains("INTERVIEW LANGUAGE: Russian"));
     }
 
     #[test]
     fn a_fixed_language_beats_the_guess() {
-        let text = user_prompt(&brief(), "Tell me about yourself", Kind::Intro, &[], Some("de"), "concise", "main", "", None);
-        assert!(text.contains("INTERVIEW LANGUAGE: German") && text.contains("ANSWER STYLE: concise") && text.contains("main answer only"));
+        let text =
+            user_prompt(&brief(), "Tell me about yourself", Kind::Intro, &[], Some("de"), "concise", "main", "", None);
+        assert!(
+            text.contains("INTERVIEW LANGUAGE: German")
+                && text.contains("ANSWER STYLE: concise")
+                && text.contains("main answer only")
+        );
     }
 
     #[test]
     fn only_the_last_six_turns_and_the_project_code_go_in() {
         let history: Vec<String> = (1..=9).map(|n| format!("Interviewer: turn {n}")).collect();
-        let text = user_prompt(&brief(), "How?", Kind::Technical, &history, Some("en"), "standard", "lines", "--- a.py ---\nprint(1)", Some("heard"));
+        let text = user_prompt(
+            &brief(),
+            "How?",
+            Kind::Technical,
+            &history,
+            Some("en"),
+            "standard",
+            "lines",
+            "--- a.py ---\nprint(1)",
+            Some("heard"),
+        );
         assert!(!text.contains("turn 3") && text.contains("turn 4") && text.contains("turn 9"));
         assert!(text.contains("RELEVANT CODE FROM THE PROJECT (excerpts)\n--- a.py ---\nprint(1)"));
         assert!(text.contains("WHAT WAS HEARD: it came from the call audio"));
@@ -242,7 +285,9 @@ mod tests {
         let mut brief = InterviewBrief::new("## Skills\n| Strong | Python, Docker |\n");
         brief.documents.push(crate::brief::Document::new("cv.pdf", "CV text", "cv"));
         let text = screenshot_prompt(&brief, Some("pl"), "main");
-        assert!(text.contains("CANDIDATE STACK: Python, Docker") && text.contains("Polish") && !text.contains("CV text"));
+        assert!(
+            text.contains("CANDIDATE STACK: Python, Docker") && text.contains("Polish") && !text.contains("CV text")
+        );
         assert!(screenshot_prompt(&InterviewBrief::new(""), None, "lines").contains("(not stated)"));
     }
 

@@ -34,7 +34,12 @@ impl Vacancy {
 
     /// "Title at Company", or how much text there is.
     pub fn label(&self) -> String {
-        let head = [self.title.as_str(), self.company.as_str()].iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join(" at ");
+        let head = [self.title.as_str(), self.company.as_str()]
+            .iter()
+            .filter(|part| !part.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" at ");
         if !head.is_empty() {
             head
         } else if !self.text.is_empty() {
@@ -58,7 +63,14 @@ pub struct Interview {
 
 impl Interview {
     pub fn new(name: &str) -> Self {
-        Self { id: Uuid::new_v4().simple().to_string()[..8].to_owned(), name: name.to_owned(), documents: Vec::new(), notes: String::new(), vacancy: Vacancy::default(), project: String::new() }
+        Self {
+            id: Uuid::new_v4().simple().to_string()[..8].to_owned(),
+            name: name.to_owned(),
+            documents: Vec::new(),
+            notes: String::new(),
+            vacancy: Vacancy::default(),
+            project: String::new(),
+        }
     }
 }
 
@@ -87,7 +99,8 @@ impl Library {
         if interviews.is_empty() {
             interviews.push(Interview::new(&format!("{DEFAULT_NAME} 1")));
         }
-        let active = if interviews.iter().any(|item| item.id == active) { active.to_owned() } else { interviews[0].id.clone() };
+        let active =
+            if interviews.iter().any(|item| item.id == active) { active.to_owned() } else { interviews[0].id.clone() };
         Self { interviews, active }
     }
 
@@ -109,7 +122,10 @@ impl Library {
             only.entry("name").or_insert_with(|| json!(format!("{DEFAULT_NAME} 1")));
             data = Map::from_iter([("interviews".to_owned(), json!([Value::Object(only)]))]);
         }
-        let interviews = data["interviews"].as_array().map(|items| items.iter().filter_map(Value::as_object).map(read_interview).collect()).unwrap_or_default();
+        let interviews = data["interviews"]
+            .as_array()
+            .map(|items| items.iter().filter_map(Value::as_object).map(read_interview).collect())
+            .unwrap_or_default();
         Self::from_parts(interviews, &text(data.get("active")))
     }
 
@@ -145,7 +161,11 @@ impl Library {
 
     /// Add an empty interview and make it the active one.
     pub fn new_interview(&mut self, name: &str) -> &Interview {
-        let name = if name.trim().is_empty() { format!("{DEFAULT_NAME} {}", self.interviews.len() + 1) } else { name.trim().to_owned() };
+        let name = if name.trim().is_empty() {
+            format!("{DEFAULT_NAME} {}", self.interviews.len() + 1)
+        } else {
+            name.trim().to_owned()
+        };
         let interview = Interview::new(&name);
         self.active = interview.id.clone();
         self.interviews.push(interview);
@@ -157,7 +177,8 @@ impl Library {
         let Some(gone) = self.interviews.iter().find(|item| item.id == id).cloned() else { return Vec::new() };
         self.interviews.retain(|item| item.id != id);
         *self = Self::from_parts(std::mem::take(&mut self.interviews), &self.active.clone());
-        let used: Vec<&String> = self.interviews.iter().flat_map(|item| item.documents.iter().map(|doc| &doc.path)).collect();
+        let used: Vec<&String> =
+            self.interviews.iter().flat_map(|item| item.documents.iter().map(|doc| &doc.path)).collect();
         gone.documents.iter().filter(|doc| !used.contains(&&doc.path)).map(|doc| PathBuf::from(&doc.path)).collect()
     }
 }
@@ -178,7 +199,11 @@ fn read_interview(item: &Map<String, Value>) -> Interview {
         title: text(vacancy.get("title")),
         company: text(vacancy.get("company")),
         text: text(vacancy.get("text")),
-        job: if vacancy.get("type").and_then(Value::as_str) == Some("job") { text(vacancy.get("value")) } else { String::new() },
+        job: if vacancy.get("type").and_then(Value::as_str) == Some("job") {
+            text(vacancy.get("value"))
+        } else {
+            String::new()
+        },
     });
     let id = text(item.get("id"));
     let name = text(item.get("name"));
@@ -196,9 +221,14 @@ fn read_interview(item: &Map<String, Value>) -> Interview {
 pub fn read_document(path: &Path) -> Result<String, String> {
     let extension = path.extension().map(|ext| ext.to_string_lossy().to_lowercase()).unwrap_or_default();
     let text = match extension.as_str() {
-        "pdf" => pdf_extract::extract_text(path).map_err(|error| format!("{} could not be read as a PDF: {error}", path.display()))?,
-        "txt" | "md" | "markdown" | "" => std::fs::read(path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).map_err(|error| format!("{}: {error}", path.display()))?,
-        other => return Err(format!("{}: .{other} files are not read yet (use PDF, Markdown or text)", path.display())),
+        "pdf" => pdf_extract::extract_text(path)
+            .map_err(|error| format!("{} could not be read as a PDF: {error}", path.display()))?,
+        "txt" | "md" | "markdown" | "" => std::fs::read(path)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|error| format!("{}: {error}", path.display()))?,
+        other => {
+            return Err(format!("{}: .{other} files are not read yet (use PDF, Markdown or text)", path.display()));
+        }
     };
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_owned();
     if text.is_empty() { Err(format!("{} has no text in it", path.display())) } else { Ok(text) }
@@ -213,9 +243,18 @@ pub fn build_brief(about: &Path, interview: &Interview) -> (InterviewBrief, Vec<
     for saved in &interview.documents {
         match read_document(Path::new(&saved.path)) {
             Ok(body) => {
-                let name = Path::new(&saved.path).file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+                let name = Path::new(&saved.path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 let kind = if saved.kind.is_empty() { guess_kind(&name).to_owned() } else { saved.kind.clone() };
-                brief.documents.push(Document { name, text: body, path: saved.path.clone(), kind, enabled: saved.enabled });
+                brief.documents.push(Document {
+                    name,
+                    text: body,
+                    path: saved.path.clone(),
+                    kind,
+                    enabled: saved.enabled,
+                });
             }
             Err(problem) => problems.push(problem),
         }
@@ -240,13 +279,21 @@ mod tests {
             let current = library.current_mut();
             current.name = "Vention: Data Engineering".into();
             current.notes = "I study in the evenings".into();
-            current.vacancy = Vacancy { title: "Data Engineering Intern".into(), company: "Vention".into(), text: "Python and SQL".into(), job: String::new() };
+            current.vacancy = Vacancy {
+                title: "Data Engineering Intern".into(),
+                company: "Vention".into(),
+                text: "Python and SQL".into(),
+                job: String::new(),
+            };
             current.documents.push(SavedDocument { path: "/x/cv.pdf".into(), kind: "cv".into(), enabled: true });
         }
         library.new_interview("");
         library.save(&path).unwrap();
         let json: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(json["interviews"][0]["vacancy"], json!({"type": "text", "title": "Data Engineering Intern", "company": "Vention", "text": "Python and SQL"}));
+        assert_eq!(
+            json["interviews"][0]["vacancy"],
+            json!({"type": "text", "title": "Data Engineering Intern", "company": "Vention", "text": "Python and SQL"})
+        );
         assert_eq!(json["interviews"][1]["name"], "Interview 2");
         assert_eq!(Library::load(&path), library);
     }
@@ -261,7 +308,10 @@ mod tests {
              "notes": "n", "vacancy": {"type": "text", "title": "DE", "company": "V", "text": "t"}, "project": "/p"}]}"#).unwrap();
         let library = Library::load(&path);
         assert_eq!((library.current().name.as_str(), library.current().project.as_str()), ("Vention", "/p"));
-        assert_eq!(library.current().documents, [SavedDocument { path: "/d/cv.pdf".into(), kind: "cv".into(), enabled: false }]);
+        assert_eq!(
+            library.current().documents,
+            [SavedDocument { path: "/d/cv.pdf".into(), kind: "cv".into(), enabled: false }]
+        );
         assert_eq!(library.current().vacancy.label(), "DE at V");
         assert_eq!(library.interviews.len(), 2);
     }
@@ -271,7 +321,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("context.json");
         std::fs::write(&path, r#"{"notes": "old", "documents": []}"#).unwrap();
-        assert_eq!((Library::load(&path).current().name.as_str(), Library::load(&path).current().notes.as_str()), ("Interview 1", "old"));
+        assert_eq!(
+            (Library::load(&path).current().name.as_str(), Library::load(&path).current().notes.as_str()),
+            ("Interview 1", "old")
+        );
         std::fs::write(&path, "not json").unwrap();
         assert_eq!(Library::load(&path).interviews.len(), 1);
         assert_eq!(Library::load(&dir.path().join("missing.json")).interviews.len(), 1);
@@ -280,11 +333,23 @@ mod tests {
     #[test]
     fn deleting_keeps_one_interview_and_returns_the_files_nobody_uses() {
         let mut library = Library::default();
-        library.current_mut().documents.push(SavedDocument { path: "/d/shared.pdf".into(), kind: "cv".into(), enabled: true });
-        library.current_mut().documents.push(SavedDocument { path: "/d/mine.pdf".into(), kind: "cv".into(), enabled: true });
+        library.current_mut().documents.push(SavedDocument {
+            path: "/d/shared.pdf".into(),
+            kind: "cv".into(),
+            enabled: true,
+        });
+        library.current_mut().documents.push(SavedDocument {
+            path: "/d/mine.pdf".into(),
+            kind: "cv".into(),
+            enabled: true,
+        });
         let first = library.current().id.clone();
         library.new_interview("Second");
-        library.current_mut().documents.push(SavedDocument { path: "/d/shared.pdf".into(), kind: "cv".into(), enabled: true });
+        library.current_mut().documents.push(SavedDocument {
+            path: "/d/shared.pdf".into(),
+            kind: "cv".into(),
+            enabled: true,
+        });
         assert_eq!(library.delete(&first), [PathBuf::from("/d/mine.pdf")]);
         assert_eq!((library.interviews.len(), library.current().name.as_str()), (1, "Second"));
         let last = library.current().id.clone();
@@ -309,14 +374,34 @@ mod tests {
         std::fs::write(dir.path().join("empty.txt"), "   ").unwrap();
         let mut interview = Interview::new("Vention");
         interview.documents = vec![
-            SavedDocument { path: dir.path().join("Alex_CV.md").to_string_lossy().into_owned(), kind: "cv".into(), enabled: true },
-            SavedDocument { path: dir.path().join("empty.txt").to_string_lossy().into_owned(), kind: "cv".into(), enabled: true },
-            SavedDocument { path: dir.path().join("nope.docx").to_string_lossy().into_owned(), kind: "about".into(), enabled: true },
+            SavedDocument {
+                path: dir.path().join("Alex_CV.md").to_string_lossy().into_owned(),
+                kind: "cv".into(),
+                enabled: true,
+            },
+            SavedDocument {
+                path: dir.path().join("empty.txt").to_string_lossy().into_owned(),
+                kind: "cv".into(),
+                enabled: true,
+            },
+            SavedDocument {
+                path: dir.path().join("nope.docx").to_string_lossy().into_owned(),
+                kind: "about".into(),
+                enabled: true,
+            },
         ];
         interview.vacancy = Vacancy { title: "DE".into(), company: "V".into(), text: "SQL".into(), job: String::new() };
         interview.notes = "  evenings  ".into();
         let (brief, problems) = build_brief(&about, &interview);
-        assert_eq!((brief.documents.len(), brief.documents[0].name.as_str(), brief.job_title.as_str(), brief.notes.as_str()), (1, "Alex_CV.md", "DE", "evenings"));
-        assert!(brief.candidate.contains("Python") && problems.len() == 2 && problems[0].contains("no text") && problems[1].contains("docx"));
+        assert_eq!(
+            (brief.documents.len(), brief.documents[0].name.as_str(), brief.job_title.as_str(), brief.notes.as_str()),
+            (1, "Alex_CV.md", "DE", "evenings")
+        );
+        assert!(
+            brief.candidate.contains("Python")
+                && problems.len() == 2
+                && problems[0].contains("no text")
+                && problems[1].contains("docx")
+        );
     }
 }

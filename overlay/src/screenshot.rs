@@ -52,11 +52,16 @@ const TOOLS: [(&str, &[&str], bool); 6] = [
 /// Installed capture tools that can see this session's screen, best first. `has` says whether a program is
 /// installed; the real caller looks it up on the PATH.
 pub fn tools_with(has: impl Fn(&str) -> bool, wayland: bool) -> Vec<String> {
-    TOOLS.iter().filter(|(name, _, wayland_ok)| has(name) && (*wayland_ok || !wayland)).map(|(name, _, _)| (*name).to_owned()).collect()
+    TOOLS
+        .iter()
+        .filter(|(name, _, wayland_ok)| has(name) && (*wayland_ok || !wayland))
+        .map(|(name, _, _)| (*name).to_owned())
+        .collect()
 }
 
 pub fn on_path(program: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|paths| std::env::split_paths(&paths).any(|folder| folder.join(program).is_file()))
+    std::env::var_os("PATH")
+        .is_some_and(|paths| std::env::split_paths(&paths).any(|folder| folder.join(program).is_file()))
 }
 
 pub fn available_tools() -> Vec<String> {
@@ -82,7 +87,12 @@ pub fn focused_output() -> Option<String> {
     if std::env::var_os("NIRI_SOCKET").is_none() || !on_path("niri") {
         return None;
     }
-    let output = Command::new("niri").args(["msg", "--json", "focused-output"]).stdout(Stdio::piped()).stderr(Stdio::null()).output().ok()?;
+    let output = Command::new("niri")
+        .args(["msg", "--json", "focused-output"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
     let data: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     data.get("name")?.as_str().filter(|name| !name.is_empty()).map(str::to_owned)
 }
@@ -121,14 +131,16 @@ pub fn capture(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError
             command.args(["-o", output]);
         }
         command.arg("-");
-        let result = run(command, limit).map_err(|error| ScreenshotError::Failed { tool: chosen.clone(), why: error.to_string() })?;
+        let result = run(command, limit)
+            .map_err(|error| ScreenshotError::Failed { tool: chosen.clone(), why: error.to_string() })?;
         if result.status.success() && is_jpeg(&result.stdout) {
             return Ok(Shot { data: result.stdout, mime: "image/jpeg" });
         }
         // an older grim without JPEG support: fall through to a PNG file
     }
     let directory = std::env::temp_dir().join(format!("careertwin-shot-{}", std::process::id()));
-    std::fs::create_dir_all(&directory).map_err(|error| ScreenshotError::Failed { tool: chosen.clone(), why: error.to_string() })?;
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| ScreenshotError::Failed { tool: chosen.clone(), why: error.to_string() })?;
     let path = directory.join("screen.png");
     let result = capture_file(&chosen, output, &path, limit);
     let bytes = std::fs::read(&path).unwrap_or_default();
@@ -141,19 +153,24 @@ pub fn capture(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError
 }
 
 fn capture_file(tool: &str, output: Option<&str>, path: &Path, limit: Duration) -> Result<(), ScreenshotError> {
-    let (_, template, _) = TOOLS.iter().find(|(name, _, _)| *name == tool).ok_or_else(|| ScreenshotError::Unavailable(tool.to_owned()))?;
+    let (_, template, _) =
+        TOOLS.iter().find(|(name, _, _)| *name == tool).ok_or_else(|| ScreenshotError::Unavailable(tool.to_owned()))?;
     let mut command = Command::new(tool);
-    if tool == "grim" {
-        if let Some(output) = output {
-            command.args(["-o", output]);
-        }
+    if tool == "grim"
+        && let Some(output) = output
+    {
+        command.args(["-o", output]);
     }
     command.args(template.iter().map(|part| part.replace("{path}", &path.to_string_lossy())));
-    let result = run(command, limit).map_err(|error| ScreenshotError::Failed { tool: tool.to_owned(), why: error.to_string() })?;
+    let result = run(command, limit)
+        .map_err(|error| ScreenshotError::Failed { tool: tool.to_owned(), why: error.to_string() })?;
     if result.status.success() {
         Ok(())
     } else {
-        Err(ScreenshotError::Failed { tool: tool.to_owned(), why: String::from_utf8_lossy(&result.stderr).trim().chars().take(200).collect() })
+        Err(ScreenshotError::Failed {
+            tool: tool.to_owned(),
+            why: String::from_utf8_lossy(&result.stderr).trim().chars().take(200).collect(),
+        })
     }
 }
 

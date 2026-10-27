@@ -4,19 +4,50 @@ use std::collections::VecDeque;
 
 /// The names used inside prompts.
 pub const NAMES: &[(&str, &str)] = &[
-    ("en", "English"), ("ru", "Russian"), ("pl", "Polish"), ("uk", "Ukrainian"), ("be", "Belarusian"),
-    ("de", "German"), ("fr", "French"), ("es", "Spanish"), ("it", "Italian"), ("pt", "Portuguese"),
-    ("nl", "Dutch"), ("cs", "Czech"), ("sk", "Slovak"), ("sv", "Swedish"), ("da", "Danish"),
-    ("no", "Norwegian"), ("fi", "Finnish"), ("tr", "Turkish"), ("ro", "Romanian"), ("hu", "Hungarian"),
-    ("bg", "Bulgarian"), ("lt", "Lithuanian"), ("lv", "Latvian"), ("et", "Estonian"), ("el", "Greek"),
-    ("he", "Hebrew"), ("ar", "Arabic"), ("zh", "Chinese"), ("ja", "Japanese"), ("ko", "Korean"),
-    ("hi", "Hindi"), ("vi", "Vietnamese"), ("id", "Indonesian"),
+    ("en", "English"),
+    ("ru", "Russian"),
+    ("pl", "Polish"),
+    ("uk", "Ukrainian"),
+    ("be", "Belarusian"),
+    ("de", "German"),
+    ("fr", "French"),
+    ("es", "Spanish"),
+    ("it", "Italian"),
+    ("pt", "Portuguese"),
+    ("nl", "Dutch"),
+    ("cs", "Czech"),
+    ("sk", "Slovak"),
+    ("sv", "Swedish"),
+    ("da", "Danish"),
+    ("no", "Norwegian"),
+    ("fi", "Finnish"),
+    ("tr", "Turkish"),
+    ("ro", "Romanian"),
+    ("hu", "Hungarian"),
+    ("bg", "Bulgarian"),
+    ("lt", "Lithuanian"),
+    ("lv", "Latvian"),
+    ("et", "Estonian"),
+    ("el", "Greek"),
+    ("he", "Hebrew"),
+    ("ar", "Arabic"),
+    ("zh", "Chinese"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("hi", "Hindi"),
+    ("vi", "Vietnamese"),
+    ("id", "Indonesian"),
 ];
 
 /// The languages the window itself speaks, in the order of the picker, with their own names.
 pub const UI_LANGUAGES: &[(&str, &str)] = &[
-    ("en", "English"), ("ru", "Русский"), ("pl", "Polski"), ("uk", "Українська"), ("de", "Deutsch"),
-    ("fr", "Français"), ("es", "Español"),
+    ("en", "English"),
+    ("ru", "Русский"),
+    ("pl", "Polski"),
+    ("uk", "Українська"),
+    ("de", "Deutsch"),
+    ("fr", "Français"),
+    ("es", "Español"),
 ];
 
 /// English name for a language code, used inside prompts.
@@ -27,7 +58,10 @@ pub fn name(code: Option<&str>) -> String {
         Some((_, label)) => (*label).to_owned(),
         None => {
             let mut chars = code.chars();
-            chars.next().map(|first| first.to_uppercase().chain(chars.flat_map(char::to_lowercase)).collect()).unwrap_or_default()
+            chars
+                .next()
+                .map(|first| first.to_uppercase().chain(chars.flat_map(char::to_lowercase)).collect())
+                .unwrap_or_default()
         }
     }
 }

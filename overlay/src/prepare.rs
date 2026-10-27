@@ -73,7 +73,10 @@ pub fn json_object(text: &str) -> Option<Value> {
 }
 
 fn strings(value: Option<&Value>) -> Vec<String> {
-    value.and_then(Value::as_array).map(|items| items.iter().map(|item| item.as_str().map_or_else(|| item.to_string(), str::to_owned)).collect()).unwrap_or_default()
+    value
+        .and_then(Value::as_array)
+        .map(|items| items.iter().map(|item| item.as_str().map_or_else(|| item.to_string(), str::to_owned)).collect())
+        .unwrap_or_default()
 }
 
 fn field(value: &Value, key: &str) -> String {
@@ -87,7 +90,11 @@ pub fn parse_questions(text: &str, count: usize) -> Result<Vec<BankQuestion>, Pr
     let questions: Vec<BankQuestion> = items
         .iter()
         .filter(|item| item.is_object() && !field(item, "question").is_empty())
-        .map(|item| BankQuestion { question: field(item, "question"), kind: field(item, "kind"), outline: strings(item.get("outline")).into_iter().take(6).collect() })
+        .map(|item| BankQuestion {
+            question: field(item, "question"),
+            kind: field(item, "kind"),
+            outline: strings(item.get("outline")).into_iter().take(6).collect(),
+        })
         .take(count)
         .collect();
     if questions.is_empty() { Err(error()) } else { Ok(questions) }
@@ -100,12 +107,24 @@ pub fn parse_analysis(text: &str) -> Result<Analysis, PrepareError> {
     let gaps: Vec<Gap> = data
         .get("gaps")
         .and_then(Value::as_array)
-        .map(|items| items.iter().filter(|item| item.is_object() && !field(item, "gap").is_empty()).map(|item| Gap { gap: field(item, "gap"), how_to_address: field(item, "how_to_address") }).collect())
+        .map(|items| {
+            items
+                .iter()
+                .filter(|item| item.is_object() && !field(item, "gap").is_empty())
+                .map(|item| Gap { gap: field(item, "gap"), how_to_address: field(item, "how_to_address") })
+                .collect()
+        })
         .unwrap_or_default();
     if summary.is_empty() && gaps.is_empty() {
         return Err(error());
     }
-    Ok(Analysis { summary, strengths: strings(data.get("strengths")), gaps, likely_questions: strings(data.get("likely_questions")), cv_fixes: strings(data.get("cv_fixes")) })
+    Ok(Analysis {
+        summary,
+        strengths: strings(data.get("strengths")),
+        gaps,
+        likely_questions: strings(data.get("likely_questions")),
+        cv_fixes: strings(data.get("cv_fixes")),
+    })
 }
 
 #[cfg(test)]
@@ -124,7 +143,10 @@ mod tests {
     fn the_prompts_carry_the_background_the_count_the_focus_and_the_language() {
         let brief = InterviewBrief::new("## Skills\n| Strong | Python |\n");
         let text = questions_prompt(&brief, 8, " SQL, system design ", Some("pl"));
-        assert!(text.contains("CANDIDATE CONTEXT") && text.ends_with("Write 8 questions in Polish. Focus on: SQL, system design."));
+        assert!(
+            text.contains("CANDIDATE CONTEXT")
+                && text.ends_with("Write 8 questions in Polish. Focus on: SQL, system design.")
+        );
         assert!(!questions_prompt(&brief, 5, "", None).contains("Focus on"));
         assert!(analysis_prompt(&brief, Some("ru")).ends_with("Review the CV against the vacancy. Write in Russian."));
     }
@@ -151,7 +173,10 @@ mod tests {
         let analysis = parse_analysis(reply).unwrap();
         assert_eq!(analysis.summary, "Good fit.");
         assert_eq!(analysis.gaps, [Gap { gap: "Spark".into(), how_to_address: "Say so".into() }]);
-        assert_eq!((analysis.strengths, analysis.likely_questions, analysis.cv_fixes), (vec!["Python".to_owned()], vec!["Why Spark?".to_owned()], vec!["Add numbers".to_owned()]));
+        assert_eq!(
+            (analysis.strengths, analysis.likely_questions, analysis.cv_fixes),
+            (vec!["Python".to_owned()], vec!["Why Spark?".to_owned()], vec!["Add numbers".to_owned()])
+        );
         assert!(parse_analysis("{}").is_err() && parse_analysis("sorry").is_err());
     }
 }

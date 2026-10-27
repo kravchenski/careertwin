@@ -39,8 +39,15 @@ impl Kind {
 
     pub fn parse(value: &str) -> Option<Kind> {
         [
-            Kind::Intro, Kind::Behavioral, Kind::Motivation, Kind::Salary, Kind::Logistics,
-            Kind::CandidateQuestions, Kind::Definition, Kind::Technical, Kind::SmallTalk,
+            Kind::Intro,
+            Kind::Behavioral,
+            Kind::Motivation,
+            Kind::Salary,
+            Kind::Logistics,
+            Kind::CandidateQuestions,
+            Kind::Definition,
+            Kind::Technical,
+            Kind::SmallTalk,
         ]
         .into_iter()
         .find(|kind| kind.as_str() == value)
@@ -140,11 +147,9 @@ pub fn mentions(text: &str, vocabulary: &str) -> bool {
     if value.split(' ').count() < 2 || matches(&SMALL_TALK, &value) {
         return false;
     }
-    vocabulary
-        .split([',', '/'])
-        .map(str::trim)
-        .filter(|term| term.chars().count() > 2)
-        .any(|term| Regex::new(&format!(r"(?i)(?<!\w){}(?!\w)", fancy_regex::escape(term))).is_ok_and(|re| matches(&re, &value)))
+    vocabulary.split([',', '/']).map(str::trim).filter(|term| term.chars().count() > 2).any(|term| {
+        Regex::new(&format!(r"(?i)(?<!\w){}(?!\w)", fancy_regex::escape(term))).is_ok_and(|re| matches(&re, &value))
+    })
 }
 
 pub fn classify(text: &str) -> Kind {
@@ -162,7 +167,9 @@ static UKRAINIAN_WORDS: LazyLock<Regex> = LazyLock::new(|| {
     compile(r"(?i)\b(що|як|чому|де|коли|хто|який|яка|які|чи|будь ласка|дякую|так|ні|розкажіть|поясніть)\b")
 });
 static RUSSIAN_WORDS: LazyLock<Regex> = LazyLock::new(|| {
-    compile(r"(?i)\b(что|как|почему|где|когда|кто|какой|какая|какие|ли|пожалуйста|спасибо|да|нет|расскажите|объясните)\b")
+    compile(
+        r"(?i)\b(что|как|почему|где|когда|кто|какой|какая|какие|ли|пожалуйста|спасибо|да|нет|расскажите|объясните)\b",
+    )
 });
 static CYRILLIC: LazyLock<Regex> = LazyLock::new(|| compile(r"[а-яёА-ЯЁіїєґІЇЄҐўЎ]"));
 static POLISH: LazyLock<Regex> = LazyLock::new(|| compile(r"[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]"));
@@ -210,7 +217,8 @@ mod tests {
 
     #[test]
     fn a_pleasantry_is_not_a_question() {
-        for text in ["Дякую", "Добре", "Так", "Привіт", "Зрозуміло", "Доброго дня", "Thanks!", "okay"] {
+        for text in ["Дякую", "Добре", "Так", "Привіт", "Зрозуміло", "Доброго дня", "Thanks!", "okay"]
+        {
             assert!(!is_question(text, Some("uk")), "{text}");
             assert_eq!(classify(text), Kind::SmallTalk, "{text}");
         }
@@ -231,10 +239,14 @@ mod tests {
     #[test]
     fn questions_are_recognised_in_the_language_they_are_asked_in() {
         for (language, text) in [
-            ("de", "Erzählen Sie mir von sich"), ("de", "Warum möchten Sie bei uns arbeiten"),
-            ("fr", "Parlez-moi de votre expérience"), ("fr", "Pourquoi voulez-vous ce poste"),
-            ("es", "Cuéntame sobre tu experiencia"), ("es", "Por qué quieres trabajar con nosotros"),
-            ("ru", "Расскажите о своём опыте"), ("pl", "Opowiedz o swoim doświadczeniu"),
+            ("de", "Erzählen Sie mir von sich"),
+            ("de", "Warum möchten Sie bei uns arbeiten"),
+            ("fr", "Parlez-moi de votre expérience"),
+            ("fr", "Pourquoi voulez-vous ce poste"),
+            ("es", "Cuéntame sobre tu experiencia"),
+            ("es", "Por qué quieres trabajar con nosotros"),
+            ("ru", "Расскажите о своём опыте"),
+            ("pl", "Opowiedz o swoim doświadczeniu"),
         ] {
             assert!(is_question(text, Some(language)), "{language}: {text}");
         }
@@ -266,7 +278,9 @@ mod tests {
 
     #[test]
     fn a_task_worded_as_an_order_is_a_question() {
-        for text in ["Write a function that reverses a string", "Imagine the queue stalls at night", "Let's talk about indexes"] {
+        for text in
+            ["Write a function that reverses a string", "Imagine the queue stalls at night", "Let's talk about indexes"]
+        {
             assert!(is_question(text, Some("en")), "{text}");
         }
     }

@@ -10,7 +10,8 @@ const DEFAULT_PNG: &[u8] = include_bytes!("../../../packaging/careertwin-intervi
 const SIZE: u32 = 256;
 
 /// The colour variants: (name, how far the hue turns in degrees; `None` is grey).
-pub const VARIANTS: [(&str, Option<f32>); 5] = [("amber", Some(0.0)), ("sky", Some(165.0)), ("mint", Some(105.0)), ("rose", Some(305.0)), ("graphite", None)];
+pub const VARIANTS: [(&str, Option<f32>); 5] =
+    [("amber", Some(0.0)), ("sky", Some(165.0)), ("mint", Some(105.0)), ("rose", Some(305.0)), ("graphite", None)];
 
 pub fn is_builtin(setting: &str) -> bool {
     setting.strip_prefix("builtin:").is_some_and(|name| VARIANTS.iter().any(|(known, _)| *known == name))
@@ -37,7 +38,7 @@ fn square(image: &image::DynamicImage) -> IconData {
 /// Turn the hue of every pixel by `degrees`, or take its colour away for `None`; the alpha stays.
 pub fn recolour(icon: &IconData, turn: Option<f32>) -> IconData {
     let mut rgba = icon.rgba.clone();
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         let (h, s, l) = rgb_to_hsl(pixel[0], pixel[1], pixel[2]);
         let (r, g, b) = match turn {
             Some(degrees) => hsl_to_rgb((h + degrees).rem_euclid(360.0), s, l),
@@ -98,7 +99,10 @@ pub fn load(setting: &str) -> Result<IconData, String> {
         return Ok(default_icon());
     }
     if let Some(name) = setting.strip_prefix("builtin:") {
-        let (_, turn) = VARIANTS.iter().find(|(known, _)| *known == name).ok_or_else(|| format!("there is no icon named {name}"))?;
+        let (_, turn) = VARIANTS
+            .iter()
+            .find(|(known, _)| *known == name)
+            .ok_or_else(|| format!("there is no icon named {name}"))?;
         return Ok(recolour(&default_icon(), *turn));
     }
     let path = Path::new(setting);
@@ -126,22 +130,47 @@ mod tests {
     fn the_icon_that_ships_is_square_and_has_its_pixels() {
         let icon = default_icon();
         assert_eq!((icon.width, icon.height, icon.rgba.len()), (SIZE, SIZE, (SIZE * SIZE * 4) as usize));
-        assert!(icon.rgba.chunks_exact(4).any(|px| px[3] > 200)); // not blank
+        assert!(icon.rgba.as_chunks::<4>().0.iter().any(|px| px[3] > 200)); // not blank
     }
 
     #[test]
     fn a_colour_variant_changes_the_colour_and_keeps_the_shape() {
         let original = default_icon();
-        let amber = original.rgba.chunks_exact(4).filter(|px| px[3] > 200 && px[0] > 200 && px[1] > 140 && px[2] < 90).count();
+        let amber = original
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|px| px[3] > 200 && px[0] > 200 && px[1] > 140 && px[2] < 90)
+            .count();
         assert!(amber > 500, "the amber crescent should be there: {amber}");
         for (name, turn) in VARIANTS.iter().skip(1) {
             let other = recolour(&original, *turn);
             assert_ne!(other.rgba, original.rgba, "{name}");
-            assert!(other.rgba.chunks_exact(4).zip(original.rgba.chunks_exact(4)).all(|(a, b)| a[3] == b[3]), "{name}: alpha");
+            assert!(
+                other
+                    .rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(original.rgba.as_chunks::<4>().0.iter())
+                    .all(|(a, b)| a[3] == b[3]),
+                "{name}: alpha"
+            );
         }
         let grey = recolour(&original, None);
-        assert!(grey.rgba.chunks_exact(4).all(|px| px[0] == px[1] && px[1] == px[2]));
-        assert_eq!(recolour(&original, Some(0.0)).rgba.chunks_exact(4).zip(original.rgba.chunks_exact(4)).filter(|(a, b)| a[..3].iter().zip(b[..3].iter()).any(|(x, y)| x.abs_diff(*y) > 2)).count(), 0);
+        assert!(grey.rgba.as_chunks::<4>().0.iter().all(|px| px[0] == px[1] && px[1] == px[2]));
+        assert_eq!(
+            recolour(&original, Some(0.0))
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(original.rgba.as_chunks::<4>().0.iter())
+                .filter(|(a, b)| a[..3].iter().zip(b[..3].iter()).any(|(x, y)| x.abs_diff(*y) > 2))
+                .count(),
+            0
+        );
     }
 
     #[test]
@@ -157,7 +186,12 @@ mod tests {
     fn a_setting_names_the_default_a_variant_or_a_file() {
         assert_eq!(load("").unwrap(), default_icon());
         assert_ne!(load("builtin:sky").unwrap(), default_icon());
-        assert!(load("builtin:nope").is_err() && is_builtin("builtin:mint") && !is_builtin("builtin:nope") && !is_builtin(""));
+        assert!(
+            load("builtin:nope").is_err()
+                && is_builtin("builtin:mint")
+                && !is_builtin("builtin:nope")
+                && !is_builtin("")
+        );
         assert!(load("/no/such/file.png").is_err());
     }
 

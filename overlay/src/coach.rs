@@ -43,7 +43,9 @@ impl CoachError {
 }
 
 pub fn model_name() -> String {
-    std::env::var("INTERVIEW_MODEL").or_else(|_| std::env::var("SWITCHYARD_MODEL")).unwrap_or_else(|_| "auto".to_owned())
+    std::env::var("INTERVIEW_MODEL")
+        .or_else(|_| std::env::var("SWITCHYARD_MODEL"))
+        .unwrap_or_else(|_| "auto".to_owned())
 }
 
 pub fn unreachable_message(base: &str, error: &str) -> String {
@@ -64,7 +66,8 @@ pub fn failed_message(base: &str, model: &str, status: u16, text: &str) -> Strin
     message
 }
 
-static WAIT_HINT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)next one in (\d+)\s*s").expect("a fixed pattern"));
+static WAIT_HINT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)next one in (\d+)\s*s").expect("a fixed pattern"));
 
 /// How long a 429 asks to wait: the Retry-After header, or "next one in 32s" in the message.
 pub fn retry_after(status: u16, retry_header: Option<&str>, body: &str) -> Option<Duration> {
@@ -92,16 +95,30 @@ pub struct Request {
 
 impl Request {
     pub fn text(system: &str, prompt: &str) -> Self {
-        Self { system: system.to_owned(), prompt: prompt.to_owned(), image: None, max_tokens: MAX_TOKENS, temperature: 0.3 }
+        Self {
+            system: system.to_owned(),
+            prompt: prompt.to_owned(),
+            image: None,
+            max_tokens: MAX_TOKENS,
+            temperature: 0.3,
+        }
     }
 
     pub fn screenshot(system: &str, prompt: &str, data_url: &str) -> Self {
-        Self { system: system.to_owned(), prompt: prompt.to_owned(), image: Some(data_url.to_owned()), max_tokens: SCREENSHOT_MAX_TOKENS, temperature: 0.2 }
+        Self {
+            system: system.to_owned(),
+            prompt: prompt.to_owned(),
+            image: Some(data_url.to_owned()),
+            max_tokens: SCREENSHOT_MAX_TOKENS,
+            temperature: 0.2,
+        }
     }
 
     fn body(&self, model: &str, stream: bool) -> Value {
         let content = match &self.image {
-            Some(url) => json!([{"type": "text", "text": self.prompt}, {"type": "image_url", "image_url": {"url": url}}]),
+            Some(url) => {
+                json!([{"type": "text", "text": self.prompt}, {"type": "image_url", "image_url": {"url": url}}])
+            }
             None => json!(self.prompt),
         };
         let mut body = json!({
@@ -172,7 +189,11 @@ impl Coach {
 
     /// The key in use first, then the spare ones; `[None]` when there is no key at all.
     fn keys(config: &CoachConfig) -> Vec<Option<String>> {
-        let own = config.key.clone().filter(|key| !key.is_empty()).or_else(|| std::env::var("SWITCHYARD_API_KEY").ok().filter(|key| !key.is_empty()));
+        let own = config
+            .key
+            .clone()
+            .filter(|key| !key.is_empty())
+            .or_else(|| std::env::var("SWITCHYARD_API_KEY").ok().filter(|key| !key.is_empty()));
         let mut keys: Vec<String> = Vec::new();
         for key in own.into_iter().chain(config.spare_keys.iter().cloned()) {
             if !keys.contains(&key) {
@@ -196,7 +217,9 @@ impl Coach {
         let table = self.wait_until.lock().expect("the table lock is never held across a panic");
         let k = key.clone().unwrap_or_default();
         let now = Instant::now();
-        [(k.clone(), model.to_owned()), (k, String::new())].iter().any(|slot| table.get(slot).is_some_and(|until| *until > now))
+        [(k.clone(), model.to_owned()), (k, String::new())]
+            .iter()
+            .any(|slot| table.get(slot).is_some_and(|until| *until > now))
     }
 
     /// Leave a limited model alone for as long as it asked; a rejected key (with others to use) for good measure.
@@ -205,7 +228,7 @@ impl Coach {
         let k = key.clone().unwrap_or_default();
         if let Some(wait) = error.retry_after {
             table.insert((k, model.to_owned()), Instant::now() + wait);
-        } else if several && matches!(error.status, Some(401 | 402 | 403)) {
+        } else if several && matches!(error.status, Some(401..=403)) {
             table.insert((k, String::new()), Instant::now() + KEY_REST);
         }
     }
@@ -222,14 +245,22 @@ impl Coach {
         let keys = Self::keys(&config);
         let mut last: Option<(u16, String, Option<String>)> = None;
         for (position, key) in keys.iter().enumerate() {
-            let mut builder = self.client.post(format!("{base}/v1/chat/completions")).timeout(Duration::from_secs(180)).json(&request.body(&model, false));
+            let mut builder = self
+                .client
+                .post(format!("{base}/v1/chat/completions"))
+                .timeout(Duration::from_secs(180))
+                .json(&request.body(&model, false));
             if let Some(auth) = self.headers(key) {
                 builder = builder.header("authorization", auth);
             }
-            let response = builder.send().await.map_err(|error| CoachError::new(unreachable_message(&base, &describe(&error))))?;
+            let response =
+                builder.send().await.map_err(|error| CoachError::new(unreachable_message(&base, &describe(&error))))?;
             let status = response.status().as_u16();
             if status < 400 {
-                let data: Value = response.json().await.map_err(|_| CoachError::new("The AI gateway returned an unreadable answer"))?;
+                let data: Value = response
+                    .json()
+                    .await
+                    .map_err(|_| CoachError::new("The AI gateway returned an unreadable answer"))?;
                 let text = data["choices"][0]["message"]["content"].as_str().unwrap_or("").to_owned();
                 if text.trim().is_empty() {
                     return Err(CoachError::new("The model returned no text. Check the model in Settings → AI."));
@@ -243,7 +274,11 @@ impl Coach {
             }
         }
         let (status, body, _) = last.unwrap_or((0, String::new(), None));
-        Err(CoachError { message: failed_message(&base, &model, status, &body), retry_after: None, status: Some(status) })
+        Err(CoachError {
+            message: failed_message(&base, &model, status, &body),
+            retry_after: None,
+            status: Some(status),
+        })
     }
 
     /// Ask for an answer and stream it: `on_chunk` gets each piece as it is written.
@@ -252,7 +287,12 @@ impl Coach {
     /// model of the fallback chain is asked, so one bad provider does not cost a live answer. A model that said
     /// how long to wait is not asked again until then. By default the chain is one step, "auto", on a Switchyard
     /// gateway; other providers have no "auto", so their error is shown as it is.
-    pub async fn ask(&self, request: &Request, cancel: &CancellationToken, mut on_chunk: impl FnMut(&str)) -> Result<Reply, CoachError> {
+    pub async fn ask(
+        &self,
+        request: &Request,
+        cancel: &CancellationToken,
+        mut on_chunk: impl FnMut(&str),
+    ) -> Result<Reply, CoachError> {
         let config = self.config();
         let image = request.image.is_some();
         let model = if image { config.vision_model.clone() } else { None }
@@ -274,10 +314,12 @@ impl Coach {
                     continue;
                 }
                 let mut started = false;
-                let result = self.stream_once(&config, request, name, key, cancel, &mut |piece| {
-                    started = true;
-                    on_chunk(piece);
-                }).await;
+                let result = self
+                    .stream_once(&config, request, name, key, cancel, &mut |piece| {
+                        started = true;
+                        on_chunk(piece);
+                    })
+                    .await;
                 match result {
                     Ok(mut reply) => {
                         reply.fell_back = (*name != model).then(|| name.clone());
@@ -333,10 +375,15 @@ impl Coach {
                 status: Some(status),
             });
         }
-        let streaming = response.headers().get("content-type").and_then(|value| value.to_str().ok()).is_some_and(|kind| kind.contains("text/event-stream"));
+        let streaming = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|kind| kind.contains("text/event-stream"));
         let mut reply = Reply::default();
         if !streaming {
-            let data: Value = response.json().await.map_err(|_| CoachError::new("The AI gateway returned an unreadable answer"))?;
+            let data: Value =
+                response.json().await.map_err(|_| CoachError::new("The AI gateway returned an unreadable answer"))?;
             let choice = &data["choices"][0];
             reply.finish = choice["finish_reason"].as_str().map(str::to_owned);
             if let Some(text) = choice["message"]["content"].as_str().filter(|text| !text.is_empty()) {
@@ -352,7 +399,9 @@ impl Coach {
                 () = cancel.cancelled() => return Ok(reply),
                 next = tokio::time::timeout(IDLE_TIMEOUT, bytes.next()) => next,
             };
-            let Ok(next) = next else { return Err(CoachError::new("The model stopped answering (no data for 60 seconds)")) };
+            let Ok(next) = next else {
+                return Err(CoachError::new("The model stopped answering (no data for 60 seconds)"));
+            };
             let Some(piece) = next else { break };
             let piece = piece.map_err(|error| CoachError::new(unreachable_message(&base, &describe(&error))))?;
             for event in decoder.push(&piece) {
@@ -378,25 +427,48 @@ impl Coach {
         if let Some(key) = key {
             builder = builder.bearer_auth(key);
         }
-        let response = builder.send().await.map_err(|error| CoachError::new(format!("Cannot reach {base} ({})", describe(&error))))?;
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| CoachError::new(format!("Cannot reach {base} ({})", describe(&error))))?;
         if !response.status().is_success() {
-            return Err(CoachError::new(failed_message(&base, "", response.status().as_u16(), &response.text().await.unwrap_or_default())));
+            return Err(CoachError::new(failed_message(
+                &base,
+                "",
+                response.status().as_u16(),
+                &response.text().await.unwrap_or_default(),
+            )));
         }
-        let data: Value = response.json().await.map_err(|_| CoachError::new(format!("{base} did not return a model list")))?;
-        Ok(data["data"].as_array().map(|items| items.iter().filter_map(|item| item["id"].as_str().map(str::to_owned)).collect()).unwrap_or_default())
+        let data: Value =
+            response.json().await.map_err(|_| CoachError::new(format!("{base} did not return a model list")))?;
+        Ok(data["data"]
+            .as_array()
+            .map(|items| items.iter().filter_map(|item| item["id"].as_str().map(str::to_owned)).collect())
+            .unwrap_or_default())
     }
 
     /// Ask the provider about `key`: `Ok(true)` when it accepts it, `Ok(false)` when it could not say (offline,
     /// no model list), `Err` when it rejects it.
     pub async fn check_key(&self, url: &str, key: &str) -> Result<bool, CoachError> {
         let base = if url.is_empty() { default_gateway() } else { base_url(url) };
-        let response = match self.client.get(format!("{base}/v1/models")).timeout(Duration::from_secs(8)).bearer_auth(key).send().await {
+        let response = match self
+            .client
+            .get(format!("{base}/v1/models"))
+            .timeout(Duration::from_secs(8))
+            .bearer_auth(key)
+            .send()
+            .await
+        {
             Ok(response) => response,
             Err(_) => return Ok(false),
         };
         if matches!(response.status().as_u16(), 401 | 403) {
             let who = provider_for(&base).map_or(base.clone(), |provider| provider.label.to_owned());
-            return Err(CoachError { message: format!("{who} rejected this key"), retry_after: None, status: Some(response.status().as_u16()) });
+            return Err(CoachError {
+                message: format!("{who} rejected this key"),
+                retry_after: None,
+                status: Some(response.status().as_u16()),
+            });
         }
         Ok(response.status().is_success())
     }
@@ -479,30 +551,45 @@ mod tests {
     const GROQ_LIKE: &str = "https://api.groq.com/openai";
 
     fn sse(parts: &[&str]) -> ResponseTemplate {
-        let body: String = parts.iter().map(|part| format!("data: {}\n\n", json!({"choices": [{"delta": {"content": part}}]}))).collect::<String>() + "data: [DONE]\n\n";
+        let body: String = parts
+            .iter()
+            .map(|part| format!("data: {}\n\n", json!({"choices": [{"delta": {"content": part}}]})))
+            .collect::<String>()
+            + "data: [DONE]\n\n";
         ResponseTemplate::new(200).set_body_raw(body, "text/event-stream")
     }
+
+    type Decide = Box<dyn Fn(&str, &str) -> ResponseTemplate + Send + Sync>;
 
     /// Answers by (model, key) and remembers every call.
     struct Script {
         calls: Arc<Mutex<Vec<(String, String)>>>,
-        decide: Box<dyn Fn(&str, &str) -> ResponseTemplate + Send + Sync>,
+        decide: Decide,
     }
 
     impl Respond for Script {
         fn respond(&self, request: &MockRequest) -> ResponseTemplate {
             let body: Value = serde_json::from_slice(&request.body).unwrap();
             let model = body["model"].as_str().unwrap_or("").to_owned();
-            let key = request.headers.get("authorization").map(|value| value.to_str().unwrap().trim_start_matches("Bearer ").to_owned()).unwrap_or_default();
+            let key = request
+                .headers
+                .get("authorization")
+                .map(|value| value.to_str().unwrap().trim_start_matches("Bearer ").to_owned())
+                .unwrap_or_default();
             self.calls.lock().unwrap().push((model.clone(), key.clone()));
             (self.decide)(&model, &key)
         }
     }
 
-    async fn server(decide: impl Fn(&str, &str) -> ResponseTemplate + Send + Sync + 'static) -> (MockServer, Arc<Mutex<Vec<(String, String)>>>) {
+    async fn server(
+        decide: impl Fn(&str, &str) -> ResponseTemplate + Send + Sync + 'static,
+    ) -> (MockServer, Arc<Mutex<Vec<(String, String)>>>) {
         let server = MockServer::start().await;
         let calls = Arc::new(Mutex::new(Vec::new()));
-        Mock::given(method("POST")).respond_with(Script { calls: calls.clone(), decide: Box::new(decide) }).mount(&server).await;
+        Mock::given(method("POST"))
+            .respond_with(Script { calls: calls.clone(), decide: Box::new(decide) })
+            .mount(&server)
+            .await;
         (server, calls)
     }
 
@@ -528,7 +615,10 @@ mod tests {
     #[test]
     fn a_429_says_how_long_to_wait_in_a_header_or_in_the_message() {
         assert_eq!(retry_after(429, Some("7"), "x"), Some(Duration::from_secs(7)));
-        assert_eq!(retry_after(429, None, "all 4 Groq keys are rate limited or rejected; next one in 32s"), Some(Duration::from_secs(32)));
+        assert_eq!(
+            retry_after(429, None, "all 4 Groq keys are rate limited or rejected; next one in 32s"),
+            Some(Duration::from_secs(32))
+        );
         assert_eq!(retry_after(429, Some("9999"), "x"), Some(Duration::from_secs(90))); // never for long
         assert_eq!(retry_after(429, None, "slow down"), None);
         assert_eq!(retry_after(503, Some("7"), "down"), None);
@@ -536,10 +626,16 @@ mod tests {
 
     #[test]
     fn a_provider_error_says_what_to_do() {
-        assert!(failed_message(GROQ_LIKE, "auto", 404, "no model").contains("Groq returned 404") && failed_message(GROQ_LIKE, "auto", 404, "x").contains("Load models"));
+        assert!(
+            failed_message(GROQ_LIKE, "auto", 404, "no model").contains("Groq returned 404")
+                && failed_message(GROQ_LIKE, "auto", 404, "x").contains("Load models")
+        );
         assert!(!failed_message("http://127.0.0.1:3260", "auto", 404, "x").contains("Load models"));
         assert!(failed_message(GROQ_LIKE, "m", 401, "x").contains("check the API key"));
-        assert_eq!(failed_message("http://x", "m", 500, &"y".repeat(500)).len(), "The AI gateway returned 500: ".len() + 200);
+        assert_eq!(
+            failed_message("http://x", "m", 500, &"y".repeat(500)).len(),
+            "The AI gateway returned 500: ".len() + 200
+        );
     }
 
     #[test]
@@ -549,7 +645,8 @@ mod tests {
         let (a, b) = line.as_bytes().split_at(10);
         assert!(decoder.push(a).is_empty());
         assert_eq!(decoder.push(b), [SseEvent::Text("Hel".into())]);
-        let finish = format!("data: {}\r\n\r\ndata: [DONE]\n", json!({"choices": [{"delta": {}, "finish_reason": "length"}]}));
+        let finish =
+            format!("data: {}\r\n\r\ndata: [DONE]\n", json!({"choices": [{"delta": {}, "finish_reason": "length"}]}));
         assert_eq!(decoder.push(finish.as_bytes()), [SseEvent::Finish("length".into()), SseEvent::Done]);
         assert!(decoder.push(b": comment\ndata: not json\n").is_empty());
     }
@@ -559,7 +656,10 @@ mod tests {
         let (server, _) = server(|_, _| sse(&["ANSWER:\n", "hello"])).await;
         let coach = coach(&server, |config| config.model = Some("m".into()));
         let mut pieces = Vec::new();
-        let reply = coach.ask(&Request::text("s", "p"), &CancellationToken::new(), |piece| pieces.push(piece.to_owned())).await.unwrap();
+        let reply = coach
+            .ask(&Request::text("s", "p"), &CancellationToken::new(), |piece| pieces.push(piece.to_owned()))
+            .await
+            .unwrap();
         assert_eq!(pieces, ["ANSWER:\n", "hello"]);
         assert_eq!(reply.text, "ANSWER:\nhello");
         assert_eq!(reply.fell_back, None);
@@ -567,7 +667,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_rate_limited_key_is_followed_by_the_next_key_on_the_same_model() {
-        let (server, log) = server(|_, key| if key == "k1" { ResponseTemplate::new(429).set_body_string("slow down") } else { sse(&["from ", key]) }).await;
+        let (server, log) = server(|_, key| {
+            if key == "k1" { ResponseTemplate::new(429).set_body_string("slow down") } else { sse(&["from ", key]) }
+        })
+        .await;
         let coach = coach(&server, |c| {
             c.model = Some("groq/big".into());
             c.key = Some("k1".into());
@@ -582,7 +685,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_rejected_key_rests_and_is_not_asked_again_while_another_works() {
-        let (server, log) = server(|_, key| if key == "bad" { ResponseTemplate::new(401).set_body_string("invalid api key") } else { sse(&["ok"]) }).await;
+        let (server, log) = server(|_, key| {
+            if key == "bad" { ResponseTemplate::new(401).set_body_string("invalid api key") } else { sse(&["ok"]) }
+        })
+        .await;
         let coach = coach(&server, |c| {
             c.model = Some("m".into());
             c.key = Some("bad".into());
@@ -596,7 +702,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_model_problem_goes_to_the_next_model_without_trying_the_other_keys() {
-        let (server, log) = server(|model, _| if model == "gone" { ResponseTemplate::new(404).set_body_string("no such model") } else { sse(&["ok"]) }).await;
+        let (server, log) = server(|model, _| {
+            if model == "gone" { ResponseTemplate::new(404).set_body_string("no such model") } else { sse(&["ok"]) }
+        })
+        .await;
         let coach = coach(&server, |c| {
             c.model = Some("gone".into());
             c.key = Some("k1".into());
@@ -610,7 +719,13 @@ mod tests {
 
     #[tokio::test]
     async fn every_key_limited_goes_on_to_the_next_model_and_the_first_error_is_reported_when_all_fail() {
-        let (server, log) = server(|model, _| if model == "a" { ResponseTemplate::new(429).set_body_string("limited") } else { sse(&["from b"]) }).await;
+        let (server, log) =
+            server(
+                |model, _| {
+                    if model == "a" { ResponseTemplate::new(429).set_body_string("limited") } else { sse(&["from b"]) }
+                },
+            )
+            .await;
         let coach = coach(&server, |c| {
             c.model = Some("a".into());
             c.key = Some("k1".into());
@@ -640,7 +755,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_cooldown_belongs_to_one_key_so_the_other_key_is_still_asked() {
-        let (server, log) = server(|_, key| if key == "k1" { ResponseTemplate::new(429).set_body_string("next one in 30s") } else { sse(&["ok"]) }).await;
+        let (server, log) = server(|_, key| {
+            if key == "k1" { ResponseTemplate::new(429).set_body_string("next one in 30s") } else { sse(&["ok"]) }
+        })
+        .await;
         let coach = coach(&server, |c| {
             c.model = Some("m".into());
             c.key = Some("k1".into());
@@ -719,7 +837,12 @@ mod tests {
 
     #[tokio::test]
     async fn a_cancelled_question_stops_at_once() {
-        let (server, _) = server(|_, _| ResponseTemplate::new(200).set_delay(Duration::from_secs(5)).set_body_raw("data: [DONE]\n\n", "text/event-stream")).await;
+        let (server, _) = server(|_, _| {
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(5))
+                .set_body_raw("data: [DONE]\n\n", "text/event-stream")
+        })
+        .await;
         let coach = coach(&server, |c| c.model = Some("m".into()));
         let cancel = CancellationToken::new();
         let trigger = cancel.clone();
@@ -735,14 +858,22 @@ mod tests {
     #[tokio::test]
     async fn the_key_check_tells_rejected_from_unknown() {
         let server = MockServer::start().await;
-        Mock::given(method("GET")).respond_with(|request: &MockRequest| {
-            let key = request.headers.get("authorization").map(|v| v.to_str().unwrap().to_owned()).unwrap_or_default();
-            if key == "Bearer good" { ResponseTemplate::new(200).set_body_json(json!({"data": [{"id": "m1"}]})) } else { ResponseTemplate::new(401) }
-        }).mount(&server).await;
+        Mock::given(method("GET"))
+            .respond_with(|request: &MockRequest| {
+                let key =
+                    request.headers.get("authorization").map(|v| v.to_str().unwrap().to_owned()).unwrap_or_default();
+                if key == "Bearer good" {
+                    ResponseTemplate::new(200).set_body_json(json!({"data": [{"id": "m1"}]}))
+                } else {
+                    ResponseTemplate::new(401)
+                }
+            })
+            .mount(&server)
+            .await;
         let coach = Coach::new(CoachConfig::default());
-        assert_eq!(coach.check_key(&server.uri(), "good").await.unwrap(), true);
+        assert!(coach.check_key(&server.uri(), "good").await.unwrap());
         assert!(coach.check_key(&server.uri(), "bad").await.unwrap_err().message.contains("rejected"));
-        assert_eq!(coach.check_key("http://127.0.0.1:1", "x").await.unwrap(), false); // nothing listens: could not say
+        assert!(!coach.check_key("http://127.0.0.1:1", "x").await.unwrap()); // nothing listens: could not say
         let listed = Coach::new(CoachConfig { url: server.uri(), key: Some("good".into()), ..CoachConfig::default() });
         assert_eq!(listed.models().await.unwrap(), ["m1"]);
     }

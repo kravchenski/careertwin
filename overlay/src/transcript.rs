@@ -47,7 +47,13 @@ pub struct TranscriptLog {
 
 impl TranscriptLog {
     pub fn new(directory: impl Into<PathBuf>, title: &str) -> Self {
-        Self { title: title.to_owned(), turns: Vec::new(), suggestions: Vec::new(), directory: directory.into(), started: Local::now().naive_local() }
+        Self {
+            title: title.to_owned(),
+            turns: Vec::new(),
+            suggestions: Vec::new(),
+            directory: directory.into(),
+            started: Local::now().naive_local(),
+        }
     }
 
     pub fn add(&mut self, speaker: &str, text: &str) {
@@ -60,7 +66,12 @@ impl TranscriptLog {
     }
 
     pub fn render(&self) -> String {
-        let record = Record { title: self.title.clone(), started: Some(self.started), turns: self.turns.clone(), suggestions: self.suggestions.clone() };
+        let record = Record {
+            title: self.title.clone(),
+            started: Some(self.started),
+            turns: self.turns.clone(),
+            suggestions: self.suggestions.clone(),
+        };
         render(&record)
     }
 
@@ -154,7 +165,11 @@ fn parse_turn(line: &str, day: NaiveDate) -> Option<Turn> {
 /// Every saved interview of a folder, oldest first. The date of a file without a header comes from its name.
 pub fn read_all(directory: &Path) -> Vec<Record> {
     let Ok(entries) = std::fs::read_dir(directory) else { return Vec::new() };
-    let mut files: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).filter(|path| path.extension().is_some_and(|ext| ext == "md")).collect();
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
+        .collect();
     files.sort();
     files
         .into_iter()
@@ -185,7 +200,10 @@ mod tests {
                 Turn { speaker: INTERVIEWER.into(), text: "What is a left join?".into(), at: at(13, 13, 55) },
                 Turn { speaker: YOU.into(), text: "It keeps every row on the left.".into(), at: at(13, 14, 20) },
             ],
-            suggestions: vec![("What is a left join?".into(), "A join that keeps the left rows.\nEven without a match.".into())],
+            suggestions: vec![(
+                "What is a left join?".into(),
+                "A join that keeps the left rows.\nEven without a match.".into(),
+            )],
         };
         let text = render(&record);
         assert!(text.starts_with("# Interview 2026-10-27 13:13 — Vention: Data Engineering Internship (Gdańsk)\n\n**13:13:55 Interviewer:** What is a left join?"));
@@ -198,7 +216,10 @@ mod tests {
         let record = parse(text, None);
         assert_eq!((record.title.as_str(), record.turns.len(), record.suggestions.len()), ("", 2, 2));
         assert_eq!(record.turns[1].at, at(13, 14, 15));
-        assert_eq!(record.suggestions[0], (SCREENSHOT.to_owned(), "There is no task or question to answer in the provided image.".to_owned()));
+        assert_eq!(
+            record.suggestions[0],
+            (SCREENSHOT.to_owned(), "There is no task or question to answer in the provided image.".to_owned())
+        );
     }
 
     #[test]

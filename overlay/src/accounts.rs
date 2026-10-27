@@ -57,7 +57,11 @@ pub fn clean(items: Vec<Account>) -> Result<Vec<Account>, AccountError> {
         if result.iter().any(|a| same_address(&a.url, &url) && a.key == key) {
             continue;
         }
-        let name = if result.iter().any(|a| same_address(&a.url, &url) && a.name == name) { next_name(&result, &url) } else { name };
+        let name = if result.iter().any(|a| same_address(&a.url, &url) && a.name == name) {
+            next_name(&result, &url)
+        } else {
+            name
+        };
         result.push(Account { name, url, key });
     }
     if result.len() > MAX_ACCOUNTS {
@@ -152,18 +156,26 @@ mod tests {
             Account { name: "again".into(), url: GROQ.into(), key: "k1".into() }, // the same key: kept once
         ])
         .unwrap();
-        assert_eq!(tidy.iter().map(|a| (a.name.as_str(), a.key.as_str())).collect::<Vec<_>>(), [("work", "k1"), ("default", "k2")]);
-        let bad = |name: &str, url: &str, key: &str| clean(vec![Account { name: name.into(), url: url.into(), key: key.into() }]);
+        assert_eq!(
+            tidy.iter().map(|a| (a.name.as_str(), a.key.as_str())).collect::<Vec<_>>(),
+            [("work", "k1"), ("default", "k2")]
+        );
+        let bad = |name: &str, url: &str, key: &str| {
+            clean(vec![Account { name: name.into(), url: url.into(), key: key.into() }])
+        };
         assert_eq!(bad("x", "ftp://h", "k"), Err(AccountError::Invalid));
         assert_eq!(bad("", GROQ, "k"), Err(AccountError::Invalid));
         assert_eq!(bad("x", GROQ, ""), Err(AccountError::Invalid));
-        let many = (0..=MAX_ACCOUNTS).map(|n| Account { name: format!("a{n}"), url: GROQ.into(), key: format!("k{n}") }).collect();
+        let many = (0..=MAX_ACCOUNTS)
+            .map(|n| Account { name: format!("a{n}"), url: GROQ.into(), key: format!("k{n}") })
+            .collect();
         assert_eq!(clean(many), Err(AccountError::TooMany));
     }
 
     #[test]
     fn the_spare_keys_are_the_others_of_the_same_address_in_order() {
-        let items = add(&add(&add(&[], GROQ, "k1").unwrap(), GROQ, "k2").unwrap(), "https://api.openai.com", "o1").unwrap();
+        let items =
+            add(&add(&add(&[], GROQ, "k1").unwrap(), GROQ, "k2").unwrap(), "https://api.openai.com", "o1").unwrap();
         assert_eq!(spares(&items, GROQ, "k1"), ["k2"]);
         assert_eq!(spares(&items, GROQ, "k2"), ["k1"]);
         assert_eq!(spares(&items, GROQ, ""), ["k1", "k2"]);

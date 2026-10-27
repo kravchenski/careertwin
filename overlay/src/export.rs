@@ -89,7 +89,16 @@ fn csv_cell(text: &str) -> String {
 pub fn to_csv(rows: &[Row]) -> String {
     let mut out = String::from("\u{feff}date,time,interview,kind,language,question,answered,answer\r\n");
     for row in rows {
-        let cells = [&row.date, &row.time, &row.interview, &row.kind, &row.language, &row.question, &(if row.answered { "yes" } else { "no" }).to_owned(), &row.answer];
+        let cells = [
+            &row.date,
+            &row.time,
+            &row.interview,
+            &row.kind,
+            &row.language,
+            &row.question,
+            &(if row.answered { "yes" } else { "no" }).to_owned(),
+            &row.answer,
+        ];
         out.push_str(&cells.iter().map(|cell| csv_cell(cell)).collect::<Vec<_>>().join(","));
         out.push_str("\r\n");
     }
@@ -99,10 +108,12 @@ pub fn to_csv(rows: &[Row]) -> String {
 pub fn to_json(rows: &[Row]) -> String {
     let items: Vec<_> = rows
         .iter()
-        .map(|row| json!({
-            "date": row.date, "time": row.time, "interview": row.interview, "kind": row.kind,
-            "language": row.language, "question": row.question, "answered": row.answered, "answer": row.answer,
-        }))
+        .map(|row| {
+            json!({
+                "date": row.date, "time": row.time, "interview": row.interview, "kind": row.kind,
+                "language": row.language, "question": row.question, "answered": row.answered, "answer": row.answer,
+            })
+        })
         .collect();
     serde_json::to_string_pretty(&json!({"count": rows.len(), "questions": items})).unwrap_or_default() + "\n"
 }
@@ -117,12 +128,12 @@ pub fn to_markdown(rows: &[Row]) -> String {
             None => kinds.push((row.kind.clone(), 1)),
         }
     }
-    kinds.sort_by(|a, b| b.1.cmp(&a.1));
+    kinds.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     if !kinds.is_empty() {
         out.push_str(": ");
         out.push_str(&kinds.iter().map(|(kind, count)| format!("{kind} {count}")).collect::<Vec<_>>().join(", "));
     }
-    out.push_str("\n");
+    out.push('\n');
     let mut current = "";
     let mut number = 0;
     for row in rows {
@@ -132,7 +143,8 @@ pub fn to_markdown(rows: &[Row]) -> String {
             number = 0;
         }
         number += 1;
-        let language = if row.language.is_empty() { String::new() } else { format!(", {}", languages::name(Some(&row.language))) };
+        let language =
+            if row.language.is_empty() { String::new() } else { format!(", {}", languages::name(Some(&row.language))) };
         out.push_str(&format!("{number}. **{}** ({}{language}, {} {})\n", row.question, row.kind, row.date, row.time));
         if row.answered {
             for line in row.answer.lines() {
@@ -154,7 +166,12 @@ pub fn render(rows: &[Row], format: Format) -> String {
 }
 
 /// Write the questions of every saved interview in each chosen format; returns the files written.
-pub fn export_questions(transcripts: &Path, into: &Path, formats: &[Format], stamp: &str) -> std::io::Result<Vec<PathBuf>> {
+pub fn export_questions(
+    transcripts: &Path,
+    into: &Path,
+    formats: &[Format],
+    stamp: &str,
+) -> std::io::Result<Vec<PathBuf>> {
     let all = rows(&read_all(transcripts));
     std::fs::create_dir_all(into)?;
     let mut written = Vec::new();
@@ -174,7 +191,11 @@ mod tests {
 
     fn record() -> Record {
         let day = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
-        let turn = |speaker: &str, text: &str, h, m, s| Turn { speaker: speaker.into(), text: text.into(), at: day.and_hms_opt(h, m, s).unwrap() };
+        let turn = |speaker: &str, text: &str, h, m, s| Turn {
+            speaker: speaker.into(),
+            text: text.into(),
+            at: day.and_hms_opt(h, m, s).unwrap(),
+        };
         Record {
             title: "Vention".into(),
             started: Some(day.and_hms_opt(13, 0, 0).unwrap()),
@@ -200,7 +221,10 @@ mod tests {
         assert_eq!((rows[0].kind.as_str(), rows[0].language.as_str(), rows[0].answered), ("definition", "en", true));
         assert_eq!((rows[1].kind.as_str(), rows[1].language.as_str(), rows[1].answered), ("intro", "uk", false));
         assert_eq!((rows[2].kind.as_str(), rows[2].answer.as_str()), ("screenshot", "def f(): pass"));
-        assert_eq!((rows[0].interview.as_str(), rows[0].date.as_str(), rows[0].time.as_str()), ("Vention", "2026-10-27", "13:02:00"));
+        assert_eq!(
+            (rows[0].interview.as_str(), rows[0].date.as_str(), rows[0].time.as_str()),
+            ("Vention", "2026-10-27", "13:02:00")
+        );
     }
 
     #[test]
@@ -232,8 +256,15 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&to_json(&rows)).unwrap();
         assert_eq!((json["count"].as_u64(), json["questions"][1]["kind"].as_str()), (Some(3), Some("intro")));
         let md = to_markdown(&rows);
-        assert!(md.starts_with("# Interview questions\n\n3 questions: ") && md.contains("## Vention\n\n1. **What is a left join?** (definition, English, 2026-10-27 13:02:00)"));
-        assert!(md.contains("   > A join that keeps\n   > the left rows") && md.contains("2. **Розкажіть про себе** (intro, Ukrainian") && md.contains("(no answer shown)"));
+        assert!(
+            md.starts_with("# Interview questions\n\n3 questions: ")
+                && md.contains("## Vention\n\n1. **What is a left join?** (definition, English, 2026-10-27 13:02:00)")
+        );
+        assert!(
+            md.contains("   > A join that keeps\n   > the left rows")
+                && md.contains("2. **Розкажіть про себе** (intro, Ukrainian")
+                && md.contains("(no answer shown)")
+        );
     }
 
     #[test]
@@ -243,9 +274,13 @@ mod tests {
         std::fs::create_dir(&transcripts).unwrap();
         std::fs::write(transcripts.join("2026-10-27_1300.md"), crate::transcript::render(&record())).unwrap();
         let written = export_questions(&transcripts, &dir.path().join("exports"), &Format::ALL, "2026-10-27").unwrap();
-        let names: Vec<_> = written.iter().map(|path| path.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        let names: Vec<_> =
+            written.iter().map(|path| path.file_name().unwrap().to_string_lossy().into_owned()).collect();
         assert_eq!(names, ["questions-2026-10-27.csv", "questions-2026-10-27.md", "questions-2026-10-27.json"]);
         assert!(std::fs::read_to_string(&written[2]).unwrap().contains("\"count\": 3"));
-        assert!(export_questions(&dir.path().join("missing"), &dir.path().join("e2"), &[Format::Csv], "x").unwrap().len() == 1); // nothing to export is an empty file, not an error
+        assert!(
+            export_questions(&dir.path().join("missing"), &dir.path().join("e2"), &[Format::Csv], "x").unwrap().len()
+                == 1
+        ); // nothing to export is an empty file, not an error
     }
 }

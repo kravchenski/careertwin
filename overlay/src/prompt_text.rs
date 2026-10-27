@@ -73,35 +73,65 @@ pub const KIND_HINTS: &[(&str, &str)] = &[
     (r#"behavioral"#, r#"Behavioral: say it as situation, task, action, result with the real details."#),
     (r#"motivation"#, r#"Motivation: say how real interests connect to the vacancy and company."#),
     (r#"salary"#, r#"Salary: say what SALARY POLICY allows; do not name an unsupported figure."#),
-    (r#"logistics"#, r#"Logistics: answer with the facts from the context and the candidate notes (availability, hours, studies, start date, office days, location). Do not invent a plan or a routine; if something is not stated, say it can be agreed."#),
+    (
+        r#"logistics"#,
+        r#"Logistics: answer with the facts from the context and the candidate notes (availability, hours, studies, start date, office days, location). Do not invent a plan or a routine; if something is not stated, say it can be agreed."#,
+    ),
     (r#"candidate_questions"#, r#"Write two sharp questions the candidate can ask, as spoken."#),
-    (r#"definition"#, r#"Definition: line one defines it in a sentence, then key properties, typical uses and the main trade-off. No greeting and no personal story. This is general knowledge: state it as a fact about the technology. Say nothing the candidate did (no "I built, used, debugged, monitored, validated") in POINTS, ANSWER, KEY or CONTEXT, even as an example. The only link to the candidate is the last line of POINTS, and only when the technology itself is named in CANDIDATE CONTEXT: then "I work with <technology>" or the exact fact written there. If it is not named there, the candidate appears nowhere. CONTEXT says where this is used in practice in general, never what the candidate did.
-After CONTEXT add NEXT: one or two questions the interviewer will probably ask next, each line "question - the answer in one sentence". Skip NEXT when ANSWER STYLE is concise or ANSWER LAYOUT is main answer only."#),
-    (r#"technical"#, r#"Technical question. Pick the shape that fits and write it as speech, with no opener such as "Sure" or "Here is":
+    (
+        r#"definition"#,
+        r#"Definition: line one defines it in a sentence, then key properties, typical uses and the main trade-off. No greeting and no personal story. This is general knowledge: state it as a fact about the technology. Say nothing the candidate did (no "I built, used, debugged, monitored, validated") in POINTS, ANSWER, KEY or CONTEXT, even as an example. The only link to the candidate is the last line of POINTS, and only when the technology itself is named in CANDIDATE CONTEXT: then "I work with <technology>" or the exact fact written there. If it is not named there, the candidate appears nowhere. CONTEXT says where this is used in practice in general, never what the candidate did.
+After CONTEXT add NEXT: one or two questions the interviewer will probably ask next, each line "question - the answer in one sentence". Skip NEXT when ANSWER STYLE is concise or ANSWER LAYOUT is main answer only."#,
+    ),
+    (
+        r#"technical"#,
+        r#"Technical question. Pick the shape that fits and write it as speech, with no opener such as "Sure" or "Here is":
 - Concept or difference (what is X, X vs Y): one-sentence definition, how it works, when to use each, the main trade-off or pitfall.
 - Design (how would you design or build X): the assumption you make (scale, latency, consistency), the main components and the data flow, the key decision with its alternative and why, where it breaks and how you would measure it.
 - Troubleshooting (slow, broken, flaky): reproduce and measure first, form a hypothesis, narrow it down (logs, metrics, profiler, query plan), fix the cause, prevent a repeat.
 - Coding (write, implement, fix): POINTS say the approach, the time and space complexity and the edge cases; ANSWER is one fenced code block with the signature the task names, then one sentence on how it works.
 - Choice (why X, which would you use): the criteria, the option, what you give up.
 Be exact: real names, numbers, complexity, defaults. "It depends" only with what it depends on. If you are unsure of a version or a detail, say so instead of guessing. This is general knowledge: state it as a fact about the technology. Say nothing the candidate did (no "I built, used, debugged, monitored, validated") in POINTS, ANSWER, KEY or CONTEXT, even as an example. The only link to the candidate is the last line of POINTS, and only when the technology itself is named in CANDIDATE CONTEXT: then "I work with <technology>" or the exact fact written there. If it is not named there, the candidate appears nowhere. CONTEXT says where this is used in practice in general, never what the candidate did.
-After CONTEXT add NEXT: one or two questions the interviewer will probably ask next, each line "question - the answer in one sentence". Skip NEXT when ANSWER STYLE is concise or ANSWER LAYOUT is main answer only."#),
-    (r#"small_talk"#, r#"Small talk: say the greeting or reply itself, then who you are, then invite the first question."#),
+After CONTEXT add NEXT: one or two questions the interviewer will probably ask next, each line "question - the answer in one sentence". Skip NEXT when ANSWER STYLE is concise or ANSWER LAYOUT is main answer only."#,
+    ),
+    (
+        r#"small_talk"#,
+        r#"Small talk: say the greeting or reply itself, then who you are, then invite the first question."#,
+    ),
 ];
 
 pub const LAYOUT_HINTS: &[(&str, &str)] = &[
-    (r#"main"#, r#"ANSWER LAYOUT: main answer only. Write only the ANSWER section, as one spoken paragraph the candidate can read aloud. If the interviewer asks to write, implement, fix or solve something in code, the ANSWER is the complete code in fenced blocks first (a description of code is not an answer), then one or two spoken sentences."#),
+    (
+        r#"main"#,
+        r#"ANSWER LAYOUT: main answer only. Write only the ANSWER section, as one spoken paragraph the candidate can read aloud. If the interviewer asks to write, implement, fix or solve something in code, the ANSWER is the complete code in fenced blocks first (a description of code is not an answer), then one or two spoken sentences."#,
+    ),
     (r#"lines"#, r#"ANSWER LAYOUT: lines to say, then the detailed answer."#),
 ];
 
 pub const STYLE_HINTS: &[(&str, &str)] = &[
-    (r#"concise"#, r#"ANSWER STYLE: concise. Three or four lines to say, an answer of two or three sentences, no KEY or CONTEXT."#),
-    (r#"standard"#, r#"ANSWER STYLE: standard. Four to six lines to say, an answer of three to five sentences, two to four KEY lines and a short CONTEXT."#),
-    (r#"detailed"#, r#"ANSWER STYLE: detailed. Six to eight lines to say with real numbers and names from the context, an answer of five to eight sentences with one concrete example, four or five KEY lines and a fuller CONTEXT."#),
+    (
+        r#"concise"#,
+        r#"ANSWER STYLE: concise. Three or four lines to say, an answer of two or three sentences, no KEY or CONTEXT."#,
+    ),
+    (
+        r#"standard"#,
+        r#"ANSWER STYLE: standard. Four to six lines to say, an answer of three to five sentences, two to four KEY lines and a short CONTEXT."#,
+    ),
+    (
+        r#"detailed"#,
+        r#"ANSWER STYLE: detailed. Six to eight lines to say with real numbers and names from the context, an answer of five to eight sentences with one concrete example, four or five KEY lines and a fuller CONTEXT."#,
+    ),
 ];
 
 pub const LISTENING_HINTS: &[(&str, &str)] = &[
-    (r#"heard"#, r#"WHAT WAS HEARD: it came from the call audio, which may be anything the computer plays, not only the interviewer. If the words are not a question, a task or a prompt put to the candidate (a statement, an explanation, a story, narration, thanks, small talk that needs no reply, a video, a tutorial, someone else's talk), reply with exactly SKIP and nothing else. If they ask or request anything of the candidate, answer."#),
-    (r#"hearing"#, r#"WHAT WAS HEARD: the interviewer is still speaking, so the words may stop in the middle and the real question may still come. If what is said so far is already a question, a task or a prompt put to the candidate, answer it as far as it goes; if it is only a statement, an explanation or background so far, or it is not the interviewer talking to the candidate (a video, a tutorial, someone else's talk), reply with exactly SKIP and nothing else."#),
+    (
+        r#"heard"#,
+        r#"WHAT WAS HEARD: it came from the call audio, which may be anything the computer plays, not only the interviewer. If the words are not a question, a task or a prompt put to the candidate (a statement, an explanation, a story, narration, thanks, small talk that needs no reply, a video, a tutorial, someone else's talk), reply with exactly SKIP and nothing else. If they ask or request anything of the candidate, answer."#,
+    ),
+    (
+        r#"hearing"#,
+        r#"WHAT WAS HEARD: the interviewer is still speaking, so the words may stop in the middle and the real question may still come. If what is said so far is already a question, a task or a prompt put to the candidate, answer it as far as it goes; if it is only a statement, an explanation or background so far, or it is not the interviewer talking to the candidate (a video, a tutorial, someone else's talk), reply with exactly SKIP and nothing else."#,
+    ),
 ];
 
 pub const TOPIC_TERMS: &[(&str, &str)] = &[

@@ -70,7 +70,13 @@ pub fn apply(ctx: &egui::Context, scale: f32) {
     visuals.selection.bg_fill = Color32::from_rgb(88, 80, 160);
     visuals.selection.stroke = Stroke::new(1.0, STRONG);
     let radius = CornerRadius::same(8);
-    for widget in [&mut visuals.widgets.noninteractive, &mut visuals.widgets.inactive, &mut visuals.widgets.hovered, &mut visuals.widgets.active, &mut visuals.widgets.open] {
+    for widget in [
+        &mut visuals.widgets.noninteractive,
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
         widget.corner_radius = radius;
     }
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, LINE);
@@ -90,7 +96,12 @@ pub fn apply(ctx: &egui::Context, scale: f32) {
 
 pub fn panel_frame(opacity: f32) -> egui::Frame {
     egui::Frame::new()
-        .fill(Color32::from_rgba_unmultiplied(PANEL.r(), PANEL.g(), PANEL.b(), (opacity.clamp(0.35, 1.0) * 232.0) as u8))
+        .fill(Color32::from_rgba_unmultiplied(
+            PANEL.r(),
+            PANEL.g(),
+            PANEL.b(),
+            (opacity.clamp(0.35, 1.0) * 232.0) as u8,
+        ))
         .corner_radius(CornerRadius::same(14))
         .inner_margin(Margin::symmetric(18, 14))
         .stroke(Stroke::new(1.0, LINE))

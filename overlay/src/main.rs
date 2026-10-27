@@ -22,7 +22,7 @@ your compositor to `careertwin-interview-ctl screenshot`.";
 struct Shell {
     app: App,
     _runtime: tokio::runtime::Runtime,
-    _control: Option<control::Server>,
+    control: Option<control::Server>,
 }
 
 impl eframe::App for Shell {
@@ -32,6 +32,10 @@ impl eframe::App for Shell {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.app.show(ui);
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.control = None; // takes the socket file away, so the next window can listen
     }
 }
 
@@ -74,7 +78,7 @@ fn main() -> ExitCode {
             })
             .map_err(|error| eprintln!("the screenshot key works only while this window has the focus: {error}"))
             .ok();
-            Ok(Box::new(Shell { app, _runtime: runtime, _control: server }))
+            Ok(Box::new(Shell { app, _runtime: runtime, control: server }))
         }),
     );
     match result {

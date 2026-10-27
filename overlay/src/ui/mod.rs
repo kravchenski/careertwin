@@ -8,8 +8,8 @@ pub mod theme;
 pub mod update_ui;
 
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 
 use egui::{Align, Layout, RichText, ScrollArea, Ui};
@@ -160,7 +160,8 @@ impl App {
     /// Push the settings into the live coach.
     pub fn apply_coach(&mut self) {
         let url = self.settings.gateway_url.clone();
-        let spare = crate::accounts::spares(&self.settings.accounts, &self.settings.gateway(), &self.settings.gateway_key);
+        let spare =
+            crate::accounts::spares(&self.settings.accounts, &self.settings.gateway(), &self.settings.gateway_key);
         let non_empty = |text: &str| Some(text.to_owned()).filter(|text| !text.is_empty());
         self.coach.configure(CoachConfig {
             url,
@@ -213,7 +214,17 @@ impl App {
         }
         let kind = classify(&question);
         let history = self.log.history(6);
-        let prompt = prompts::user_prompt(&self.brief, &question, kind, &history, self.language().as_deref(), &self.settings.answer_style, &self.settings.answer_layout, "", None);
+        let prompt = prompts::user_prompt(
+            &self.brief,
+            &question,
+            kind,
+            &history,
+            self.language().as_deref(),
+            &self.settings.answer_style,
+            &self.settings.answer_layout,
+            "",
+            None,
+        );
         self.log.add(INTERVIEWER, &question);
         self.start(question, kind, Source::Typed, Request::text(SYSTEM, &prompt));
     }
@@ -221,7 +232,18 @@ impl App {
     fn start(&mut self, question: String, kind: Kind, source: Source, request: Request) {
         let id = self.next_id;
         self.next_id += 1;
-        self.entries.push(Entry { id, question, kind, source, raw: String::new(), done: false, error: None, fell_back: None, first_ms: None, started: Instant::now() });
+        self.entries.push(Entry {
+            id,
+            question,
+            kind,
+            source,
+            raw: String::new(),
+            done: false,
+            error: None,
+            fell_back: None,
+            first_ms: None,
+            started: Instant::now(),
+        });
         self.shown = self.entries.len() - 1;
         self.details_open = self.settings.show_full_answer;
         let cancel = CancellationToken::new();
@@ -258,7 +280,9 @@ impl App {
 
     fn capture_step(&mut self) {
         let Some(capturing) = self.capturing.as_mut() else { return };
-        if capturing.started || capturing.since.elapsed() < Duration::from_millis(self.settings.screenshot_delay_ms.max(0) as u64) {
+        if capturing.started
+            || capturing.since.elapsed() < Duration::from_millis(self.settings.screenshot_delay_ms.max(0) as u64)
+        {
             return;
         }
         capturing.started = true;
@@ -276,9 +300,15 @@ impl App {
         match result {
             Err(error) => self.say(&error, true),
             Ok(shot) => {
-                let prompt = prompts::screenshot_prompt(&self.brief, self.language().as_deref(), &self.settings.answer_layout);
+                let prompt =
+                    prompts::screenshot_prompt(&self.brief, self.language().as_deref(), &self.settings.answer_layout);
                 self.log.add(INTERVIEWER, SCREENSHOT);
-                self.start(SCREENSHOT.to_owned(), Kind::Technical, Source::Screenshot, Request::screenshot(SCREENSHOT_SYSTEM, &prompt, &shot.data_url()));
+                self.start(
+                    SCREENSHOT.to_owned(),
+                    Kind::Technical,
+                    Source::Screenshot,
+                    Request::screenshot(SCREENSHOT_SYSTEM, &prompt, &shot.data_url()),
+                );
             }
         }
     }
@@ -355,7 +385,8 @@ impl App {
                 Ok(crate::settings::AccountChange::Added(account)) => {
                     self.settings_ui.new_key.clear();
                     self.settings_changed();
-                    let message = self.tf(if verified { "saved_as" } else { "saved_unchecked" }, &[("name", &account.name)]);
+                    let message =
+                        self.tf(if verified { "saved_as" } else { "saved_unchecked" }, &[("name", &account.name)]);
                     self.say(&message, false);
                 }
                 Ok(_) => {}
@@ -412,7 +443,10 @@ impl App {
                     repaint();
                 }
             };
-            let result = update::download(&release, update::System::current(), &update::downloads_dir(), false, progress).await.map_err(|error| error.to_string());
+            let result =
+                update::download(&release, update::System::current(), &update::downloads_dir(), false, progress)
+                    .await
+                    .map_err(|error| error.to_string());
             let _ = tx.send(Event::Downloaded(result));
             repaint();
         });
@@ -421,7 +455,8 @@ impl App {
     // ---- export ----------------------------------------------------------------------------------------------
 
     pub fn export_questions(&mut self, formats: Vec<export::Format>) {
-        let (from, into, tx, repaint) = (self.paths.transcripts_dir(), self.paths.exports_dir(), self.tx.clone(), self.repaint.clone());
+        let (from, into, tx, repaint) =
+            (self.paths.transcripts_dir(), self.paths.exports_dir(), self.tx.clone(), self.repaint.clone());
         self.settings_ui.exported = None;
         let stamp = chrono::Local::now().format("%Y-%m-%d_%H%M").to_string();
         self.handle.spawn_blocking(move || {
@@ -434,7 +469,8 @@ impl App {
     // ---- the window itself -----------------------------------------------------------------------------------
 
     fn apply_window(&mut self, ctx: &egui::Context) {
-        if self.applied.icon != self.app.app_icon || self.applied.icon.is_empty() && self.applied == Applied::default() {
+        if self.applied.icon != self.app.app_icon || self.applied.icon.is_empty() && self.applied == Applied::default()
+        {
             self.applied.icon = self.app.app_icon.clone();
             ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon::shared(&self.app.app_icon))));
         }
@@ -472,7 +508,11 @@ impl App {
                     self.settings_open = !self.settings_open;
                 }
                 let shot = egui::Button::new(self.t("screenshot")).min_size(egui::vec2(0.0, 34.0));
-                if ui.add_enabled(self.settings.screenshot_enabled && !self.busy(), shot).on_hover_text("Ctrl+Shift+Enter").clicked() {
+                if ui
+                    .add_enabled(self.settings.screenshot_enabled && !self.busy(), shot)
+                    .on_hover_text("Ctrl+Shift+Enter")
+                    .clicked()
+                {
                     self.start_screenshot();
                 }
             });
@@ -489,7 +529,10 @@ impl App {
             let ask_width = 92.0;
             let hint = self.t("question_hint");
             let idle = !self.busy();
-            let edit = egui::TextEdit::singleline(&mut self.input).hint_text(hint).desired_width(ui.available_width() - ask_width - 12.0).margin(egui::vec2(10.0, 8.0));
+            let edit = egui::TextEdit::singleline(&mut self.input)
+                .hint_text(hint)
+                .desired_width(ui.available_width() - ask_width - 12.0)
+                .margin(egui::vec2(10.0, 8.0));
             let response = ui.add_enabled(idle, edit);
             let enter = response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
             if self.running.is_some() {
@@ -497,7 +540,9 @@ impl App {
                     self.stop();
                 }
             } else {
-                let ask = egui::Button::new(RichText::new(self.t("ask")).color(ON_ACCENT)).fill(ACCENT).min_size(egui::vec2(ask_width, 34.0));
+                let ask = egui::Button::new(RichText::new(self.t("ask")).color(ON_ACCENT))
+                    .fill(ACCENT)
+                    .min_size(egui::vec2(ask_width, 34.0));
                 let can = !self.input.trim().is_empty() && !self.busy();
                 if (ui.add_enabled(can, ask).clicked() || (enter && can)) && can {
                     let question = std::mem::take(&mut self.input);
@@ -526,7 +571,8 @@ impl App {
         let mut details_open = self.details_open;
         ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(self.running.is_some()).show(ui, |ui| {
             let entry = &self.entries[index];
-            let title = if entry.source == Source::Screenshot { translate("screenshot") } else { entry.question.clone() };
+            let title =
+                if entry.source == Source::Screenshot { translate("screenshot") } else { entry.question.clone() };
             ui.label(RichText::new(title).font(theme::semibold(size)).color(MUTED));
             ui.add_space(4.0);
             if let Some(error) = &entry.error {
@@ -552,15 +598,30 @@ impl App {
                     if ui.add_enabled(shown < last, egui::Button::new("›").frame(false)).clicked() {
                         self.shown = shown + 1;
                     }
-                    ui.label(RichText::new(self.tf("history", &[("n", &(shown + 1).to_string()), ("total", &self.entries.len().to_string())])).color(MUTED).small());
+                    ui.label(
+                        RichText::new(self.tf(
+                            "history",
+                            &[("n", &(shown + 1).to_string()), ("total", &self.entries.len().to_string())],
+                        ))
+                        .color(MUTED)
+                        .small(),
+                    );
                     if ui.add_enabled(shown > 0, egui::Button::new("‹").frame(false)).clicked() {
                         self.shown = shown - 1;
                     }
                 }
                 if let Some(entry) = self.entries.get(shown) {
-                    if !entry.raw.is_empty() && ui.add(egui::Button::new(RichText::new(self.t("copy")).color(MUTED).small()).frame(false)).clicked() {
+                    if !entry.raw.is_empty()
+                        && ui
+                            .add(egui::Button::new(RichText::new(self.t("copy")).color(MUTED).small()).frame(false))
+                            .clicked()
+                    {
                         let parts = sections(&entry.raw);
-                        let text = if parts.answer.is_empty() { parts.points.join("\n").replace("**", "") } else { parts.answer };
+                        let text = if parts.answer.is_empty() {
+                            parts.points.join("\n").replace("**", "")
+                        } else {
+                            parts.answer
+                        };
                         ui.ctx().copy_text(text);
                     }
                     if let Some(model) = &entry.fell_back {
@@ -610,7 +671,10 @@ impl App {
         }
         self.settings_window(&ctx);
         self.update_window(&ctx);
-        if self.update_ui.available.is_none() && !self.update_ui.requested && update::due(&self.app, chrono::Utc::now().timestamp()) {
+        if self.update_ui.available.is_none()
+            && !self.update_ui.requested
+            && update::due(&self.app, chrono::Utc::now().timestamp())
+        {
             self.update_ui.requested = true;
             self.check_for_update(false);
         }

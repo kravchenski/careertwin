@@ -36,7 +36,11 @@ fn fixture(language: &str) -> Fixture {
     Fixture { app, _dir: dir, _runtime: runtime }
 }
 
-fn harness(fixture: Fixture, width: f32, height: f32) -> (Harness<'static, App>, tempfile::TempDir, tokio::runtime::Runtime) {
+fn harness(
+    fixture: Fixture,
+    width: f32,
+    height: f32,
+) -> (Harness<'static, App>, tempfile::TempDir, tokio::runtime::Runtime) {
     let Fixture { app, _dir, _runtime } = fixture;
     let scale = app.settings.font_scale as f32 / 100.0;
     let harness = Harness::builder()
@@ -57,7 +61,18 @@ fn shot(harness: &mut Harness<'_, App>, name: &str) {
 }
 
 fn answered(question: &str, raw: &str) -> Entry {
-    Entry { id: 1, question: question.into(), kind: Kind::Definition, source: Source::Typed, raw: raw.into(), done: true, error: None, fell_back: Some("ollama-cloud/gpt-oss:120b".into()), first_ms: Some(900), started: Instant::now() }
+    Entry {
+        id: 1,
+        question: question.into(),
+        kind: Kind::Definition,
+        source: Source::Typed,
+        raw: raw.into(),
+        done: true,
+        error: None,
+        fell_back: Some("ollama-cloud/gpt-oss:120b".into()),
+        first_ms: Some(900),
+        started: Instant::now(),
+    }
 }
 
 const REPLY: &str = "POINTS:\n- A **LEFT JOIN** keeps every row of the left table\n- Where there is no match the right columns are **NULL**\n- I use it to keep rows with `no activity` in reports\nANSWER:\nA left join returns all rows from the left table and the matching rows from the right one; where nothing matches, the right side is NULL.\n```sql\nselect u.id, o.total\nfrom users u\nleft join orders o on o.user_id = u.id;\n```\nKEY:\n- **INNER JOIN**: only rows that match on both sides\nCONTEXT:\nUsed to keep records that have no activity in reports.\nNEXT:\n- What is the difference with a full join? - a full join also keeps unmatched right rows.";
@@ -91,7 +106,10 @@ fn an_answer_shows_the_lines_to_say_and_opens_its_details() {
 fn the_main_answer_layout_shows_only_the_paragraph() {
     let mut fixture = fixture("en");
     fixture.app.settings.answer_layout = "main".into();
-    fixture.app.entries.push(answered("What is a left join?", "ANSWER:\nA left join keeps all rows of the left table."));
+    fixture
+        .app
+        .entries
+        .push(answered("What is a left join?", "ANSWER:\nA left join keeps all rows of the left table."));
     let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 320.0);
     harness.run();
     harness.get_by_label_contains("A left join keeps all rows");
@@ -101,7 +119,12 @@ fn the_main_answer_layout_shows_only_the_paragraph() {
 
 #[test]
 fn the_settings_have_four_tabs_and_each_draws() {
-    for (tab, key, shot_name) in [(Tab::Interview, "Interview", "tab-interview"), (Tab::Practice, "Practice", "tab-practice"), (Tab::Ai, "AI", "tab-ai"), (Tab::General, "General", "tab-general")] {
+    for (tab, key, shot_name) in [
+        (Tab::Interview, "Interview", "tab-interview"),
+        (Tab::Practice, "Practice", "tab-practice"),
+        (Tab::Ai, "AI", "tab-ai"),
+        (Tab::General, "General", "tab-general"),
+    ] {
         let mut fixture = fixture("en");
         fixture.app.settings_open = true;
         fixture.app.settings_ui.tab = tab;
@@ -119,7 +142,17 @@ fn the_ai_tab_has_the_three_models_and_the_keys_of_the_address() {
     fixture.app.settings_ui.tab = Tab::Ai;
     let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
     harness.run();
-    for label in ["Answers (Ask)", "Screenshots", "Audio: speech recognition", "Accounts", "default", "default-2", "In use", "Save key", "Base URL"] {
+    for label in [
+        "Answers (Ask)",
+        "Screenshots",
+        "Audio: speech recognition",
+        "Accounts",
+        "default",
+        "default-2",
+        "In use",
+        "Save key",
+        "Base URL",
+    ] {
         harness.get_by_label(label);
     }
     shot(&mut harness, "tab-ai-full");
@@ -143,14 +176,22 @@ fn the_practice_tab_is_a_checklist() {
 #[test]
 fn a_new_version_opens_a_window_with_what_to_do() {
     let mut fixture = fixture("en");
-    let asset = |name: &str| Asset { name: name.into(), url: format!("https://github.com/kravchenski/careertwin/releases/download/v0.6.0/{name}"), size: 100 };
+    let asset = |name: &str| Asset {
+        name: name.into(),
+        url: format!("https://github.com/kravchenski/careertwin/releases/download/v0.6.0/{name}"),
+        size: 100,
+    };
     fixture.app.update_ui.available = Some(Available {
         current: "0.5.0".into(),
         release: Release {
             tag: "v0.6.0".into(),
             notes: "## What is new\n- Several API keys per provider\n- The window is written in Rust".into(),
             page: "https://github.com/kravchenski/careertwin/releases/tag/v0.6.0".into(),
-            assets: vec![asset("CareerTwin-Interview-v0.6.0-windows-x64-setup.exe"), asset("CareerTwin-Interview-v0.6.0-macos-arm64.dmg"), asset("SHA256SUMS.txt")],
+            assets: vec![
+                asset("CareerTwin-Interview-v0.6.0-windows-x64-setup.exe"),
+                asset("CareerTwin-Interview-v0.6.0-macos-arm64.dmg"),
+                asset("SHA256SUMS.txt"),
+            ],
         },
     });
     let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 520.0);

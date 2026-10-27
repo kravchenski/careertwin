@@ -19,7 +19,9 @@ mod unix {
 
     /// A real directory (not a link) that belongs to this user and nobody else can enter.
     fn private(path: &Path) -> bool {
-        std::fs::symlink_metadata(path).is_ok_and(|info| info.is_dir() && info.uid() == rustix::process::getuid().as_raw() && info.mode() & 0o077 == 0)
+        std::fs::symlink_metadata(path).is_ok_and(|info| {
+            info.is_dir() && info.uid() == rustix::process::getuid().as_raw() && info.mode() & 0o077 == 0
+        })
     }
 
     /// Where the window listens: the runtime directory when it is private, else `<tmp>/careertwin-interview-<uid>/`,
@@ -31,7 +33,8 @@ mod unix {
         }
         let folder = std::env::temp_dir().join(format!("{NAME}-{}", rustix::process::getuid().as_raw()));
         match std::fs::create_dir(&folder) {
-            Ok(()) => std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o700)).map_err(|error| format!("cannot protect {}: {error}", folder.display()))?,
+            Ok(()) => std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o700))
+                .map_err(|error| format!("cannot protect {}: {error}", folder.display()))?,
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(format!("cannot create {}: {error}", folder.display())),
         }
@@ -73,7 +76,8 @@ mod unix {
             }
             let _ = std::fs::remove_file(path); // nobody answers, so a file left here is from a crashed run
             let listener = UnixListener::bind(path).map_err(|error| error.to_string())?;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).map_err(|error| error.to_string())?;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+                .map_err(|error| error.to_string())?;
             std::thread::Builder::new()
                 .name("control".into())
                 .spawn(move || {

@@ -16,12 +16,19 @@ pub struct Paths {
 impl Paths {
     pub fn under(data: impl Into<PathBuf>) -> Self {
         let data = data.into();
-        let about = data.parent().map(|parent| parent.join("ABOUT.md")).filter(|path| path.is_file()).unwrap_or_else(|| data.join("ABOUT.md"));
+        let about = data
+            .parent()
+            .map(|parent| parent.join("ABOUT.md"))
+            .filter(|path| path.is_file())
+            .unwrap_or_else(|| data.join("ABOUT.md"));
         Self { data, about }
     }
 
     pub fn discover() -> Self {
-        let data = std::env::var_os("CAREERTWIN_DATA_DIR").map(PathBuf::from).or_else(find_checkout_data).unwrap_or_else(platform_data);
+        let data = std::env::var_os("CAREERTWIN_DATA_DIR")
+            .map(PathBuf::from)
+            .or_else(find_checkout_data)
+            .unwrap_or_else(platform_data);
         let mut paths = Self::under(data);
         if let Some(about) = std::env::var_os("CAREERTWIN_ABOUT_PATH") {
             paths.about = PathBuf::from(about);
@@ -70,7 +77,8 @@ fn has_overlay_files(data: &Path) -> bool {
 }
 
 fn platform_data() -> PathBuf {
-    directories::ProjectDirs::from("", "", "careertwin").map_or_else(|| PathBuf::from("data"), |dirs| dirs.data_dir().to_path_buf())
+    directories::ProjectDirs::from("", "", "careertwin")
+        .map_or_else(|| PathBuf::from("data"), |dirs| dirs.data_dir().to_path_buf())
 }
 
 #[cfg(test)]
