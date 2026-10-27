@@ -1,0 +1,878 @@
+//! Settings: four tabs, each about one thing. Interview (what the answers know), Practice (get ready for the
+//! technical interview), AI (the provider, the keys and the three models) and General.
+
+use std::path::PathBuf;
+
+use egui::{ComboBox, RichText, ScrollArea, TextEdit, Ui};
+use serde_json::json;
+
+use super::theme::{ACCENT, DANGER, GOOD, MUTED, ON_ACCENT, STRONG, WARN, semibold};
+use super::{App, Event, text};
+use crate::accounts::Account;
+use crate::coach::Request;
+use crate::export::{self, Format};
+use crate::library::{SavedDocument, read_document};
+use crate::prepare::{self, Analysis, BankQuestion};
+use crate::providers::{OTHER, PROVIDERS, provider_for};
+use crate::settings::{ANSWER_LAYOUTS, ANSWER_STYLES, STT_ENGINES, WHISPER_MODELS};
+use crate::transcript::read_all;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Tab {
+    #[default]
+    Interview,
+    Practice,
+    Ai,
+    General,
+}
+
+pub struct State {
+    pub tab: Tab,
+    pub models: Vec<String>,
+    pub models_error: Option<String>,
+    pub connected: Option<Result<usize, String>>,
+    pub new_key: String,
+    pub checking_key: bool,
+    pub rename: Option<String>,
+    pub new_doc: String,
+    pub bank: Option<Result<Vec<BankQuestion>, String>>,
+    pub bank_busy: bool,
+    pub bank_count: usize,
+    pub focus: String,
+    pub review: Option<Result<Analysis, String>>,
+    pub review_busy: bool,
+    pub exported: Option<Result<Vec<PathBuf>, String>>,
+    pub formats: [bool; 3],
+    pub icon_path: String,
+    pub icon_error: Option<String>,
+    pub confirm_reset: bool,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            tab: Tab::Interview,
+            models: Vec::new(),
+            models_error: None,
+            connected: None,
+            new_key: String::new(),
+            checking_key: false,
+            rename: None,
+            new_doc: String::new(),
+            bank: None,
+            bank_busy: false,
+            bank_count: 10,
+            focus: String::new(),
+            review: None,
+            review_busy: false,
+            exported: None,
+            formats: [true, true, false],
+            icon_path: String::new(),
+            icon_error: None,
+            confirm_reset: false,
+        }
+    }
+}
+
+impl State {
+    pub fn models_loaded(&mut self, result: Result<Vec<String>, String>) {
+        match result {
+            Ok(models) => {
+                self.models = models;
+                self.models_error = None;
+            }
+            Err(error) => self.models_error = Some(error),
+        }
+    }
+}
+
+fn section(ui: &mut Ui, title: &str) {
+    ui.add_space(10.0);
+    ui.label(RichText::new(title).font(semibold(16.0)).color(STRONG));
+    ui.add_space(2.0);
+}
+
+fn note(ui: &mut Ui, text: &str) {
+    ui.label(RichText::new(text).color(MUTED).small());
+}
+
+fn row<R>(ui: &mut Ui, label: &str, content: impl FnOnce(&mut Ui) -> R) -> R {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(egui::vec2(150.0, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.label(RichText::new(label).color(MUTED));
+        });
+        content(ui)
+    })
+    .inner
+}
+
+/// A line of text with a menu of ready choices next to it.
+fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        let edit = TextEdit::singleline(value).hint_text(hint).desired_width((ui.available_width() - 72.0).max(120.0));
+        changed |= ui.add(edit).changed();
+        ComboBox::from_id_salt(("models", hint)).selected_text("").width(24.0).show_ui(ui, |ui| {
+            if models.is_empty() {
+                ui.label(RichText::new("—").color(MUTED));
+            }
+            ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                for model in models {
+                    if ui.selectable_label(value == model, model).clicked() {
+                        *value = model.clone();
+                        changed = true;
+                    }
+                }
+            });
+        });
+    });
+    changed
+}
+
+impl App {
+    pub fn settings_window(&mut self, ctx: &egui::Context) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        if !self.settings_open {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new(t("settings"))
+            .id(egui::Id::unique("settings"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size([720.0, 640.0])
+            .min_size([520.0, 420.0])
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    for (tab, key) in [(Tab::Interview, "tab_interview"), (Tab::Practice, "tab_practice"), (Tab::Ai, "tab_ai"), (Tab::General, "tab_general")] {
+                        let selected = self.settings_ui.tab == tab;
+                        let label = RichText::new(t(key)).font(semibold(15.0)).color(if selected { ACCENT } else { MUTED });
+                        if ui.add(egui::Button::new(label).frame(false).selected(selected)).clicked() {
+                            self.settings_ui.tab = tab;
+                        }
+                        ui.add_space(8.0);
+                    }
+                });
+                ui.separator();
+                ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.settings_ui.tab {
+                    Tab::Interview => self.tab_interview(ui),
+                    Tab::Practice => self.tab_practice(ui),
+                    Tab::Ai => self.tab_ai(ui),
+                    Tab::General => self.tab_general(ui),
+                });
+            });
+        self.settings_open = open;
+    }
+
+    // ---- Interview -------------------------------------------------------------------------------------------
+
+    /// The text of a vacancy or the notes changed: use it now, without reading the documents again.
+    fn interview_text_changed(&mut self) {
+        let current = self.library.current().clone();
+        self.brief.job_title = current.vacancy.title.clone();
+        self.brief.company = current.vacancy.company.clone();
+        self.brief.job_description = current.vacancy.text.clone();
+        self.brief.notes = current.notes.trim().to_owned();
+        if let Err(error) = self.library.save(&self.paths.context_file()) {
+            self.say(&format!("Could not save the interviews: {error}"), true);
+        }
+    }
+
+    fn tab_interview(&mut self, ui: &mut Ui) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        let (mut switch_to, mut new, mut delete, mut rename_done) = (None, false, false, false);
+        ui.horizontal(|ui| {
+            let current = self.library.current().name.clone();
+            ComboBox::from_id_salt("interview").selected_text(current).width(300.0).show_ui(ui, |ui| {
+                for item in &self.library.interviews {
+                    if ui.selectable_label(item.id == self.library.active, &item.name).clicked() {
+                        switch_to = Some(item.id.clone());
+                    }
+                }
+            });
+            new = ui.button(t("new")).clicked();
+            if ui.button(t("rename")).clicked() {
+                self.settings_ui.rename = Some(self.library.current().name.clone());
+            }
+            delete = ui.button(RichText::new(t("delete")).color(DANGER)).clicked();
+        });
+        if let Some(name) = self.settings_ui.rename.as_mut() {
+            ui.horizontal(|ui| {
+                ui.add(TextEdit::singleline(name).desired_width(300.0));
+                rename_done = ui.button("OK").clicked();
+            });
+        }
+        note(ui, &t("interview_note"));
+        if let Some(id) = switch_to {
+            self.library.active = id;
+            self.library_changed();
+        }
+        if new {
+            self.library.new_interview("");
+            self.library_changed();
+        }
+        if delete {
+            let id = self.library.active.clone();
+            self.library.delete(&id);
+            self.library_changed();
+        }
+        if rename_done {
+            if let Some(name) = self.settings_ui.rename.take().filter(|name| !name.trim().is_empty()) {
+                self.library.current_mut().name = name.trim().to_owned();
+                self.library_changed();
+            }
+        }
+
+        section(ui, &t("vacancy"));
+        let mut changed = false;
+        {
+            let (title_label, company_label, text_hint) = (t("vacancy_title"), t("vacancy_company"), t("vacancy_text"));
+            let vacancy = &mut self.library.current_mut().vacancy;
+            row(ui, &title_label, |ui| changed |= ui.add(TextEdit::singleline(&mut vacancy.title).desired_width(f32::INFINITY)).changed());
+            row(ui, &company_label, |ui| changed |= ui.add(TextEdit::singleline(&mut vacancy.company).desired_width(f32::INFINITY)).changed());
+            changed |= ui.add(TextEdit::multiline(&mut vacancy.text).hint_text(text_hint).desired_rows(5).desired_width(f32::INFINITY)).changed();
+        }
+        section(ui, &t("notes"));
+        let hint = t("notes_hint");
+        changed |= ui.add(TextEdit::multiline(&mut self.library.current_mut().notes).hint_text(hint).desired_rows(3).desired_width(f32::INFINITY)).changed();
+        if changed {
+            self.interview_text_changed();
+        }
+
+        section(ui, &t("documents"));
+        let mut documents_changed = false;
+        let mut remove = None;
+        for (index, doc) in self.library.current_mut().documents.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                documents_changed |= ui.checkbox(&mut doc.enabled, "").changed();
+                let name = std::path::Path::new(&doc.path).file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| doc.path.clone());
+                ui.label(name).on_hover_text(&doc.path);
+                ComboBox::from_id_salt(("kind", index)).selected_text(doc.kind.clone()).width(80.0).show_ui(ui, |ui| {
+                    for kind in ["cv", "about"] {
+                        documents_changed |= ui.selectable_value(&mut doc.kind, kind.to_owned(), kind).changed();
+                    }
+                });
+                if ui.add(egui::Button::new(RichText::new(t("remove")).color(DANGER).small()).frame(false)).clicked() {
+                    remove = Some(index);
+                }
+            });
+        }
+        if let Some(index) = remove {
+            self.library.current_mut().documents.remove(index);
+            documents_changed = true;
+        }
+        ui.horizontal(|ui| {
+            let width = (ui.available_width() - 90.0).max(120.0);
+            ui.add(TextEdit::singleline(&mut self.settings_ui.new_doc).hint_text(t("file_path")).desired_width(width));
+            if ui.add_enabled(!self.settings_ui.new_doc.trim().is_empty(), egui::Button::new(t("add_file"))).clicked() {
+                let path = PathBuf::from(self.settings_ui.new_doc.trim().trim_matches('"'));
+                match read_document(&path) {
+                    Ok(_) => {
+                        let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+                        let kind = crate::brief::guess_kind(&name).to_owned();
+                        self.library.current_mut().documents.push(SavedDocument { path: path.to_string_lossy().into_owned(), kind, enabled: true });
+                        self.settings_ui.new_doc.clear();
+                        documents_changed = true;
+                        let message = tf("file_added", &[("name", &name)]);
+                        self.say(&message, false);
+                    }
+                    Err(problem) => self.say(&problem, true),
+                }
+            }
+        });
+        if documents_changed {
+            self.library_changed();
+        }
+        for problem in self.problems.clone() {
+            ui.label(RichText::new(problem).color(DANGER).small());
+        }
+
+        section(ui, &t("about_file"));
+        let about = self.paths.about.clone();
+        let size = std::fs::read_to_string(&about).map(|text| text.chars().count()).ok();
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(about.display().to_string()).color(MUTED).small());
+            if let Some(size) = size {
+                ui.label(RichText::new(format!("{:.1}k", size as f64 / 1000.0)).color(GOOD).small());
+            }
+            if ui.add(egui::Button::new(RichText::new(t("open_folder")).small()).frame(false)).clicked() {
+                open_path(about.parent().unwrap_or(&about));
+            }
+        });
+        section(ui, &t("project_folder"));
+        let mut project_changed = false;
+        project_changed |= ui.add(TextEdit::singleline(&mut self.library.current_mut().project).desired_width(f32::INFINITY)).changed();
+        if project_changed {
+            self.interview_text_changed();
+        }
+    }
+
+    // ---- Practice --------------------------------------------------------------------------------------------
+
+    fn step(&self, ui: &mut Ui, number: usize, title: &str, done: bool, detail: &str, optional: bool) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        ui.horizontal(|ui| {
+            super::theme::step_mark(ui, done);
+            ui.label(RichText::new(format!("{number}. {title}")).font(semibold(15.0)).color(STRONG));
+            if optional {
+                ui.label(RichText::new(t("optional")).color(MUTED).small());
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.add_space(26.0);
+            ui.label(RichText::new(detail).color(if done { MUTED } else { WARN }).small());
+        });
+        ui.add_space(-4.0);
+    }
+
+    fn tab_practice(&mut self, ui: &mut Ui) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        ui.label(RichText::new(t("practice_title")).font(semibold(18.0)).color(STRONG));
+        note(ui, &t("practice_intro"));
+        ui.add_space(8.0);
+        let interview = self.library.current().clone();
+        let cv = self.brief.documents.iter().find(|doc| doc.kind == "cv" && doc.enabled).map(|doc| doc.name.clone());
+        let about_chars = self.brief.candidate.chars().count();
+        self.step(ui, 1, &t("step_vacancy"), !interview.vacancy.is_empty(), &if interview.vacancy.is_empty() { t("missing_vacancy") } else { interview.vacancy.label() }, false);
+        self.step(ui, 2, &t("step_cv"), cv.is_some(), &cv.clone().unwrap_or_else(|| t("missing_cv")), false);
+        self.step(ui, 3, &t("step_about"), about_chars > 0, &if about_chars > 0 { format!("ABOUT.md · {:.1}k", about_chars as f64 / 1000.0) } else { t("missing_about") }, false);
+        self.step(ui, 4, &t("step_project"), !interview.project.is_empty(), &if interview.project.is_empty() { t("missing_project") } else { interview.project.clone() }, true);
+
+        let ready = !self.brief.is_empty();
+        section(ui, &format!("5. {}", t("step_bank")));
+        ui.horizontal(|ui| {
+            let label = ui.label(RichText::new(t("how_many")).color(MUTED));
+            ui.add(egui::DragValue::new(&mut self.settings_ui.bank_count).range(3..=20)).labelled_by(label.id);
+            ui.add(TextEdit::singleline(&mut self.settings_ui.focus).hint_text(t("focus_hint")).desired_width(f32::INFINITY));
+        });
+        ui.horizontal(|ui| {
+            let busy = self.settings_ui.bank_busy;
+            let label = if busy { t("working") } else { t("build_bank") };
+            if ui.add_enabled(ready && !busy, egui::Button::new(RichText::new(label).color(ON_ACCENT)).fill(ACCENT)).clicked() {
+                self.build_bank();
+            }
+        });
+        match &self.settings_ui.bank {
+            None => note(ui, &t("nothing_yet")),
+            Some(Err(error)) => {
+                ui.label(RichText::new(error).color(DANGER));
+            }
+            Some(Ok(questions)) => {
+                for (index, item) in questions.iter().enumerate() {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(format!("{}. {}", index + 1, item.question)).font(semibold(15.0)).color(STRONG));
+                    if !item.kind.is_empty() {
+                        ui.label(RichText::new(&item.kind).color(MUTED).small());
+                    }
+                    for line in &item.outline {
+                        ui.horizontal_top(|ui| {
+                            ui.label(RichText::new("–").color(ACCENT));
+                            super::answer::rich_line(ui, line, 14.5, super::theme::TEXT);
+                        });
+                    }
+                }
+            }
+        }
+
+        section(ui, &format!("6. {}", t("step_review")));
+        let busy = self.settings_ui.review_busy;
+        let label = if busy { t("working") } else { t("review_cv") };
+        if ui.add_enabled(ready && !busy && cv.is_some(), egui::Button::new(label)).clicked() {
+            self.review_cv();
+        }
+        match &self.settings_ui.review {
+            None => note(ui, &t("nothing_yet")),
+            Some(Err(error)) => {
+                ui.label(RichText::new(error).color(DANGER));
+            }
+            Some(Ok(analysis)) => {
+                if !analysis.summary.is_empty() {
+                    ui.label(&analysis.summary);
+                }
+                let list = |ui: &mut Ui, title: String, items: &[String]| {
+                    if items.is_empty() {
+                        return;
+                    }
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(title).font(semibold(14.0)).color(MUTED));
+                    for item in items {
+                        ui.horizontal_top(|ui| {
+                            ui.label(RichText::new("–").color(ACCENT));
+                            ui.label(item);
+                        });
+                    }
+                };
+                list(ui, t("strengths"), &analysis.strengths);
+                if !analysis.gaps.is_empty() {
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(t("gaps")).font(semibold(14.0)).color(MUTED));
+                    for gap in &analysis.gaps {
+                        ui.label(RichText::new(&gap.gap).color(STRONG));
+                        ui.label(RichText::new(&gap.how_to_address).color(MUTED));
+                    }
+                }
+                list(ui, t("likely"), &analysis.likely_questions);
+                list(ui, t("fixes"), &analysis.cv_fixes);
+            }
+        }
+
+        section(ui, &t("past_questions"));
+        note(ui, &t("past_questions_body"));
+        let records = read_all(&self.paths.transcripts_dir());
+        let rows = export::rows(&records);
+        ui.label(RichText::new(tf("questions_found", &[("n", &rows.len().to_string()), ("m", &records.len().to_string())])).color(MUTED));
+        ui.horizontal(|ui| {
+            for (index, format) in Format::ALL.iter().enumerate() {
+                ui.checkbox(&mut self.settings_ui.formats[index], format.extension().to_uppercase());
+            }
+        });
+        let chosen: Vec<Format> = Format::ALL.iter().enumerate().filter(|(index, _)| self.settings_ui.formats[*index]).map(|(_, format)| *format).collect();
+        if ui.add_enabled(!chosen.is_empty() && !rows.is_empty(), egui::Button::new(t("export_questions"))).clicked() {
+            self.export_questions(chosen);
+        }
+        match &self.settings_ui.exported {
+            Some(Ok(files)) => {
+                let folder = self.paths.exports_dir();
+                ui.label(RichText::new(tf("export_done", &[("n", &files.len().to_string()), ("folder", &folder.display().to_string())])).color(GOOD).small());
+                if ui.add(egui::Button::new(t("open_folder")).frame(false)).clicked() {
+                    open_path(&folder);
+                }
+            }
+            Some(Err(error)) => {
+                ui.label(RichText::new(error).color(DANGER).small());
+            }
+            None => {}
+        }
+    }
+
+    fn build_bank(&mut self) {
+        self.settings_ui.bank_busy = true;
+        self.settings_ui.bank = None;
+        let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
+        let count = self.settings_ui.bank_count;
+        let prompt = prepare::questions_prompt(&self.brief, count, &self.settings_ui.focus, self.language().as_deref());
+        self.handle.spawn(async move {
+            let mut result = Err("no answer".to_owned());
+            for _ in 0..2 {
+                // free models sometimes return broken JSON; try once more before giving up
+                let request = Request { system: prepare::QUESTIONS_SYSTEM.to_owned(), prompt: prompt.clone(), image: None, max_tokens: 3000, temperature: 0.4 };
+                result = match coach.complete(&request).await {
+                    Ok(text) => prepare::parse_questions(&text, count).map_err(|error| error.0),
+                    Err(error) => Err(error.message),
+                };
+                if result.is_ok() {
+                    break;
+                }
+            }
+            let _ = tx.send(Event::Bank(result));
+            repaint();
+        });
+    }
+
+    fn review_cv(&mut self) {
+        self.settings_ui.review_busy = true;
+        self.settings_ui.review = None;
+        let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
+        let prompt = prepare::analysis_prompt(&self.brief, self.language().as_deref());
+        self.handle.spawn(async move {
+            let mut result = Err("no answer".to_owned());
+            for _ in 0..2 {
+                let request = Request { system: prepare::ANALYSIS_SYSTEM.to_owned(), prompt: prompt.clone(), image: None, max_tokens: 3000, temperature: 0.3 };
+                result = match coach.complete(&request).await {
+                    Ok(text) => prepare::parse_analysis(&text).map_err(|error| error.0),
+                    Err(error) => Err(error.message),
+                };
+                if result.is_ok() {
+                    break;
+                }
+            }
+            let _ = tx.send(Event::Review(result));
+            repaint();
+        });
+    }
+
+    // ---- AI --------------------------------------------------------------------------------------------------
+
+    fn tab_ai(&mut self, ui: &mut Ui) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        let mut changed = false;
+        let address = self.settings.gateway();
+        let known = provider_for(&address);
+        row(ui, &t("provider"), |ui| {
+            let label = known.map_or("Other (own address)".to_owned(), |provider| provider.label.to_owned());
+            ComboBox::from_id_salt("provider").selected_text(label).width(260.0).show_ui(ui, |ui| {
+                for provider in PROVIDERS {
+                    if ui.selectable_label(known == Some(provider), provider.label).clicked() && known != Some(provider) {
+                        // a model id belongs to one provider, and so does a key
+                        self.settings.model.clear();
+                        self.settings.vision_model.clear();
+                        if self.settings.set_gateway(provider.url).is_ok() {
+                            changed = true;
+                        }
+                    }
+                }
+                let _ = OTHER;
+            });
+        });
+        let mut url = if self.settings.gateway_url.is_empty() { address.clone() } else { self.settings.gateway_url.clone() };
+        let url_changed = row(ui, &t("base_url"), |ui| ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).lost_focus());
+        if url_changed && url.trim() != self.settings.gateway_url.trim() && url.trim() != address {
+            match self.settings.set_gateway(url.trim()) {
+                Ok(()) => changed = true,
+                Err(error) => self.say(&tf("bad_value", &[("error", &error.to_string())]), true),
+            }
+        }
+        if let Some(provider) = known.filter(|provider| provider.cloud) {
+            note(ui, &tf("cloud_note", &[("name", provider.label)]));
+        }
+
+        if known.is_none_or(|provider| provider.cloud) {
+            section(ui, &t("accounts"));
+            let here: Vec<Account> = self.settings.accounts_here();
+            if here.is_empty() {
+                note(ui, &t("no_keys"));
+            }
+            let (mut use_name, mut remove_name) = (None, None);
+            for account in &here {
+                egui::Frame::new().fill(super::theme::FIELD).corner_radius(8).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&account.name).font(semibold(15.0)).color(STRONG));
+                        ui.label(RichText::new(account.tail()).color(MUTED).small());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.add(egui::Button::new(RichText::new(t("remove")).color(DANGER))).clicked() {
+                                remove_name = Some(account.name.clone());
+                            }
+                            if account.key == self.settings.gateway_key {
+                                ui.label(RichText::new(t("in_use")).color(ACCENT));
+                            } else if ui.button(t("use")).clicked() {
+                                use_name = Some(account.name.clone());
+                            }
+                        });
+                    });
+                });
+            }
+            if let Some(name) = use_name {
+                self.settings.use_account(&name);
+                changed = true;
+            }
+            if let Some(name) = remove_name {
+                self.settings.remove_account(&name);
+                changed = true;
+            }
+            ui.horizontal(|ui| {
+                let width = (ui.available_width() - 120.0).max(120.0);
+                let edit = ui.add(TextEdit::singleline(&mut self.settings_ui.new_key).password(true).hint_text(t("paste_key")).desired_width(width));
+                let enter = edit.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                let can = !self.settings_ui.new_key.trim().is_empty() && !self.settings_ui.checking_key;
+                if (ui.add_enabled(can, egui::Button::new(t("save_key"))).clicked() || (enter && can)) && can {
+                    self.settings_ui.checking_key = true;
+                    let (coach, tx, repaint, key, url) = (self.coach.clone(), self.tx.clone(), self.repaint.clone(), self.settings_ui.new_key.trim().to_owned(), address.clone());
+                    self.handle.spawn(async move {
+                        let result = coach.check_key(&url, &key).await.map_err(|error| error.message);
+                        let _ = tx.send(Event::KeyChecked { key, result });
+                        repaint();
+                    });
+                }
+            });
+            note(ui, &t("keys_note"));
+        }
+
+        section(ui, &t("models_title"));
+        let models = self.settings_ui.models.clone();
+        ui.label(RichText::new(t("model_ask")).font(semibold(15.0)).color(STRONG));
+        changed |= model_picker(ui, &mut self.settings.model, &models, "auto");
+        note(ui, &t("model_ask_note"));
+        row(ui, &t("fallbacks"), |ui| {
+            changed |= ui.add(TextEdit::singleline(&mut self.settings.fallback_models).hint_text(t("fallbacks_hint")).desired_width(f32::INFINITY)).changed();
+        });
+        ui.add_space(10.0);
+        ui.label(RichText::new(t("model_screenshot")).font(semibold(15.0)).color(STRONG));
+        changed |= model_picker(ui, &mut self.settings.vision_model, &models, "");
+        note(ui, &t("model_shot_note"));
+        ui.add_space(10.0);
+        ui.label(RichText::new(t("model_audio")).font(semibold(15.0)).color(STRONG));
+        row(ui, &t("engine"), |ui| {
+            let label = if self.settings.stt_engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
+            ComboBox::from_id_salt("engine").selected_text(label).width(260.0).show_ui(ui, |ui| {
+                for engine in STT_ENGINES {
+                    let text = if engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
+                    if ui.selectable_label(self.settings.stt_engine == engine, text).clicked() {
+                        self.settings.stt_engine = engine.to_owned();
+                        changed = true;
+                    }
+                }
+            });
+        });
+        if self.settings.stt_engine == "deepgram" {
+            row(ui, &t("deepgram_key"), |ui| {
+                changed |= ui.add(TextEdit::singleline(&mut self.settings.deepgram_key).password(true).desired_width(f32::INFINITY)).changed();
+            });
+            row(ui, &t("speech_model"), |ui| {
+                changed |= ui.add(TextEdit::singleline(&mut self.settings.deepgram_model).desired_width(f32::INFINITY)).changed();
+            });
+        } else {
+            row(ui, &t("speech_model"), |ui| {
+                ComboBox::from_id_salt("whisper").selected_text(self.settings.whisper_model.clone()).width(200.0).show_ui(ui, |ui| {
+                    for model in WHISPER_MODELS {
+                        if ui.selectable_label(self.settings.whisper_model == model, model).clicked() {
+                            self.settings.whisper_model = model.to_owned();
+                            changed = true;
+                        }
+                    }
+                });
+            });
+        }
+        note(ui, &t("audio_note"));
+
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            if ui.button(t("load_models")).clicked() {
+                self.settings_ui.models_error = None;
+                let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
+                self.handle.spawn(async move {
+                    let _ = tx.send(Event::Models(coach.models().await.map_err(|error| error.message)));
+                    repaint();
+                });
+            }
+            if ui.button(t("test_connection")).clicked() {
+                self.settings_ui.connected = None;
+                let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
+                self.handle.spawn(async move {
+                    let _ = tx.send(Event::Connected(coach.models().await.map(|models| models.len()).map_err(|error| error.message)));
+                    repaint();
+                });
+            }
+        });
+        if let Some(error) = &self.settings_ui.models_error {
+            ui.label(RichText::new(error).color(DANGER).small());
+        }
+        match &self.settings_ui.connected {
+            Some(Ok(count)) => {
+                ui.label(RichText::new(tf("connected", &[("n", &count.to_string())])).color(GOOD).small());
+            }
+            Some(Err(error)) => {
+                ui.label(RichText::new(error).color(DANGER).small());
+            }
+            None => {}
+        }
+        if changed {
+            self.settings_changed();
+        }
+    }
+
+    // ---- General ---------------------------------------------------------------------------------------------
+
+    fn tab_general(&mut self, ui: &mut Ui) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        let mut changed = false;
+        section(ui, &t("language"));
+        row(ui, &t("interview_language"), |ui| {
+            let current = self.settings.language.clone();
+            ComboBox::from_id_salt("language").selected_text(if current == "auto" { t("auto") } else { crate::languages::name(Some(&current)) }).width(220.0).show_ui(ui, |ui| {
+                if ui.selectable_label(current == "auto", t("auto")).clicked() {
+                    self.settings.language = "auto".into();
+                    changed = true;
+                }
+                for (code, name) in crate::languages::NAMES {
+                    if ui.selectable_label(current == *code, *name).clicked() {
+                        self.settings.language = (*code).to_owned();
+                        changed = true;
+                    }
+                }
+            });
+        });
+        row(ui, &t("window_language"), |ui| {
+            let current = self.settings.ui_language.clone();
+            let label = crate::languages::UI_LANGUAGES.iter().find(|(code, _)| *code == current).map_or(t("auto"), |(_, name)| (*name).to_owned());
+            ComboBox::from_id_salt("ui_language").selected_text(label).width(220.0).show_ui(ui, |ui| {
+                if ui.selectable_label(current == "auto", t("auto")).clicked() {
+                    self.settings.ui_language = "auto".into();
+                    changed = true;
+                }
+                for (code, name) in crate::languages::UI_LANGUAGES {
+                    if ui.selectable_label(current == *code, *name).clicked() {
+                        self.settings.ui_language = (*code).to_owned();
+                        changed = true;
+                    }
+                }
+            });
+        });
+
+        section(ui, &t("answer_style"));
+        row(ui, &t("style"), |ui| {
+            for style in ANSWER_STYLES {
+                changed |= ui.selectable_value(&mut self.settings.answer_style, style.to_owned(), t(&format!("style_{style}"))).changed();
+            }
+        });
+        row(ui, &t("layout"), |ui| {
+            for layout in ANSWER_LAYOUTS {
+                changed |= ui.selectable_value(&mut self.settings.answer_layout, layout.to_owned(), t(&format!("layout_{layout}"))).changed();
+            }
+        });
+
+        section(ui, &t("window"));
+        changed |= ui.checkbox(&mut self.settings.pinned, t("keep_on_top")).changed();
+        changed |= ui.checkbox(&mut self.settings.frameless, t("frameless")).changed();
+        row(ui, &t("opacity"), |ui| changed |= ui.add(egui::Slider::new(&mut self.settings.opacity, 35..=100).suffix("%")).changed());
+        row(ui, &t("text_size"), |ui| changed |= ui.add(egui::Slider::new(&mut self.settings.font_scale, 70..=180).suffix("%")).changed());
+
+        section(ui, &t("screenshot_section"));
+        changed |= ui.checkbox(&mut self.settings.screenshot_enabled, t("screenshot_enabled")).changed();
+        let tools = crate::screenshot::available_tools();
+        row(ui, &t("screenshot_tool"), |ui| {
+            let current = self.settings.screenshot_tool.clone();
+            ComboBox::from_id_salt("tool").selected_text(if current.is_empty() || current == "auto" { t("auto") } else { current.clone() }).width(220.0).show_ui(ui, |ui| {
+                if ui.selectable_label(current == "auto", t("auto")).clicked() {
+                    self.settings.screenshot_tool = "auto".into();
+                    changed = true;
+                }
+                for tool in &tools {
+                    if ui.selectable_label(&current == tool, tool).clicked() {
+                        self.settings.screenshot_tool = tool.clone();
+                        changed = true;
+                    }
+                }
+            });
+        });
+        note(ui, &t("screenshot_note"));
+
+        section(ui, &t("app_icon"));
+        self.icon_picker(ui);
+
+        section(ui, &t("updates"));
+        let mut check = self.app.check_updates;
+        if ui.checkbox(&mut check, t("check_updates")).changed() {
+            self.app.check_updates = check;
+            self.app_changed();
+        }
+        ui.horizontal(|ui| {
+            if ui.add_enabled(!self.update_ui.checking, egui::Button::new(t("check_now"))).clicked() {
+                self.check_for_update(true);
+            }
+            match &self.update_ui.last {
+                Some(Ok(version)) => {
+                    ui.label(RichText::new(tf("up_to_date", &[("version", version)])).color(GOOD).small());
+                }
+                Some(Err(why)) => {
+                    ui.label(RichText::new(tf("update_failed", &[("why", why)])).color(DANGER).small());
+                }
+                None => {}
+            }
+        });
+        note(ui, &t("update_note"));
+
+        section(ui, &t("data"));
+        changed |= ui.checkbox(&mut self.settings.save_transcripts, t("save_transcripts")).changed();
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(tf("data_folder", &[("path", &self.paths.data.display().to_string())])).color(MUTED).small());
+            if ui.add(egui::Button::new(RichText::new(t("open_folder")).small()).frame(false)).clicked() {
+                open_path(&self.paths.data);
+            }
+        });
+        ui.add_space(8.0);
+        let reset = ui.button(RichText::new(t("reset")).color(DANGER));
+        if reset.clicked() {
+            self.settings_ui.confirm_reset = true;
+        }
+        if self.settings_ui.confirm_reset {
+            ui.horizontal(|ui| {
+                if ui.button(RichText::new("OK").color(DANGER)).clicked() {
+                    let keep = self.settings.clone();
+                    self.settings = crate::settings::Settings::default();
+                    let _ = keep;
+                    self.settings_ui.confirm_reset = false;
+                    changed = true;
+                }
+                if ui.button(t("close")).clicked() {
+                    self.settings_ui.confirm_reset = false;
+                }
+            });
+        }
+        if changed {
+            self.settings_changed();
+        }
+    }
+
+    fn icon_picker(&mut self, ui: &mut Ui) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let _ = (&t, &tf);
+        let current = self.app.app_icon.clone();
+        let mut chosen: Option<String> = None;
+        ui.horizontal_wrapped(|ui| {
+            let mut tile = |ui: &mut Ui, setting: &str, label: &str| {
+                let selected = current == setting;
+                let icon = super::icon::load(setting).unwrap_or_default();
+                let image = egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
+                let texture = ui.ctx().load_texture(format!("icon-{setting}"), image, egui::TextureOptions::LINEAR);
+                ui.vertical(|ui| {
+                    let response = ui.add(egui::Button::image(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(52.0, 52.0))).selected(selected));
+                    ui.label(RichText::new(label).small().color(if selected { ACCENT } else { MUTED }));
+                    if response.clicked() {
+                        chosen = Some(setting.to_owned());
+                    }
+                });
+            };
+            tile(ui, "", &t("icon_default"));
+            for (name, _) in super::icon::VARIANTS.iter().skip(1) {
+                tile(ui, &format!("builtin:{name}"), name);
+            }
+        });
+        ui.add_space(4.0);
+        ui.label(RichText::new(t("icon_custom")).color(MUTED));
+        ui.horizontal(|ui| {
+            let width = (ui.available_width() - 170.0).max(120.0);
+            ui.add(TextEdit::singleline(&mut self.settings_ui.icon_path).hint_text(t("icon_path")).desired_width(width));
+            if ui.add_enabled(!self.settings_ui.icon_path.trim().is_empty(), egui::Button::new(t("icon_apply"))).clicked() {
+                let path = self.settings_ui.icon_path.trim().trim_matches('"').to_owned();
+                match super::icon::load(&path) {
+                    Ok(_) => chosen = Some(path),
+                    Err(why) => self.settings_ui.icon_error = Some(why),
+                }
+            }
+        });
+        if let Some(why) = &self.settings_ui.icon_error {
+            ui.label(RichText::new(tf("icon_bad", &[("why", why)])).color(DANGER).small());
+        }
+        note(ui, &t("icon_note"));
+        if let Some(setting) = chosen {
+            self.settings_ui.icon_error = None;
+            self.app.app_icon = setting;
+            self.app_changed();
+        }
+    }
+}
+
+/// Open a folder or a file in the system's own program.
+pub fn open_path(path: &std::path::Path) {
+    let program = if cfg!(target_os = "windows") {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(program).arg(path).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+    let _ = json!(null);
+}

@@ -7,6 +7,7 @@
 pub mod accounts;
 pub mod brief;
 pub mod coach;
+pub mod control;
 pub mod export;
 pub mod languages;
 pub mod library;

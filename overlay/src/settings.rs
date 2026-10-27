@@ -255,6 +255,60 @@ impl Settings {
     }
 }
 
+/// What a key check or an account change can say.
+#[derive(Debug, PartialEq, Eq)]
+pub enum AccountChange {
+    Added(Account),
+    Used(Account),
+    Removed(Account),
+}
+
+impl Settings {
+    /// The accounts saved for the address in use.
+    pub fn accounts_here(&self) -> Vec<Account> {
+        accounts::for_url(&self.accounts, &self.gateway())
+    }
+
+    /// Point the window at another address. A key belongs to its address and never goes to another one: the
+    /// first account saved for the new address is used, or none.
+    pub fn set_gateway(&mut self, url: &str) -> Result<(), SettingsError> {
+        let before = self.gateway();
+        self.set("gateway_url", Value::String(url.to_owned()))?;
+        if self.gateway() != before {
+            let key = self.accounts_here().first().map(|account| account.key.clone()).unwrap_or_default();
+            self.gateway_key = key;
+        }
+        Ok(())
+    }
+
+    /// Save `key` for the address in use. The first key becomes the one in use; the others are spare and are
+    /// tried in turn when it is limited.
+    pub fn add_account(&mut self, key: &str) -> Result<AccountChange, accounts::AccountError> {
+        let saved = accounts::add(&self.accounts, &self.gateway(), key)?;
+        let account = accounts::for_url(&saved, &self.gateway()).into_iter().find(|account| account.key == key.trim()).expect("the key was just added");
+        self.accounts = saved;
+        if self.gateway_key.is_empty() {
+            self.gateway_key = account.key.clone();
+        }
+        Ok(AccountChange::Added(account))
+    }
+
+    pub fn use_account(&mut self, name: &str) -> Option<AccountChange> {
+        let account = self.accounts_here().into_iter().find(|account| account.name == name)?;
+        self.gateway_key = account.key.clone();
+        Some(AccountChange::Used(account))
+    }
+
+    pub fn remove_account(&mut self, name: &str) -> Option<AccountChange> {
+        let gone = self.accounts_here().into_iter().find(|account| account.name == name)?;
+        self.accounts = accounts::remove(&self.accounts, &gone.url, name);
+        if self.gateway_key == gone.key {
+            self.gateway_key = self.accounts_here().first().map(|account| account.key.clone()).unwrap_or_default();
+        }
+        Some(AccountChange::Removed(gone))
+    }
+}
+
 /// A file only its owner can read, from the first byte: it may hold API keys.
 pub fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
@@ -405,6 +459,36 @@ mod tests {
         let keys: Vec<String> = settings.to_json().as_object().unwrap().keys().cloned().collect();
         assert_eq!(&keys[..4], ["language", "ui_language", "listen", "call_source"]);
         assert_eq!(keys.last().map(String::as_str), Some("save_transcripts"));
+    }
+
+    #[test]
+    fn keys_are_added_used_and_removed_for_the_address_in_use() {
+        let mut settings = Settings::default();
+        settings.set_gateway(GROQ).unwrap();
+        for key in ["gsk_one_0001", "gsk_two_0002"] {
+            settings.add_account(key).unwrap();
+        }
+        assert_eq!((settings.gateway_key.as_str(), settings.accounts.len()), ("gsk_one_0001", 2)); // the first is the one in use
+        assert_eq!(settings.add_account("gsk_one_0001"), Err(accounts::AccountError::AlreadySaved));
+        assert!(matches!(settings.use_account("default-2"), Some(AccountChange::Used(account)) if account.key == "gsk_two_0002"));
+        assert_eq!(settings.gateway_key, "gsk_two_0002");
+        settings.remove_account("default-2"); // the one in use: the other takes over
+        assert_eq!(settings.gateway_key, "gsk_one_0001");
+        settings.remove_account("default");
+        assert!(settings.gateway_key.is_empty() && settings.accounts.is_empty() && settings.use_account("x").is_none());
+    }
+
+    #[test]
+    fn a_key_never_follows_the_window_to_another_address() {
+        let mut settings = Settings::default();
+        settings.set_gateway(GROQ).unwrap();
+        settings.add_account("groq-key-aaaa").unwrap();
+        settings.set_gateway("https://proxy.example.com/groq/v1").unwrap();
+        assert!(settings.gateway_key.is_empty() && settings.accounts_here().is_empty());
+        settings.add_account("proxy-key-bbbb").unwrap();
+        settings.set_gateway(GROQ).unwrap();
+        assert_eq!(settings.gateway_key, "groq-key-aaaa");
+        assert_eq!(settings.set_gateway("not a url"), Err(SettingsError::Bad("The gateway URL must start with http:// or https://".into())));
     }
 
     #[test]

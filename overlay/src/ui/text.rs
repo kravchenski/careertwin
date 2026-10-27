@@ -1,0 +1,205 @@
+//! The words of the window, in English and Russian (the other languages of the Python window are next).
+
+/// (key, English, Russian). A missing translation falls back to English.
+const TABLE: &[(&str, &str, &str)] = &[
+    ("ready", "Ready", "Готово"),
+    ("thinking", "Thinking…", "Думаю…"),
+    ("looking", "Looking at the screen…", "Смотрю на экран…"),
+    ("ask", "Ask", "Спросить"),
+    ("stop", "Stop", "Стоп"),
+    ("screenshot", "Screenshot", "Скриншот"),
+    ("settings", "Settings", "Настройки"),
+    ("close", "Close", "Закрыть"),
+    ("copy", "Copy", "Копировать"),
+    ("question_hint", "Type a question and press Enter", "Введите вопрос и нажмите Enter"),
+    ("details", "Details", "Подробнее"),
+    ("hide_details", "Hide details", "Скрыть подробности"),
+    ("empty_title", "Nothing asked yet", "Пока нет вопросов"),
+    ("empty_body", "Type a question above, or press Screenshot to answer what is on the screen.", "Введите вопрос выше или нажмите «Скриншот», чтобы ответить на то, что на экране."),
+    ("no_context", "No facts about you yet. Put your ABOUT.md next to the data folder, or open Settings → Interview.", "Пока нет фактов о вас. Положите ABOUT.md рядом с папкой данных или откройте Настройки → Собеседование."),
+    ("answered_by", "Answered by {model}", "Ответила модель {model}"),
+    ("history", "{n} of {total}", "{n} из {total}"),
+    ("key_terms", "Key points", "Главное"),
+    ("context", "Where it is used", "Где применяется"),
+    ("next_questions", "Likely next", "Дальше спросят"),
+    // tabs
+    ("tab_interview", "Interview", "Собеседование"),
+    ("tab_practice", "Practice", "Подготовка"),
+    ("tab_ai", "AI", "ИИ"),
+    ("tab_general", "General", "Общие"),
+    // interview
+    ("interview", "Interview", "Собеседование"),
+    ("new", "New", "Новое"),
+    ("rename", "Rename", "Переименовать"),
+    ("delete", "Delete", "Удалить"),
+    ("interview_note", "Each interview keeps its own vacancy, CV and notes. ABOUT.md is shared.", "У каждого собеседования своя вакансия, CV и заметки. ABOUT.md общий."),
+    ("vacancy", "Vacancy", "Вакансия"),
+    ("vacancy_title", "Title", "Должность"),
+    ("vacancy_company", "Company", "Компания"),
+    ("vacancy_text", "Paste the text of the vacancy", "Вставьте текст вакансии"),
+    ("notes", "Notes for this interview", "Заметки к этому собеседованию"),
+    ("notes_hint", "Facts the answers should know: availability, studies, what you are learning", "Что нужно знать ответам: когда можете начать, учёба, что изучаете"),
+    ("documents", "CV and documents", "CV и документы"),
+    ("add_file", "Add", "Добавить"),
+    ("file_path", "Path to a PDF, Markdown or text file", "Путь к PDF, Markdown или текстовому файлу"),
+    ("file_added", "Added {name}", "Добавлен {name}"),
+    ("about_file", "Facts about you (ABOUT.md)", "Факты о вас (ABOUT.md)"),
+    ("project_folder", "Project to defend (folder)", "Проект для защиты (папка)"),
+    ("saved", "Saved", "Сохранено"),
+    // practice
+    ("practice_title", "Get ready for the technical interview", "Подготовка к техническому собеседованию"),
+    ("practice_intro", "Work down the list. Each step makes the answers in the call more exact.", "Идите по списку. Каждый шаг делает ответы на звонке точнее."),
+    ("step_vacancy", "The vacancy", "Вакансия"),
+    ("step_cv", "The CV you sent", "CV, которое вы отправили"),
+    ("step_about", "Facts about you", "Факты о вас"),
+    ("step_project", "A project to defend", "Проект для защиты"),
+    ("step_bank", "Likely questions", "Вероятные вопросы"),
+    ("step_review", "CV against the vacancy", "CV против вакансии"),
+    ("optional", "optional", "по желанию"),
+    ("missing_vacancy", "Add it in Interview", "Добавьте во вкладке «Собеседование»"),
+    ("missing_cv", "Add the CV in Interview", "Добавьте CV во вкладке «Собеседование»"),
+    ("missing_about", "ABOUT.md was not found", "ABOUT.md не найден"),
+    ("missing_project", "Choose a folder in Interview", "Выберите папку во вкладке «Собеседование»"),
+    ("how_many", "How many", "Сколько"),
+    ("focus", "Focus (optional)", "Упор (по желанию)"),
+    ("focus_hint", "Python, SQL, system design, behavioral…", "Python, SQL, проектирование, поведенческие…"),
+    ("build_bank", "Build the questions", "Составить вопросы"),
+    ("review_cv", "Review my CV", "Разобрать моё CV"),
+    ("working", "Working…", "Работаю…"),
+    ("nothing_yet", "Nothing yet.", "Пока ничего."),
+    ("say", "What to say", "Что сказать"),
+    ("strengths", "Lead with", "С чего начать"),
+    ("gaps", "Gaps and how to answer", "Пробелы и как отвечать"),
+    ("likely", "Questions the gaps invite", "Вопросы, которые вызовут пробелы"),
+    ("fixes", "Changes to the CV", "Правки в CV"),
+    ("past_questions", "Questions from your interviews", "Вопросы с ваших собеседований"),
+    ("past_questions_body", "Every question the window heard or was given, with its kind, language and the answer shown. Take them to a model or a spreadsheet to see what is asked and what you missed.", "Каждый вопрос, который услышало окно или который ввели, с типом, языком и показанным ответом. Отдайте их модели или в таблицу, чтобы увидеть, о чём спрашивают и что вы упустили."),
+    ("export_questions", "Export the questions", "Выгрузить вопросы"),
+    ("export_done", "Saved {n} files in {folder}", "Сохранено файлов: {n}, папка {folder}"),
+    ("export_none", "No saved interviews found in {folder}", "Сохранённых собеседований нет в {folder}"),
+    ("open_folder", "Open the folder", "Открыть папку"),
+    ("questions_found", "{n} questions in {m} interviews", "Вопросов: {n}, собеседований: {m}"),
+    // ai
+    ("provider", "Provider", "Провайдер"),
+    ("base_url", "Base URL", "Базовый URL"),
+    ("accounts", "Accounts", "Аккаунты"),
+    ("paste_key", "Paste the API key", "Вставьте API-ключ"),
+    ("save_key", "Save key", "Сохранить ключ"),
+    ("use", "Use", "Использовать"),
+    ("in_use", "In use", "Используется"),
+    ("remove", "Remove", "Убрать"),
+    ("no_keys", "No key saved for this address yet.", "Для этого адреса ключей пока нет."),
+    ("keys_note", "Keys stay in a file only you can read. When the key in use is rate limited or rejected, the next one for the same address is tried before another model.", "Ключи хранятся в файле, который читаете только вы. Если используемый ключ упёрся в лимит или отклонён, пробуется следующий для того же адреса, и только потом другая модель."),
+    ("models_title", "Models", "Модели"),
+    ("model_ask", "Answers (Ask)", "Ответы (Спросить)"),
+    ("model_screenshot", "Screenshots", "Скриншоты"),
+    ("model_audio", "Audio: speech recognition", "Аудио: распознавание речи"),
+    ("model_ask_note", "Writes what to say. Empty or auto lets the gateway choose.", "Пишет, что сказать. Пусто или auto: выберет шлюз."),
+    ("model_shot_note", "Must understand images. Empty uses the answers model.", "Должна понимать картинки. Пусто: модель для ответов."),
+    ("fallbacks", "If it is down or limited, try", "Если недоступна или в лимите, пробовать"),
+    ("fallbacks_hint", "model, model, auto", "модель, модель, auto"),
+    ("load_models", "Load models", "Загрузить список"),
+    ("test_connection", "Test connection", "Проверить соединение"),
+    ("connected", "Connected: {n} models", "Подключено, моделей: {n}"),
+    ("engine", "Engine", "Движок"),
+    ("engine_whisper", "Whisper on this computer", "Whisper на этом компьютере"),
+    ("engine_deepgram", "Deepgram (cloud)", "Deepgram (облако)"),
+    ("speech_model", "Speech model", "Модель речи"),
+    ("deepgram_key", "Deepgram API key", "API-ключ Deepgram"),
+    ("audio_note", "Hearing the call arrives in the next step of the Rust window. These settings are kept for it and used by the Python window now.", "Прослушивание звонка появится на следующем шаге Rust-окна. Эти настройки сохраняются для него и сейчас используются Python-окном."),
+    ("cloud_note", "{name} gets your CV, your ABOUT text and each question with every request.", "{name} получает ваше CV, текст ABOUT и каждый вопрос с каждым запросом."),
+    // general
+    ("language", "Languages", "Языки"),
+    ("interview_language", "Interview language", "Язык собеседования"),
+    ("window_language", "Window language", "Язык окна"),
+    ("auto", "Automatic", "Автоматически"),
+    ("window", "Window", "Окно"),
+    ("keep_on_top", "Keep the window on top", "Держать окно поверх других"),
+    ("frameless", "Frameless window", "Окно без рамки"),
+    ("opacity", "Opacity", "Прозрачность"),
+    ("text_size", "Text size", "Размер текста"),
+    ("answer_style", "Answers", "Ответы"),
+    ("style", "Style", "Стиль"),
+    ("layout", "Layout", "Вид"),
+    ("layout_main", "Main answer only", "Только главный ответ"),
+    ("layout_lines", "Lines to say, then details", "Реплики, затем подробности"),
+    ("style_concise", "Concise", "Коротко"),
+    ("style_standard", "Standard", "Обычно"),
+    ("style_detailed", "Detailed", "Подробно"),
+    ("screenshot_section", "Screenshot", "Скриншот"),
+    ("screenshot_enabled", "Enable the Screenshot button", "Включить кнопку «Скриншот»"),
+    ("screenshot_tool", "Capture tool", "Чем снимать"),
+    ("screenshot_note", "The window turns transparent while the screen is captured. The image goes to the screenshot model through the gateway.", "Пока снимается экран, окно становится прозрачным. Картинка уходит модели для скриншотов через шлюз."),
+    ("app_icon", "App icon", "Иконка приложения"),
+    ("icon_default", "Default", "Стандартная"),
+    ("icon_custom", "Your own image (PNG or JPEG)", "Своя картинка (PNG или JPEG)"),
+    ("icon_path", "Path to the image", "Путь к картинке"),
+    ("icon_apply", "Use this image", "Использовать картинку"),
+    ("icon_bad", "Could not use that image: {why}", "Не удалось использовать картинку: {why}"),
+    ("icon_note", "Some desktops (Wayland) take the icon from the desktop file instead of the window.", "Некоторые окружения (Wayland) берут иконку из файла .desktop, а не из окна."),
+    ("updates", "Updates", "Обновления"),
+    ("check_updates", "Look for a new version once a day", "Раз в день искать новую версию"),
+    ("check_now", "Check now", "Проверить сейчас"),
+    ("up_to_date", "You have the latest version ({version}).", "У вас последняя версия ({version})."),
+    ("update_failed", "Could not check: {why}", "Не удалось проверить: {why}"),
+    ("update_note", "Asks GitHub for the latest release. Nothing else is sent.", "Спрашивает GitHub о последнем релизе. Больше ничего не отправляется."),
+    ("data", "Data", "Данные"),
+    ("save_transcripts", "Save transcripts of interviews", "Сохранять записи собеседований"),
+    ("data_folder", "Data folder: {path}", "Папка данных: {path}"),
+    ("reset", "Reset all settings", "Сбросить все настройки"),
+    // update window
+    ("update_title", "Version {version} is available", "Доступна версия {version}"),
+    ("update_have", "You have {version}.", "У вас {version}."),
+    ("update_download", "Download the installer", "Скачать установщик"),
+    ("update_page", "Open the release page", "Открыть страницу релиза"),
+    ("update_later", "Later", "Позже"),
+    ("update_skip", "Skip this version", "Пропустить эту версию"),
+    ("update_downloading", "Downloading… {done} of {total}", "Скачиваю… {done} из {total}"),
+    ("update_verified", "Downloaded and checked. Saved as {path}. It is not started: run it when you are ready.", "Скачано и проверено. Сохранено как {path}. Установщик не запущен: запустите, когда будете готовы."),
+    ("update_linux", "This system updates from the repository: git pull, or uv tool upgrade.", "В этой системе обновляются из репозитория: git pull или uv tool upgrade."),
+    ("update_error", "Download failed: {why}", "Скачивание не удалось: {why}"),
+    ("saved_as", "Key saved as {name}", "Ключ сохранён как {name}"),
+    ("saved_unchecked", "Key saved as {name}. The provider could not be asked to check it.", "Ключ сохранён как {name}. Провайдер не смог его проверить."),
+    ("bad_value", "Not saved: {error}", "Не сохранено: {error}"),
+];
+
+/// The text for `key` in `language` (`ru`, else English), with `{name}` holes filled from `values`.
+pub fn t(language: &str, key: &str, values: &[(&str, &str)]) -> String {
+    let text = TABLE
+        .iter()
+        .find(|(name, _, _)| *name == key)
+        .map_or(key, |(_, en, ru)| if language == "ru" { ru } else { en });
+    values.iter().fold(text.to_owned(), |text, (name, value)| text.replace(&format!("{{{name}}}"), value))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_key_has_both_languages_and_the_same_holes() {
+        for (key, en, ru) in TABLE {
+            assert!(!en.is_empty() && !ru.is_empty(), "{key}");
+            let holes = |text: &str| {
+                let mut found: Vec<String> = text.split('{').skip(1).filter_map(|rest| rest.split('}').next()).map(str::to_owned).collect();
+                found.sort();
+                found
+            };
+            assert_eq!(holes(en), holes(ru), "{key}: the holes differ");
+        }
+        let mut keys: Vec<_> = TABLE.iter().map(|(key, _, _)| *key).collect();
+        keys.sort_unstable();
+        let before = keys.len();
+        keys.dedup();
+        assert_eq!(before, keys.len(), "a key is there twice");
+    }
+
+    #[test]
+    fn the_language_picks_the_text_and_the_holes_are_filled() {
+        assert_eq!(t("en", "ask", &[]), "Ask");
+        assert_eq!(t("ru", "ask", &[]), "Спросить");
+        assert_eq!(t("de", "ask", &[]), "Ask"); // no German yet: English
+        assert_eq!(t("en", "update_title", &[("version", "0.6.0")]), "Version 0.6.0 is available");
+        assert_eq!(t("en", "no such key", &[]), "no such key");
+    }
+}
