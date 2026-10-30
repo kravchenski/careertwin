@@ -150,6 +150,8 @@ pub struct App {
     pub settings_ui: settings_ui::State,
     pub update_ui: update_ui::State,
     pub level: equalizer::Level,
+    /// How the dots move from one mood to the next.
+    motion: equalizer::Motion,
     /// The time of the frame being drawn, in seconds: what the audio level is stamped with.
     clock: f64,
     /// What the window was last told, so a change is applied once.
@@ -251,6 +253,7 @@ impl App {
             settings_ui: settings_ui::State::default(),
             update_ui: update_ui::State::default(),
             level: equalizer::Level::default(),
+            motion: equalizer::Motion::default(),
             clock: 0.0,
             applied: Applied::default(),
             excluded_at: None,
@@ -912,16 +915,12 @@ impl App {
     }
 
     fn equalizer_dots(&self) -> bool {
-        matches!(self.app.equalizer.as_str(), "both" | "dots")
-    }
-
-    fn equalizer_background(&self) -> bool {
-        matches!(self.app.equalizer.as_str(), "both" | "background")
+        self.app.equalizer == "dots"
     }
 
     /// The top bar: the round pause button and the dots at the left, the two pills in the middle, the menu at the right.
     fn header(&mut self, ui: &mut Ui) {
-        const BAR: f32 = 44.0;
+        const BAR: f32 = 54.0;
         let width = ui.available_width();
         let bar = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(width, BAR));
         // the bar drags the window; it is registered first, so every control on it is above it and gets its clicks
@@ -929,7 +928,7 @@ impl App {
         if drag.drag_started() && self.settings.frameless {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }
-        let keys = width >= 700.0; // the keys beside the names of the pills need room
+        let keys = width >= 760.0; // the keys beside the names of the pills need room
         let busy = self.busy();
         let (ask_label, shot_label) = (self.t("ask"), self.t("screenshot"));
         let ask_caps = chrome::shortcut(&[], chrome::Cap::Enter);
@@ -938,7 +937,7 @@ impl App {
             None => chrome::shortcut(&["Shift"], chrome::Cap::Enter),
         };
         let pills = chrome::pill_width(ui, &ask_label, &ask_caps, keys)
-            + 10.0
+            + 14.0
             + chrome::pill_width(ui, &shot_label, &shot_caps, keys);
         let (mut toggle, mut ask, mut shot, mut menu) = (false, false, false, None);
         ui.allocate_ui_with_layout(egui::vec2(width, BAR), Layout::left_to_right(Align::Center), |ui| {
@@ -953,7 +952,7 @@ impl App {
             toggle =
                 chrome::round_button(ui, if listening { chrome::Glyph::Pause } else { chrome::Glyph::Play }, &name)
                     .clicked();
-            ui.add_space(8.0);
+            ui.add_space(12.0);
             let status = if self.capturing.is_some() {
                 self.t("looking")
             } else if self.thinking() {
@@ -966,7 +965,10 @@ impl App {
                 response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &status));
                 let time = ui.input(|input| input.time);
                 ui.painter().rect_filled(rect, 17.0, theme::mix(theme::panel(), theme::text(), 0.09));
-                equalizer::dots(&ui.painter().with_clip_rect(rect), rect, self.level.value(), self.mood(), time);
+                let mood = self.mood();
+                let bars = self.motion.bars(equalizer::DOTS, time, self.level.smoothed(), mood);
+                let color = self.motion.color(mood, time);
+                equalizer::paint_dots(&ui.painter().with_clip_rect(rect), rect, &bars, color);
                 response.on_hover_text(&status);
             } else {
                 let dot = if busy || self.capturing.is_some() { accent() } else { theme::good() };
@@ -978,7 +980,7 @@ impl App {
             let gap = ((width - pills) / 2.0 - ui.min_rect().width()).max(10.0);
             ui.add_space(gap);
             ask = chrome::pill(ui, &ask_label, &ask_caps, keys, !busy, &self.t("ask_hint")).clicked();
-            ui.add_space(10.0);
+            ui.add_space(14.0);
             shot = chrome::pill(ui, &shot_label, &shot_caps, keys, self.settings.screenshot_enabled && !busy, "")
                 .clicked();
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1222,21 +1224,6 @@ impl App {
         let opacity = if hidden { 0.0 } else { self.settings.opacity as f32 / 100.0 };
         if !hidden {
             egui::CentralPanel::default().frame(theme::panel_frame(opacity)).show(ui, |ui| {
-                // not behind the settings: a wave of dots next to a form is noise, and it returns when they close
-                if self.equalizer_background() && !self.settings_open {
-                    let time = if self.app.animate { ctx.input(|input| input.time) } else { 0.0 };
-                    // above the line with the interview and the history, so no dot sits under that text
-                    let mut rect = ui.max_rect().expand(8.0);
-                    rect.set_bottom(rect.bottom() - 40.0);
-                    equalizer::background(
-                        &ui.painter().with_clip_rect(rect.shrink(6.0)),
-                        rect,
-                        self.level.value(),
-                        self.mood(),
-                        time,
-                        if self.entries.is_empty() { 1.0 } else { 0.4 },
-                    );
-                }
                 self.header(ui);
                 self.caption_line(ui);
                 ui.add_space(4.0);
@@ -1264,7 +1251,8 @@ impl App {
         self.level.tick(now);
         let moving = self.app.animate && self.app.equalizer != "off";
         if moving {
-            ctx.request_repaint_after(Duration::from_millis(33));
+            // at the pace of the screen: a slower repaint shows as steps in the motion of the dots
+            ctx.request_repaint_after(Duration::from_millis(8));
         } else if self.thinking() {
             ctx.request_repaint_after(Duration::from_millis(60));
         }

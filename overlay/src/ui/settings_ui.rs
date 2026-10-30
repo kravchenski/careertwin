@@ -901,38 +901,42 @@ impl App {
             note(ui, &t("keys_note"));
         }
 
-        let mut app_changed = false;
-        hint_next(&t("parallel_note"));
-        row(ui, &t("parallel"), |ui| {
-            let label = t(&format!("parallel_{}", self.app.parallel_accounts));
-            ComboBox::from_id_salt("parallel")
-                .selected_text(label)
-                .width(320.0)
-                .show_ui(ui, |ui| {
-                    for mode in crate::settings::PARALLEL_MODES {
-                        if ui
-                            .selectable_label(self.app.parallel_accounts == mode, t(&format!("parallel_{mode}")))
-                            .clicked()
-                        {
-                            self.app.parallel_accounts = mode.to_owned();
-                            app_changed = true;
+        // a local gateway (Switchyard, Ollama, LM Studio) spreads the load over its accounts itself: these are for the
+        // accounts saved here
+        if known.is_none_or(|provider| provider.cloud) {
+            let mut app_changed = false;
+            hint_next(&t("parallel_note"));
+            row(ui, &t("parallel"), |ui| {
+                let label = t(&format!("parallel_{}", self.app.parallel_accounts));
+                ComboBox::from_id_salt("parallel")
+                    .selected_text(label)
+                    .width(320.0)
+                    .show_ui(ui, |ui| {
+                        for mode in crate::settings::PARALLEL_MODES {
+                            if ui
+                                .selectable_label(self.app.parallel_accounts == mode, t(&format!("parallel_{mode}")))
+                                .clicked()
+                            {
+                                self.app.parallel_accounts = mode.to_owned();
+                                app_changed = true;
+                            }
                         }
-                    }
-                })
-                .named();
-        });
-        row(ui, &t("first_word"), |ui| {
-            app_changed |= ui
-                .add(
-                    egui::DragValue::new(&mut self.app.first_word_seconds)
-                        .range(crate::settings::FIRST_WORD_RANGE)
-                        .suffix(" s"),
-                )
-                .named()
-                .changed();
-        });
-        if app_changed {
-            self.app_changed();
+                    })
+                    .named();
+            });
+            row(ui, &t("first_word"), |ui| {
+                app_changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut self.app.first_word_seconds)
+                            .range(crate::settings::FIRST_WORD_RANGE)
+                            .suffix(" s"),
+                    )
+                    .named()
+                    .changed();
+            });
+            if app_changed {
+                self.app_changed();
+            }
         }
 
         section(ui, &t("models_title"));

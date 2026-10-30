@@ -130,9 +130,7 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("theme_text", "Text", "Текст"),
     ("theme_accent", "Accent", "Акцент"),
     ("equalizer", "Equalizer", "Эквалайзер"),
-    ("eq_both", "Both", "И то и другое"),
     ("eq_dots", "Dots at the top", "Точки сверху"),
-    ("eq_background", "Background", "Фоном"),
     ("eq_off", "Off", "Выкл"),
     ("animate", "Animate", "Анимация"),
     (

@@ -363,7 +363,7 @@ pub struct AppSettings {
     pub custom_panel: String,
     pub custom_text: String,
     pub custom_accent: String,
-    /// `both`, `dots` (next to the status), `background` or `off`.
+    /// `dots` (the strip next to the pause button) or `off`.
     pub equalizer: String,
     /// The equalizer and its background move.
     pub animate: bool,
@@ -385,7 +385,7 @@ pub struct AppSettings {
 pub const PARALLEL_MODES: [&str; 3] = ["off", "hedged", "all"];
 pub const FIRST_WORD_RANGE: std::ops::RangeInclusive<i64> = 0..=60;
 
-pub const EQUALIZER_STYLES: [&str; 4] = ["both", "dots", "background", "off"];
+pub const EQUALIZER_STYLES: [&str; 2] = ["dots", "off"];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -398,7 +398,7 @@ impl Default for AppSettings {
             custom_panel: "#13141e".to_owned(),
             custom_text: "#d7dae8".to_owned(),
             custom_accent: "#bcb4ff".to_owned(),
-            equalizer: "both".to_owned(),
+            equalizer: "dots".to_owned(),
             animate: true,
             hide_from_sharing: true,
             screenshot_key: crate::hotkey::DEFAULT.to_owned(),
@@ -440,7 +440,10 @@ impl AppSettings {
                 *slot = color;
             }
         }
-        if let Some(style) = text("equalizer").filter(|style| EQUALIZER_STYLES.contains(&style.as_str())) {
+        // the dot matrix behind the window was taken out: what was saved for it is the strip of dots at the top
+        let saved = text("equalizer")
+            .map(|style| if matches!(style.as_str(), "both" | "background") { "dots".to_owned() } else { style });
+        if let Some(style) = saved.filter(|style| EQUALIZER_STYLES.contains(&style.as_str())) {
             settings.equalizer = style;
         }
         if let Some(Value::Bool(flag)) = data.get("animate") {
@@ -643,7 +646,7 @@ mod tests {
             custom_panel: "#101820".into(),
             custom_text: "#e0e8f0".into(),
             custom_accent: "#ff7a59".into(),
-            equalizer: "background".into(),
+            equalizer: "off".into(),
             animate: false,
             hide_from_sharing: false,
             screenshot_key: "ctrl + alt + k".into(),
@@ -664,5 +667,18 @@ mod tests {
         std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes", "hide_from_taskbar": 1}"##)
             .unwrap();
         assert_eq!(AppSettings::load(&path), AppSettings::default());
+    }
+
+    #[test]
+    fn the_dot_matrix_that_was_taken_out_is_read_as_the_strip_of_dots() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("app.json");
+        for (saved, expected) in
+            [("both", "dots"), ("background", "dots"), ("dots", "dots"), ("off", "off"), ("loud", "dots")]
+        {
+            std::fs::write(&path, format!(r#"{{"equalizer": "{saved}"}}"#)).unwrap();
+            assert_eq!(AppSettings::load(&path).equalizer, expected, "{saved}");
+        }
+        assert_eq!(AppSettings::default().equalizer, "dots");
     }
 }

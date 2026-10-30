@@ -496,7 +496,6 @@ fn the_equalizer_moves_with_the_level_and_the_mood() {
                 .build_ui(move |ui| {
                     let rect = ui.max_rect();
                     ui.painter().rect_filled(rect, 14.0, theme::panel());
-                    equalizer::background(ui.painter(), rect.shrink(6.0), level, mood, time, 1.0);
                     let strip = egui::Rect::from_min_size(rect.min + egui::vec2(20.0, 14.0), egui::vec2(86.0, 26.0));
                     ui.painter().rect_filled(strip, 13.0, theme::mix(theme::panel(), theme::text(), 0.09));
                     equalizer::dots(ui.painter(), strip, level, mood, time);
@@ -780,4 +779,27 @@ fn nothing_floats_over_the_window_to_take_its_clicks() {
             );
         }
     }
+}
+
+#[test]
+fn the_account_modes_are_shown_for_a_provider_with_accounts_and_not_for_a_local_gateway() {
+    // Groq has accounts saved here
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    let (mut groq, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    groq.run();
+    see(&groq, "Several accounts at once");
+    see(&groq, "Accounts");
+    // Switchyard spreads the load over its own accounts, so there is nothing to choose here
+    let mut fixture = fixture_model("en", None);
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    fixture.app.settings.set_gateway("http://127.0.0.1:3260").unwrap();
+    let (mut local, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    local.run();
+    assert!(local.query_all_by_label("Several accounts at once").next().is_none());
+    assert!(local.query_all_by_label("Give up on a silent account after").next().is_none());
+    assert!(local.query_all_by_label("Accounts").next().is_none());
+    see(&local, "Provider");
 }

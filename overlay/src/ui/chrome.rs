@@ -44,17 +44,24 @@ pub fn caps_of(keys: &str) -> Vec<Cap> {
         .collect()
 }
 
-const PILL_HEIGHT: f32 = 34.0;
-const CAP_HEIGHT: f32 = 18.0;
+const PILL_HEIGHT: f32 = 40.0;
+const CAP_HEIGHT: f32 = 20.0;
+/// Room inside a pill: before its name, between the name and its keys, and after the keys.
+const PILL_LEFT: f32 = 22.0;
+const PILL_GAP: f32 = 14.0;
+const PILL_RIGHT: f32 = 18.0;
+/// Between two keys, and the room on each side of a word in a key.
+const CAP_GAP: f32 = 5.0;
+const CAP_PAD: f32 = 14.0;
 
 fn word_width(ui: &Ui, word: &str) -> f32 {
-    ui.painter().layout_no_wrap(word.to_owned(), sans(11.0), text()).size().x + 10.0
+    ui.painter().layout_no_wrap(word.to_owned(), sans(11.5), text()).size().x + CAP_PAD
 }
 
 fn cap_width(ui: &Ui, cap: &Cap) -> f32 {
     match cap {
         Cap::Word(word) => word_width(ui, word),
-        _ => 20.0,
+        _ => 26.0,
     }
 }
 
@@ -62,7 +69,7 @@ fn caps_width(ui: &Ui, caps: &[Cap]) -> f32 {
     if caps.is_empty() {
         return 0.0;
     }
-    caps.iter().map(|cap| cap_width(ui, cap)).sum::<f32>() + 3.0 * (caps.len() - 1) as f32
+    caps.iter().map(|cap| cap_width(ui, cap)).sum::<f32>() + CAP_GAP * (caps.len() - 1) as f32
 }
 
 fn paint_cap(ui: &Ui, rect: Rect, cap: &Cap, color: Color32) {
@@ -72,7 +79,7 @@ fn paint_cap(ui: &Ui, rect: Rect, cap: &Cap, color: Color32) {
     let line = Stroke::new(1.3, color);
     match cap {
         Cap::Word(word) => {
-            painter.text(c, egui::Align2::CENTER_CENTER, word, sans(11.0), color);
+            painter.text(c, egui::Align2::CENTER_CENTER, word, sans(11.5), color);
         }
         Cap::Enter => {
             let (a, b, d) = (c + vec2(4.0, -4.0), c + vec2(4.0, 2.0), c + vec2(-4.0, 2.0));
@@ -98,15 +105,15 @@ fn paint_caps(ui: &Ui, mut x: f32, y: f32, caps: &[Cap], color: Color32) {
     for cap in caps {
         let width = cap_width(ui, cap);
         paint_cap(ui, Rect::from_min_size(Pos2::new(x, y - CAP_HEIGHT / 2.0), vec2(width, CAP_HEIGHT)), cap, color);
-        x += width + 3.0;
+        x += width + CAP_GAP;
     }
 }
 
 /// How wide `pill` will be, so the bar can centre a pair of them.
 pub fn pill_width(ui: &Ui, label: &str, caps: &[Cap], show_caps: bool) -> f32 {
     let label = ui.painter().layout_no_wrap(label.to_owned(), semibold(14.0), text()).size().x;
-    let keys = if show_caps && !caps.is_empty() { 8.0 + caps_width(ui, caps) } else { 0.0 };
-    (16.0 + label + keys + 12.0).max(72.0)
+    let keys = if show_caps && !caps.is_empty() { PILL_GAP + caps_width(ui, caps) } else { 0.0 };
+    (PILL_LEFT + label + keys + PILL_RIGHT).max(88.0)
 }
 
 fn edge(ui: &Ui, enabled: bool, hot: bool) -> Color32 {
@@ -137,10 +144,10 @@ pub fn pill(ui: &mut Ui, label: &str, caps: &[Cap], show_caps: bool, enabled: bo
     let color = if enabled { strong() } else { muted() };
     let galley = ui.painter().layout_no_wrap(label.to_owned(), semibold(14.0), color);
     let label_width = galley.size().x;
-    ui.painter().galley(Pos2::new(rect.left() + 16.0, rect.center().y - galley.size().y / 2.0), galley, color);
+    ui.painter().galley(Pos2::new(rect.left() + PILL_LEFT, rect.center().y - galley.size().y / 2.0), galley, color);
     if show_caps && !caps.is_empty() {
         let cap_color = if enabled { mix(panel(), text(), 0.7) } else { mix(panel(), text(), 0.3) };
-        paint_caps(ui, rect.left() + 16.0 + label_width + 8.0, rect.center().y, caps, cap_color);
+        paint_caps(ui, rect.left() + PILL_LEFT + label_width + PILL_GAP, rect.center().y, caps, cap_color);
     }
     if tooltip.is_empty() { response } else { response.on_hover_text(tooltip) }
 }
@@ -154,7 +161,7 @@ pub enum Glyph {
 
 /// The round button at the left of the bar: filled while it can be paused, an outline while it would start or resume.
 pub fn round_button(ui: &mut Ui, glyph: Glyph, name: &str) -> Response {
-    let size = 40.0;
+    let size = 44.0;
     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, name));
     let hot = response.hovered();
@@ -186,7 +193,7 @@ pub fn round_button(ui: &mut Ui, glyph: Glyph, name: &str) -> Response {
 
 /// The three lines that open the menu.
 pub fn menu_mark(ui: &mut Ui, name: &str) -> Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(40.0, PILL_HEIGHT), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(vec2(48.0, PILL_HEIGHT), Sense::click());
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, name));
     let color = if response.hovered() { strong() } else { muted() };
     let c = rect.center();
@@ -218,7 +225,7 @@ pub fn counter(ui: &mut Ui, shown: &str) -> Response {
 
 /// How wide `step` will be.
 pub fn step_width(ui: &Ui, caps: &[Cap]) -> f32 {
-    caps_width(ui, caps) + 8.0
+    caps_width(ui, caps) + 14.0
 }
 
 /// The keys that move through the answers, drawn as keys and pressed as a button.
@@ -235,7 +242,7 @@ pub fn step(ui: &mut Ui, caps: &[Cap], enabled: bool, name: &str) -> Response {
     } else {
         mix(panel(), text(), 0.55)
     };
-    paint_caps(ui, rect.left() + 4.0, rect.center().y, caps, color);
+    paint_caps(ui, rect.left() + 7.0, rect.center().y, caps, color);
     if enabled { response.on_hover_text(name) } else { response }
 }
 

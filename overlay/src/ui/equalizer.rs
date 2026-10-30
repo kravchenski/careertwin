@@ -1,4 +1,4 @@
-//! The equalizer of dots: seven dots next to the status, and the same thing as a dot matrix behind the window.
+//! The equalizer of dots: seven dots next to the pause button.
 //!
 //! It follows the level of the call audio when there is one, breathes when nothing is heard, and runs a wave
 //! while an answer is being written.
@@ -21,8 +21,15 @@ pub enum Mood {
 #[derive(Debug, Default)]
 pub struct Level {
     value: f32,
+    /// What is drawn: `value` followed with a short attack and a longer release, so the dots swell and settle instead of
+    /// jumping.
+    shown: f32,
     at: f64,
 }
+
+/// How quickly the drawn level rises to a louder sound, and how slowly it lets go of it, in seconds.
+const ATTACK: f32 = 0.05;
+const RELEASE: f32 = 0.30;
 
 /// How fast the level falls, in whole scales per second.
 const FALL_PER_SECOND: f32 = 2.0;
@@ -37,11 +44,18 @@ impl Level {
     pub fn tick(&mut self, now: f64) {
         let elapsed = (now - self.at).max(0.0) as f32;
         self.value = (self.value - FALL_PER_SECOND * elapsed).max(0.0);
+        let tau = if self.value > self.shown { ATTACK } else { RELEASE };
+        self.shown += (self.value - self.shown) * (1.0 - (-elapsed / tau).exp());
         self.at = now;
     }
 
+    /// The level as it is drawn.
     pub fn value(&self) -> f32 {
         self.value
+    }
+
+    pub fn smoothed(&self) -> f32 {
+        self.shown
     }
 }
 
@@ -70,7 +84,7 @@ pub fn heights(columns: usize, time: f64, level: f32, mood: Mood) -> Vec<f32> {
         .collect()
 }
 
-fn mood_color(mood: Mood) -> Color32 {
+pub fn mood_color(mood: Mood) -> Color32 {
     match mood {
         Mood::Idle | Mood::Paused => theme::muted(),
         Mood::Listening => theme::accent(),
@@ -79,78 +93,78 @@ fn mood_color(mood: Mood) -> Color32 {
     }
 }
 
-fn with_alpha(color: Color32, alpha: u8) -> Color32 {
-    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
+/// How long the dots take to pass from the way one mood moves and looks to the way the next does.
+const FADE: f64 = 0.45;
+
+fn smooth(t: f64) -> f32 {
+    let t = t.clamp(0.0, 1.0) as f32;
+    t * t * (3.0 - 2.0 * t)
 }
 
-/// Seven dots in a row, as many lit as the level says.
+/// The motion of the dots over time. A change of mood (listening, thinking, paused) is not a jump: for a moment the dots
+/// are the two moods mixed, in height and in colour.
+#[derive(Debug)]
+pub struct Motion {
+    mood: Mood,
+    previous: Mood,
+    changed_at: f64,
+}
+
+impl Default for Motion {
+    fn default() -> Self {
+        Self { mood: Mood::Idle, previous: Mood::Idle, changed_at: f64::NEG_INFINITY }
+    }
+}
+
+impl Motion {
+    fn weight(&mut self, mood: Mood, time: f64) -> f32 {
+        if mood != self.mood {
+            // half way through a change the new change starts from what the first had reached
+            self.previous = if smooth((time - self.changed_at) / FADE) < 0.5 { self.previous } else { self.mood };
+            self.mood = mood;
+            self.changed_at = time;
+        }
+        smooth((time - self.changed_at) / FADE)
+    }
+
+    /// How tall each of `columns` dots is at `time`, with the change of mood eased.
+    pub fn bars(&mut self, columns: usize, time: f64, level: f32, mood: Mood) -> Vec<f32> {
+        let weight = self.weight(mood, time);
+        let now = heights(columns, time, level, self.mood);
+        if weight >= 1.0 {
+            return now;
+        }
+        let before = heights(columns, time, level, self.previous);
+        now.iter().zip(before).map(|(new, old)| old + (new - old) * weight).collect()
+    }
+
+    /// The colour of the dots at `time`.
+    pub fn color(&mut self, mood: Mood, time: f64) -> Color32 {
+        let weight = self.weight(mood, time);
+        theme::mix(mood_color(self.previous), mood_color(self.mood), weight)
+    }
+}
+
+/// Seven dots in a row.
 pub const DOTS: usize = 7;
 
-pub fn dots(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f64) {
-    let bars = heights(DOTS, time, level, mood);
-    let color = mood_color(mood);
+/// Draw the dots for `bars`. A dot does not switch on: it brightens and swells as its bar rises past it, so a level that
+/// moves a little moves the dots a little.
+pub fn paint_dots(painter: &Painter, rect: Rect, bars: &[f32], color: Color32) {
     let spacing = (rect.width() - 12.0) / (DOTS - 1) as f32;
     for (index, height) in bars.iter().enumerate() {
-        let lit = (height * 1.8).clamp(0.0, 1.0) > 0.2 + 0.08 * index as f32 / DOTS as f32;
+        let threshold = 0.2 + 0.08 * index as f32 / DOTS as f32;
+        let lit = ((height * 1.8 - threshold) / 0.22).clamp(0.0, 1.0);
+        let lit = lit * lit * (3.0 - 2.0 * lit);
         let centre = Pos2::new(rect.left() + 6.0 + index as f32 * spacing, rect.center().y);
-        let (radius, fill) = if lit { (3.6, color) } else { (2.8, with_alpha(theme::muted(), 80)) };
-        painter.circle_filled(centre, radius, fill);
+        let fill = theme::mix(theme::mix(theme::panel(), theme::muted(), 0.45), color, lit);
+        painter.circle_filled(centre, 2.8 + 0.9 * lit, fill);
     }
 }
 
-/// How far apart the dots of the background are.
-const STEP: f32 = 15.0;
-/// The tallest a bar of the background goes, as a part of the window's height.
-const REACH: f32 = 0.62;
-
-/// What the matrix would draw: (column, row) of each lit dot and how bright, counting rows from the bottom.
-/// Kept apart from the painting so it can be checked.
-pub fn lit_dots(width: f32, height: f32, level: f32, mood: Mood, time: f64) -> Vec<(usize, usize, f32)> {
-    let columns = (width / STEP).floor() as usize;
-    let rows = ((height * REACH) / STEP).floor() as usize;
-    if columns == 0 || rows == 0 {
-        return Vec::new();
-    }
-    let mut lit = Vec::new();
-    for (column, bar) in heights(columns, time, level, mood).into_iter().enumerate() {
-        let count = ((bar * rows as f32).round() as usize).min(rows);
-        for row in 0..count {
-            // bright at the bottom of a bar, fading upward, the top dot a little brighter
-            let fade = 1.0 - row as f32 / rows as f32;
-            let top = if row + 1 == count { 0.25 } else { 0.0 };
-            lit.push((column, row, (0.35 + 0.65 * fade + top).min(1.0)));
-        }
-    }
-    lit
-}
-
-/// The dot matrix behind the window, low in contrast so that the text on it can be read.
-/// `strength` (0 to 1) is how visible the dots are: they step back while an answer is on the screen.
-pub fn background(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f64, strength: f32) {
-    let color = mood_color(mood);
-    let accent = if mood == Mood::Listening { theme::accent() } else { mix_accent(color) };
-    let columns = (rect.width() / STEP).floor() as usize;
-    let rows = ((rect.height() * REACH) / STEP).floor() as usize;
-    if columns == 0 || rows == 0 {
-        return;
-    }
-    let left = rect.left() + (rect.width() - (columns - 1) as f32 * STEP) / 2.0;
-    let bottom = rect.bottom() - STEP * 0.9;
-    let place = |column: usize, row: usize| Pos2::new(left + column as f32 * STEP, bottom - row as f32 * STEP);
-    for column in 0..columns {
-        for row in 0..rows {
-            painter.circle_filled(place(column, row), 1.4, with_alpha(accent, (14.0 * strength) as u8));
-        }
-    }
-    for (column, row, brightness) in lit_dots(rect.width(), rect.height(), level, mood, time) {
-        let alpha = (26.0 + 104.0 * brightness) * strength;
-        painter.circle_filled(place(column, row), 2.5, with_alpha(accent, alpha as u8));
-    }
-}
-
-/// The accent, softened toward the colour of the mood, so a waiting window stays in the theme's colour.
-fn mix_accent(mood: Color32) -> Color32 {
-    theme::mix(theme::accent(), mood, 0.35)
+/// The dots at one moment, without a change of mood: for a picture of them.
+pub fn dots(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f64) {
+    paint_dots(painter, rect, &heights(DOTS, time, level, mood), mood_color(mood));
 }
 
 #[cfg(test)]
@@ -207,18 +221,50 @@ mod tests {
     }
 
     #[test]
-    fn the_matrix_fits_the_window_and_gets_taller_with_the_level() {
-        let quiet = lit_dots(900.0, 400.0, 0.0, Mood::Listening, 3.0);
-        let loud = lit_dots(900.0, 400.0, 1.0, Mood::Listening, 3.0);
-        assert!(loud.len() > quiet.len() * 2, "{} vs {}", loud.len(), quiet.len());
-        let (columns, rows) = (60, 16);
-        assert!(
-            loud.iter()
-                .all(|(column, row, brightness)| *column < columns && *row < rows && (0.0..=1.0).contains(brightness))
-        );
-        assert!(lit_dots(10.0, 10.0, 1.0, Mood::Listening, 0.0).is_empty()); // too small for a dot
-        // a dot at the bottom of a bar is brighter than one near the top
-        let bar: Vec<_> = loud.iter().filter(|(column, ..)| *column == 30).collect();
-        assert!(bar.first().unwrap().2 > bar[bar.len() / 2].2);
+    fn the_drawn_level_follows_a_sound_quickly_and_lets_go_of_it_slowly() {
+        let mut level = Level::default();
+        level.push(1.0, 10.0);
+        level.tick(10.016); // one frame later: on its way up, not there
+        assert!(level.smoothed() > 0.1 && level.smoothed() < 0.6, "{}", level.smoothed());
+        level.tick(10.3);
+        let risen = level.smoothed();
+        assert!(risen > 0.3, "{risen}"); // the level itself has fallen to 0.4 by now, and the drawn one has caught up with it
+        level.tick(10.9); // the sound is long over (the level itself fell to nothing in half a second)
+        assert!(level.smoothed() < risen);
+        level.tick(12.0);
+        assert!(level.smoothed() < 0.02);
+    }
+
+    #[test]
+    fn a_change_of_mood_is_a_slide_not_a_jump() {
+        let mut motion = Motion::default();
+        let level = 0.6;
+        let quiet = motion.bars(7, 5.0, level, Mood::Idle);
+        let at_change = motion.bars(7, 5.0, level, Mood::Thinking);
+        assert_eq!(quiet.len(), 7);
+        // the moment of the change looks like the mood before it
+        assert!(quiet.iter().zip(&at_change).all(|(a, b)| (a - b).abs() < 0.02), "{quiet:?} {at_change:?}");
+        let half = motion.bars(7, 5.0 + FADE / 2.0, level, Mood::Thinking);
+        let after = motion.bars(7, 5.0 + FADE * 2.0, level, Mood::Thinking);
+        assert_eq!(after, heights(7, 5.0 + FADE * 2.0, level, Mood::Thinking));
+        let (old, new) =
+            (heights(7, 5.0 + FADE / 2.0, level, Mood::Idle), heights(7, 5.0 + FADE / 2.0, level, Mood::Thinking));
+        for index in 0..7 {
+            let (low, high) = (old[index].min(new[index]) - 1e-4, old[index].max(new[index]) + 1e-4);
+            assert!(
+                (low..=high).contains(&half[index]),
+                "dot {index}: {} not between {} and {}",
+                half[index],
+                old[index],
+                new[index]
+            );
+        }
+        // the colour slides too
+        let mut motion = Motion::default();
+        motion.color(Mood::Idle, 1.0);
+        let start = motion.color(Mood::Listening, 1.0);
+        let end = motion.color(Mood::Listening, 1.0 + FADE * 2.0);
+        assert_eq!(start, mood_color(Mood::Idle));
+        assert_eq!(end, mood_color(Mood::Listening));
     }
 }
