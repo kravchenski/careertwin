@@ -125,7 +125,8 @@ pub fn lit_dots(width: f32, height: f32, level: f32, mood: Mood, time: f64) -> V
 }
 
 /// The dot matrix behind the window, low in contrast so that the text on it can be read.
-pub fn background(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f64) {
+/// `strength` (0 to 1) is how visible the dots are: they step back while an answer is on the screen.
+pub fn background(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f64, strength: f32) {
     let color = mood_color(mood);
     let accent = if mood == Mood::Listening { theme::accent() } else { mix_accent(color) };
     let columns = (rect.width() / STEP).floor() as usize;
@@ -138,11 +139,12 @@ pub fn background(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f
     let place = |column: usize, row: usize| Pos2::new(left + column as f32 * STEP, bottom - row as f32 * STEP);
     for column in 0..columns {
         for row in 0..rows {
-            painter.circle_filled(place(column, row), 1.4, with_alpha(accent, 14));
+            painter.circle_filled(place(column, row), 1.4, with_alpha(accent, (14.0 * strength) as u8));
         }
     }
     for (column, row, brightness) in lit_dots(rect.width(), rect.height(), level, mood, time) {
-        painter.circle_filled(place(column, row), 2.5, with_alpha(accent, (26.0 + 104.0 * brightness) as u8));
+        let alpha = (26.0 + 104.0 * brightness) * strength;
+        painter.circle_filled(place(column, row), 2.5, with_alpha(accent, alpha as u8));
     }
 }
 

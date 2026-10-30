@@ -2,6 +2,16 @@
 //! shows in English, and the test in `text.rs` keeps every table complete.
 
 pub const PL: &[(&str, &str)] = &[
+    ("get_answer", "Pobierz odpowiedź"),
+    ("manual_hint", "Wpisz pytanie ręcznie…"),
+    ("pause_listening", "Wstrzymaj słuchanie"),
+    ("resume_listening", "Wznów słuchanie"),
+    ("start_listening", "Zacznij słuchać"),
+    ("ask_hint", "Odpowiedź na ostatnie słowa rozmówcy"),
+    ("nothing_heard", "Jeszcze nic nie słychać. Wpisz pytanie poniżej."),
+    ("menu", "Menu"),
+    ("prev_answer", "Poprzednia odpowiedź"),
+    ("next_answer", "Następna odpowiedź"),
     ("hide_taskbar", "Ukryj okno na pasku zadań"),
     (
         "taskbar_note",
@@ -70,7 +80,6 @@ pub const PL: &[(&str, &str)] = &[
     ("settings", "Ustawienia"),
     ("close", "Zamknij"),
     ("copy", "Kopiuj"),
-    ("question_hint", "Wpisz pytanie i naciśnij Enter"),
     ("details", "Szczegóły"),
     ("appearance", "Wygląd"),
     ("theme", "Motyw"),
@@ -98,7 +107,6 @@ pub const PL: &[(&str, &str)] = &[
     ("empty_body", "Wpisz pytanie powyżej lub naciśnij Zrzut ekranu, aby odpowiedzieć na to, co jest na ekranie."),
     ("no_context", "Brak faktów o Tobie. Połóż ABOUT.md obok folderu danych albo otwórz Ustawienia → Rozmowa."),
     ("answered_by", "Odpowiedział model {model}"),
-    ("history", "{n} z {total}"),
     ("key_terms", "Najważniejsze"),
     ("context", "Gdzie się tego używa"),
     ("next_questions", "Prawdopodobnie dalej"),
@@ -249,6 +257,16 @@ pub const PL: &[(&str, &str)] = &[
 ];
 
 pub const UK: &[(&str, &str)] = &[
+    ("get_answer", "Отримати відповідь"),
+    ("manual_hint", "Введіть запитання вручну…"),
+    ("pause_listening", "Поставити слухання на паузу"),
+    ("resume_listening", "Продовжити слухання"),
+    ("start_listening", "Почати слухати"),
+    ("ask_hint", "Відповідь на останнє, що сказав співрозмовник"),
+    ("nothing_heard", "Поки нічого не чутно. Введіть запитання нижче."),
+    ("menu", "Меню"),
+    ("prev_answer", "Попередня відповідь"),
+    ("next_answer", "Наступна відповідь"),
     ("hide_taskbar", "Сховати вікно з панелі завдань"),
     (
         "taskbar_note",
@@ -314,7 +332,6 @@ pub const UK: &[(&str, &str)] = &[
     ("settings", "Налаштування"),
     ("close", "Закрити"),
     ("copy", "Копіювати"),
-    ("question_hint", "Введіть запитання й натисніть Enter"),
     ("details", "Докладніше"),
     ("appearance", "Вигляд"),
     ("theme", "Тема"),
@@ -345,7 +362,6 @@ pub const UK: &[(&str, &str)] = &[
         "Ще немає фактів про вас. Покладіть ABOUT.md поруч із текою даних або відкрийте Налаштування → Співбесіда.",
     ),
     ("answered_by", "Відповіла модель {model}"),
-    ("history", "{n} із {total}"),
     ("key_terms", "Головне"),
     ("context", "Де це застосовують"),
     ("next_questions", "Імовірно далі"),
@@ -496,6 +512,16 @@ pub const UK: &[(&str, &str)] = &[
 ];
 
 pub const DE: &[(&str, &str)] = &[
+    ("get_answer", "Antwort holen"),
+    ("manual_hint", "Frage von Hand eingeben…"),
+    ("pause_listening", "Zuhören pausieren"),
+    ("resume_listening", "Zuhören fortsetzen"),
+    ("start_listening", "Zuhören starten"),
+    ("ask_hint", "Antwort auf das Letzte, was das Gegenüber gesagt hat"),
+    ("nothing_heard", "Noch nichts gehört. Geben Sie unten eine Frage ein."),
+    ("menu", "Menü"),
+    ("prev_answer", "Vorherige Antwort"),
+    ("next_answer", "Nächste Antwort"),
     ("hide_taskbar", "Fenster in der Taskleiste ausblenden"),
     (
         "taskbar_note",
@@ -564,7 +590,6 @@ pub const DE: &[(&str, &str)] = &[
     ("settings", "Einstellungen"),
     ("close", "Schließen"),
     ("copy", "Kopieren"),
-    ("question_hint", "Frage eingeben und Enter drücken"),
     ("details", "Details"),
     ("appearance", "Aussehen"),
     ("theme", "Design"),
@@ -601,7 +626,6 @@ pub const DE: &[(&str, &str)] = &[
         "Noch keine Fakten über Sie. Legen Sie Ihre ABOUT.md neben den Datenordner oder öffnen Sie Einstellungen → Gespräch.",
     ),
     ("answered_by", "Beantwortet von {model}"),
-    ("history", "{n} von {total}"),
     ("key_terms", "Kernpunkte"),
     ("context", "Wo es eingesetzt wird"),
     ("next_questions", "Wahrscheinlich als Nächstes"),
@@ -758,6 +782,16 @@ pub const DE: &[(&str, &str)] = &[
 ];
 
 pub const FR: &[(&str, &str)] = &[
+    ("get_answer", "Obtenir la réponse"),
+    ("manual_hint", "Saisissez une question à la main…"),
+    ("pause_listening", "Mettre l'écoute en pause"),
+    ("resume_listening", "Reprendre l'écoute"),
+    ("start_listening", "Commencer à écouter"),
+    ("ask_hint", "Réponse à la dernière chose dite par l'interlocuteur"),
+    ("nothing_heard", "Rien entendu pour l'instant. Saisissez une question ci-dessous."),
+    ("menu", "Menu"),
+    ("prev_answer", "Réponse précédente"),
+    ("next_answer", "Réponse suivante"),
     ("hide_taskbar", "Masquer la fenêtre de la barre des tâches"),
     (
         "taskbar_note",
@@ -829,7 +863,6 @@ pub const FR: &[(&str, &str)] = &[
     ("settings", "Réglages"),
     ("close", "Fermer"),
     ("copy", "Copier"),
-    ("question_hint", "Saisissez une question et appuyez sur Entrée"),
     ("details", "Détails"),
     ("appearance", "Apparence"),
     ("theme", "Thème"),
@@ -866,7 +899,6 @@ pub const FR: &[(&str, &str)] = &[
         "Aucun fait sur vous pour l'instant. Placez votre ABOUT.md à côté du dossier de données, ou ouvrez Réglages → Entretien.",
     ),
     ("answered_by", "Réponse de {model}"),
-    ("history", "{n} sur {total}"),
     ("key_terms", "Points clés"),
     ("context", "Où cela sert"),
     ("next_questions", "Probablement ensuite"),
@@ -1023,6 +1055,16 @@ pub const FR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("get_answer", "Obtener respuesta"),
+    ("manual_hint", "Escribe una pregunta a mano…"),
+    ("pause_listening", "Pausar la escucha"),
+    ("resume_listening", "Reanudar la escucha"),
+    ("start_listening", "Empezar a escuchar"),
+    ("ask_hint", "Respuesta a lo último que dijo el entrevistador"),
+    ("nothing_heard", "Aún no se oye nada. Escribe una pregunta abajo."),
+    ("menu", "Menú"),
+    ("prev_answer", "Respuesta anterior"),
+    ("next_answer", "Respuesta siguiente"),
     ("hide_taskbar", "Ocultar la ventana de la barra de tareas"),
     (
         "taskbar_note",
@@ -1094,7 +1136,6 @@ pub const ES: &[(&str, &str)] = &[
     ("settings", "Ajustes"),
     ("close", "Cerrar"),
     ("copy", "Copiar"),
-    ("question_hint", "Escribe una pregunta y pulsa Enter"),
     ("details", "Detalles"),
     ("appearance", "Apariencia"),
     ("theme", "Tema"),
@@ -1128,7 +1169,6 @@ pub const ES: &[(&str, &str)] = &[
         "Todavía no hay datos sobre ti. Pon tu ABOUT.md junto a la carpeta de datos o abre Ajustes → Entrevista.",
     ),
     ("answered_by", "Respondió {model}"),
-    ("history", "{n} de {total}"),
     ("key_terms", "Puntos clave"),
     ("context", "Dónde se usa"),
     ("next_questions", "Probablemente después"),

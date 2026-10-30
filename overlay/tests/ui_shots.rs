@@ -1,17 +1,19 @@
 //! The window drawn headless: what a screen reader sees is checked, and pictures are written (when `UI_SHOTS`
 //! names a folder) so the look can be judged.
 
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
+use careertwin_overlay::coach::{CoachError, Reply, Request};
 use careertwin_overlay::paths::Paths;
 use careertwin_overlay::questions::Kind;
-use careertwin_overlay::session::{Event as Heard, State};
+use careertwin_overlay::session::{Event as Heard, Model, State};
 use careertwin_overlay::ui::settings_ui::Tab;
 use careertwin_overlay::ui::{App, Entry, Event, Source, theme};
 use careertwin_overlay::update::{Asset, Available, Release};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
+use tokio_util::sync::CancellationToken;
 
 const DEMO: &str = include_str!("../../prep/tests/fixtures/ABOUT.demo.md");
 
@@ -22,6 +24,51 @@ struct Fixture {
 }
 
 fn fixture(language: &str) -> Fixture {
+    fixture_model(language, None)
+}
+
+/// A model that answers at once (or when stopped, for a slow one) and remembers what it was asked.
+struct Answers {
+    asked: Mutex<Vec<String>>,
+    slow: bool,
+}
+
+impl Answers {
+    fn new(slow: bool) -> Arc<Self> {
+        Arc::new(Self { asked: Mutex::new(Vec::new()), slow })
+    }
+
+    fn count(&self) -> usize {
+        self.asked.lock().unwrap().len()
+    }
+}
+
+impl Model for Answers {
+    fn ask(
+        &self,
+        request: &Request,
+        cancel: &CancellationToken,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<Reply, CoachError> {
+        self.asked.lock().unwrap().push(request.prompt.clone());
+        on_chunk("ANSWER:\nfrom the model");
+        if self.slow {
+            for _ in 0..500 {
+                if cancel.is_cancelled() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        Ok(Reply { text: "ANSWER:\nfrom the model".into(), finish: Some("stop".into()), fell_back: None })
+    }
+
+    fn supports_listening(&self) -> bool {
+        false
+    }
+}
+
+fn fixture_model(language: &str, model: Option<Arc<dyn Model>>) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let data = dir.path().join("data");
     std::fs::create_dir_all(data.join("interview")).unwrap();
@@ -33,7 +80,7 @@ fn fixture(language: &str) -> Fixture {
     )
     .unwrap();
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
-    let app = App::new(Paths::under(data), runtime.handle().clone(), Arc::new(|| {}));
+    let app = App::with_model(Paths::under(data), runtime.handle().clone(), Arc::new(|| {}), model);
     Fixture { app, _dir: dir, _runtime: runtime }
 }
 
@@ -88,7 +135,8 @@ fn the_window_starts_empty_and_says_what_to_do() {
     harness.get_by_label("Nothing asked yet");
     harness.get_by_label("Ask");
     harness.get_by_label("Screenshot");
-    harness.get_by_label("Settings");
+    harness.get_by_label("Menu");
+    harness.get_by_label("Get answer");
     shot(&mut harness, "overlay-empty");
 }
 
@@ -448,7 +496,7 @@ fn the_equalizer_moves_with_the_level_and_the_mood() {
                 .build_ui(move |ui| {
                     let rect = ui.max_rect();
                     ui.painter().rect_filled(rect, 14.0, theme::panel());
-                    equalizer::background(ui.painter(), rect.shrink(6.0), level, mood, time);
+                    equalizer::background(ui.painter(), rect.shrink(6.0), level, mood, time, 1.0);
                     let strip = egui::Rect::from_min_size(rect.min + egui::vec2(20.0, 14.0), egui::vec2(86.0, 26.0));
                     ui.painter().rect_filled(strip, 13.0, theme::mix(theme::panel(), theme::text(), 0.09));
                     equalizer::dots(ui.painter(), strip, level, mood, time);
@@ -460,4 +508,276 @@ fn the_equalizer_moves_with_the_level_and_the_mood() {
         }
     }
     theme::set_palette(theme::preset("midnight"));
+}
+
+// ---- every button of the window is pressed, the way a pointer presses it --------------------------------------------
+
+/// Run frames until `done` holds: what the threads of the session say reaches the window a moment later.
+fn settle(harness: &mut Harness<'_, App>, done: impl Fn(&App) -> bool) {
+    for _ in 0..600 {
+        harness.run_steps(1);
+        if done(harness.state()) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("the window never got where the test waits for it");
+}
+
+fn window_with(model: Arc<Answers>) -> (Harness<'static, App>, tempfile::TempDir, tokio::runtime::Runtime) {
+    let mut fixture = fixture_model("en", Some(model));
+    fixture.app.settings.listen = true;
+    fixture.app.settings.screenshot_tool = "no-such-tool".into(); // a press must never capture the real screen
+    harness(fixture, 900.0, 520.0)
+}
+
+#[test]
+fn the_round_button_pauses_and_resumes_listening() {
+    let (mut harness, _dir, _runtime) = window_with(Answers::new(false));
+    harness.run();
+    assert!(!harness.state().paused);
+    harness.get_by_label("Pause listening").click();
+    settle(&mut harness, |app| app.paused);
+    harness.run_steps(2);
+    harness.get_by_label("Resume listening").click();
+    settle(&mut harness, |app| !app.paused);
+    harness.run_steps(2);
+    harness.get_by_label("Pause listening");
+}
+
+#[test]
+fn the_round_button_switches_listening_on_when_nothing_is_set_to_listen() {
+    let mut fixture = fixture_model("en", Some(Answers::new(false)));
+    fixture.app.settings.listen = false;
+    fixture.app.settings.use_mic = false;
+    fixture.app.settings.stt_engine = "deepgram".into(); // with no key: nothing is recorded, and it says why
+    fixture.app.settings.deepgram_key.clear();
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 520.0);
+    harness.run();
+    harness.get_by_label("Start listening").click();
+    settle(&mut harness, |app| app.settings.listen);
+    harness.run();
+    assert!(harness.state().notice.as_ref().is_some_and(|(text, error)| *error && text.contains("Deepgram")));
+}
+
+#[test]
+fn the_ask_pill_answers_the_last_thing_heard_and_says_so_when_nothing_was() {
+    let model = Answers::new(false);
+    let (mut harness, _dir, _runtime) = window_with(model.clone());
+    harness.run();
+    harness.get_by_label("Ask").click();
+    harness.run();
+    assert!(harness.state().notice.as_ref().is_some_and(|(text, _)| text.contains("Nothing heard yet")));
+    assert_eq!(model.count(), 0);
+    harness.state().session.with_log(|log| log.add("Interviewer", "What is a left join?"));
+    harness.get_by_label("Ask").click();
+    settle(&mut harness, |app| app.entries.first().is_some_and(|entry| entry.done));
+    assert_eq!(model.count(), 1);
+    assert!(model.asked.lock().unwrap()[0].contains("What is a left join?"));
+    harness.get_by_label_contains("from the model");
+}
+
+#[test]
+fn the_screenshot_pill_starts_a_capture_and_a_missing_tool_is_said_out_loud() {
+    let (mut harness, _dir, _runtime) = window_with(Answers::new(false));
+    harness.run();
+    harness.get_by_label("Screenshot").click();
+    settle(&mut harness, |app| app.notice.is_some());
+    let notice = harness.state().notice.clone().unwrap();
+    assert!(notice.1 && notice.0.contains("no-such-tool"), "{notice:?}");
+    assert!(!harness.state().busy(), "the window is free again after a failed capture");
+}
+
+#[test]
+fn a_pill_that_cannot_be_pressed_does_nothing() {
+    let model = Answers::new(true);
+    let (mut harness, _dir, _runtime) = window_with(model.clone());
+    harness.run();
+    harness.state_mut().settings.screenshot_enabled = false;
+    harness.run();
+    harness.get_by_label("Screenshot").click();
+    harness.run();
+    assert!(!harness.state().busy() && harness.state().notice.is_none());
+}
+
+#[test]
+fn the_menu_opens_and_each_of_its_items_does_what_it_says() {
+    let mut fixture = fixture_model("en", Some(Answers::new(false)));
+    fixture.app.library.new_interview("Second interview");
+    fixture.app.library_changed();
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 620.0);
+    harness.run_steps(3);
+    let second = harness.state().library.active.clone();
+    // Settings
+    harness.get_by_label("Menu").click();
+    harness.run_steps(3);
+    for label in ["Settings", "Interview", "Second interview", "Keep the window on top", "Check now", "Quit"] {
+        assert!(harness.query_all_by_label(label).next().is_some(), "the menu lacks {label}");
+    }
+    harness.get_by_label("Settings").click();
+    harness.run_steps(3);
+    assert!(harness.state().settings_open);
+    harness.state_mut().settings_open = false;
+    harness.run_steps(3);
+    // another interview
+    harness.get_by_label("Menu").click();
+    harness.run_steps(3);
+    harness.get_by_label("Vention: Data Engineering Internship (Gdańsk)").click();
+    harness.run_steps(3);
+    assert_ne!(harness.state().library.active, second);
+    // on top, and back
+    let pinned = harness.state().settings.pinned;
+    harness.get_by_label("Menu").click();
+    harness.run_steps(3);
+    harness.get_by_label("Keep the window on top").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().settings.pinned, !pinned);
+    // quit
+    harness.get_by_label("Menu").click();
+    harness.run_steps(3);
+    harness.get_by_label("Quit").click();
+    harness.run_steps(3);
+    assert!(harness.state().quitting());
+}
+
+#[test]
+fn a_question_typed_by_hand_is_answered_by_the_button_and_by_enter_and_stopped_by_stop() {
+    let model = Answers::new(false);
+    let (mut harness, _dir, _runtime) = window_with(model.clone());
+    harness.run();
+    // empty: nothing to get
+    harness.get_by_label("Get answer").click();
+    harness.run();
+    assert_eq!(model.count(), 0);
+    // the button
+    harness.get_by_label("Type a question by hand…").click();
+    harness.event(egui::Event::Text("What is a left join?".into()));
+    harness.run();
+    harness.get_by_label("Get answer").click();
+    settle(&mut harness, |app| app.entries.first().is_some_and(|entry| entry.done));
+    assert_eq!((model.count(), harness.state().input.as_str()), (1, ""));
+    assert_eq!(harness.state().entries[0].source, Source::Typed);
+    // Enter
+    harness.get_by_label("Type a question by hand…").click();
+    harness.event(egui::Event::Text("And a right join?".into()));
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    settle(&mut harness, |app| app.entries.len() == 2 && app.entries[1].done);
+    assert_eq!(model.count(), 2);
+    // a slow answer is stopped
+    let slow = Answers::new(true);
+    let (mut harness, _dir, _runtime) = window_with(slow.clone());
+    harness.run();
+    harness.get_by_label("Type a question by hand…").click();
+    harness.event(egui::Event::Text("Explain indexes".into()));
+    harness.run();
+    harness.get_by_label("Get answer").click();
+    settle(&mut harness, |app| app.thinking());
+    harness.run();
+    harness.get_by_label("Stop").click();
+    settle(&mut harness, |app| !app.thinking());
+    assert!(harness.state().entries[0].done);
+}
+
+#[test]
+fn the_keys_on_the_pills_do_what_the_pills_do() {
+    let model = Answers::new(false);
+    let (mut harness, _dir, _runtime) = window_with(model.clone());
+    harness.run();
+    harness.state().session.with_log(|log| log.add("Interviewer", "What is an index?"));
+    let both = egui::Modifiers { ctrl: true, command: true, ..egui::Modifiers::NONE };
+    harness.key_press_modifiers(both, egui::Key::Enter); // Ask
+    settle(&mut harness, |app| app.entries.first().is_some_and(|entry| entry.done));
+    assert_eq!(model.count(), 1);
+    let with_shift = egui::Modifiers { shift: true, ..both };
+    harness.key_press_modifiers(with_shift, egui::Key::Enter); // the screenshot, not Ask
+    settle(&mut harness, |app| app.notice.as_ref().is_some_and(|(text, _)| text.contains("no-such-tool")));
+    assert_eq!(model.count(), 1, "Ctrl+Shift+Enter must not also ask");
+}
+
+#[test]
+fn the_answers_are_stepped_through_by_the_buttons_and_the_keys_and_the_counter_says_where() {
+    let mut fixture = fixture("en");
+    for number in 1..=3 {
+        let mut entry = answered(&format!("Question {number}"), &format!("ANSWER:\nAnswer {number}"));
+        entry.id = number;
+        fixture.app.entries.push(entry);
+    }
+    fixture.app.shown = 2;
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 520.0);
+    harness.run();
+    harness.get_by_label("3/3");
+    harness.get_by_label_contains("Answer 3");
+    harness.get_by_label("Previous answer").click();
+    harness.run();
+    harness.get_by_label("2/3");
+    harness.get_by_label_contains("Answer 2");
+    harness.get_by_label("Next answer").click();
+    harness.run();
+    harness.get_by_label("3/3");
+    // the ends: pressing past them does nothing
+    harness.get_by_label("Next answer").click();
+    harness.run();
+    harness.get_by_label("3/3");
+    // the keys, while the line to type on is empty
+    let both = egui::Modifiers { ctrl: true, command: true, ..egui::Modifiers::NONE };
+    harness.key_press_modifiers(both, egui::Key::ArrowLeft);
+    harness.run();
+    harness.get_by_label("2/3");
+    harness.key_press_modifiers(both, egui::Key::ArrowLeft);
+    harness.run();
+    harness.get_by_label("1/3");
+    harness.key_press_modifiers(both, egui::Key::ArrowLeft);
+    harness.run();
+    harness.get_by_label("1/3");
+    harness.key_press_modifiers(both, egui::Key::ArrowRight);
+    harness.run();
+    harness.get_by_label("2/3");
+    shot(&mut harness, "overlay-steps");
+}
+
+#[test]
+fn copy_puts_the_answer_on_the_clipboard() {
+    let mut fixture = fixture("en");
+    fixture.app.entries.push(answered("What is a left join?", "ANSWER:\nIt keeps the left rows."));
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 420.0);
+    harness.run();
+    harness.get_by_label("Copy").click();
+    harness.run_steps(1); // the frame that handles the press is the one whose output has the copy
+    let copied = harness
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .any(|command| matches!(command, egui::OutputCommand::CopyText(text) if text == "It keeps the left rows."));
+    assert!(copied, "the answer was not copied: {:?}", harness.output().platform_output.commands);
+}
+
+#[test]
+fn the_window_in_a_narrow_size_drops_the_keys_from_the_pills_and_keeps_every_button() {
+    let (mut harness, _dir, _runtime) = window_with(Answers::new(false));
+    harness.set_size(egui::vec2(520.0, 300.0));
+    harness.run();
+    for label in ["Pause listening", "Ask", "Screenshot", "Menu", "Get answer"] {
+        harness.get_by_label(label);
+    }
+    shot(&mut harness, "overlay-narrow");
+}
+
+#[test]
+fn nothing_floats_over_the_window_to_take_its_clicks() {
+    // the corner to pull a frameless window by was once a layer of its own that covered most of the window
+    let mut fixture = fixture("en");
+    fixture.app.settings.frameless = true;
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 520.0);
+    harness.run();
+    for y in (0..520).step_by(10) {
+        for x in (0..900).step_by(10) {
+            let layer = harness.ctx.layer_id_at(egui::pos2(x as f32, y as f32));
+            assert!(
+                layer.is_none_or(|layer| layer.order == egui::Order::Background),
+                "({x}, {y}) is covered by {layer:?}"
+            );
+        }
+    }
 }

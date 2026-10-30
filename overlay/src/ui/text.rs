@@ -4,6 +4,16 @@ use super::text_more as more;
 
 /// (key, English, Russian). A missing translation falls back to English.
 const TABLE: &[(&str, &str, &str)] = &[
+    ("get_answer", "Get answer", "Получить ответ"),
+    ("manual_hint", "Type a question by hand…", "Введите вопрос вручную…"),
+    ("pause_listening", "Pause listening", "Поставить слушание на паузу"),
+    ("resume_listening", "Resume listening", "Продолжить слушание"),
+    ("start_listening", "Start listening", "Начать слушать"),
+    ("ask_hint", "Answer the last thing the interviewer said", "Ответ на последнее, что сказал интервьюер"),
+    ("nothing_heard", "Nothing heard yet. Type a question below.", "Пока ничего не слышно. Введите вопрос ниже."),
+    ("menu", "Menu", "Меню"),
+    ("prev_answer", "Previous answer", "Предыдущий ответ"),
+    ("next_answer", "Next answer", "Следующий ответ"),
     ("hide_taskbar", "Hide the window from the taskbar", "Скрыть окно с панели задач"),
     (
         "taskbar_note",
@@ -105,7 +115,6 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("settings", "Settings", "Настройки"),
     ("close", "Close", "Закрыть"),
     ("copy", "Copy", "Копировать"),
-    ("question_hint", "Type a question and press Enter", "Введите вопрос и нажмите Enter"),
     ("details", "Details", "Подробнее"),
     ("appearance", "Appearance", "Оформление"),
     ("theme", "Theme", "Тема"),
@@ -145,7 +154,6 @@ const TABLE: &[(&str, &str, &str)] = &[
         "Пока нет фактов о вас. Положите ABOUT.md рядом с папкой данных или откройте Настройки → Собеседование.",
     ),
     ("answered_by", "Answered by {model}", "Ответила модель {model}"),
-    ("history", "{n} of {total}", "{n} из {total}"),
     ("key_terms", "Key points", "Главное"),
     ("context", "Where it is used", "Где применяется"),
     ("next_questions", "Likely next", "Дальше спросят"),
