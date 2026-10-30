@@ -2,6 +2,12 @@
 //! shows in English, and the test in `text.rs` keeps every table complete.
 
 pub const PL: &[(&str, &str)] = &[
+    ("hide_taskbar", "Ukryj okno na pasku zadań"),
+    (
+        "taskbar_note",
+        "Okno wysuniesz na wierzch lub zakończysz ze strzałki w obszarze powiadomień. Zadziała po następnym uruchomieniu okna.",
+    ),
+    ("tray_show", "Pokaż okno"),
     ("parallel", "Kilka kont naraz"),
     ("parallel_off", "Po jednym"),
     ("parallel_hedged", "Następne, gdy pierwsze zwleka"),
@@ -243,6 +249,12 @@ pub const PL: &[(&str, &str)] = &[
 ];
 
 pub const UK: &[(&str, &str)] = &[
+    ("hide_taskbar", "Сховати вікно з панелі завдань"),
+    (
+        "taskbar_note",
+        "Винести вікно вперед або вийти можна зі стрілки в області сповіщень. Застосується під час наступного запуску вікна.",
+    ),
+    ("tray_show", "Показати вікно"),
     ("parallel", "Кілька акаунтів одразу"),
     ("parallel_off", "По одному"),
     ("parallel_hedged", "Наступний, якщо перший гальмує"),
@@ -484,6 +496,12 @@ pub const UK: &[(&str, &str)] = &[
 ];
 
 pub const DE: &[(&str, &str)] = &[
+    ("hide_taskbar", "Fenster in der Taskleiste ausblenden"),
+    (
+        "taskbar_note",
+        "Das Fenster lässt sich über den Pfeil im Infobereich nach vorn holen oder beenden. Gilt ab dem nächsten Start des Fensters.",
+    ),
+    ("tray_show", "Fenster zeigen"),
     ("parallel", "Mehrere Konten gleichzeitig"),
     ("parallel_off", "Eines nach dem anderen"),
     ("parallel_hedged", "Das nächste, wenn das erste trödelt"),
@@ -740,6 +758,12 @@ pub const DE: &[(&str, &str)] = &[
 ];
 
 pub const FR: &[(&str, &str)] = &[
+    ("hide_taskbar", "Masquer la fenêtre de la barre des tâches"),
+    (
+        "taskbar_note",
+        "Amenez la fenêtre au premier plan, ou quittez, depuis la flèche de la zone de notification. Pris en compte au prochain démarrage de la fenêtre.",
+    ),
+    ("tray_show", "Afficher la fenêtre"),
     ("parallel", "Plusieurs comptes à la fois"),
     ("parallel_off", "Un par un"),
     ("parallel_hedged", "Le suivant si le premier tarde"),
@@ -999,6 +1023,12 @@ pub const FR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("hide_taskbar", "Ocultar la ventana de la barra de tareas"),
+    (
+        "taskbar_note",
+        "Trae la ventana al frente, o sal, desde la flecha del área de notificaciones. Se aplica la próxima vez que se abra la ventana.",
+    ),
+    ("tray_show", "Mostrar la ventana"),
     ("parallel", "Varias cuentas a la vez"),
     ("parallel_off", "De una en una"),
     ("parallel_hedged", "La siguiente si la primera tarda"),

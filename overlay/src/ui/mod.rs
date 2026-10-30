@@ -493,6 +493,7 @@ impl App {
     /// The words of the tray menu.
     pub fn tray_labels(&self) -> crate::tray::Labels {
         crate::tray::Labels {
+            show: self.t("tray_show"),
             screenshot: self.t("screenshot"),
             listening: self.t("tray_listening"),
             quit: self.t("tray_quit"),
@@ -1109,6 +1110,10 @@ pub fn window_options(settings: &Settings, app: &AppSettings) -> eframe::NativeO
         .with_decorations(!settings.frameless);
     if settings.pinned {
         viewport = viewport.with_always_on_top();
+    }
+    // no taskbar button: the arrow in the notification area brings the window forward and quits (so the icon is needed)
+    if cfg!(windows) && app.tray_icon && app.hide_from_taskbar {
+        viewport = viewport.with_taskbar(false);
     }
     eframe::NativeOptions { viewport, ..Default::default() }
 }

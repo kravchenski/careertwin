@@ -4,6 +4,13 @@ use super::text_more as more;
 
 /// (key, English, Russian). A missing translation falls back to English.
 const TABLE: &[(&str, &str, &str)] = &[
+    ("hide_taskbar", "Hide the window from the taskbar", "Скрыть окно с панели задач"),
+    (
+        "taskbar_note",
+        "Bring the window forward, or quit, from the arrow in the notification area. It takes effect the next time the window starts.",
+        "Вынести окно вперёд или выйти можно из стрелки в области уведомлений. Применится при следующем запуске окна.",
+    ),
+    ("tray_show", "Show the window", "Показать окно"),
     ("parallel", "Several accounts at once", "Несколько аккаунтов сразу"),
     ("parallel_off", "One at a time", "По одному"),
     ("parallel_hedged", "The next one when the first is slow", "Следующий, если первый медлит"),

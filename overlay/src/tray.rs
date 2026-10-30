@@ -22,6 +22,7 @@ pub enum Look {
 /// What the menu asks of the window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
+    Show,
     Screenshot,
     ToggleListening,
     Quit,
@@ -85,6 +86,7 @@ pub fn arrow_rgba(size: u32, color: [u8; 3], look: Look) -> Vec<u8> {
 /// The words of the menu, in the window's language.
 #[derive(Clone, Debug, Default)]
 pub struct Labels {
+    pub show: String,
     pub screenshot: String,
     pub listening: String,
     pub quit: String,
@@ -158,16 +160,21 @@ mod native {
             tooltip: &str,
             on_command: impl Fn(Command) + Send + Sync + 'static,
         ) -> Result<Self, String> {
+            let show = MenuItem::new(&labels.show, true, None);
             let screenshot = MenuItem::new(&labels.screenshot, true, None);
             let listening = CheckMenuItem::new(&labels.listening, true, true, None);
             let quit = MenuItem::new(&labels.quit, true, None);
             let menu = Menu::new();
-            menu.append_items(&[&screenshot, &listening, &PredefinedMenuItem::separator(), &quit])
+            menu.append_items(&[&show, &screenshot, &listening, &PredefinedMenuItem::separator(), &quit])
                 .map_err(|error| error.to_string())?;
+            let show_id = show.id().clone();
             let (screenshot_id, listening_id, quit_id) =
                 (screenshot.id().clone(), listening.id().clone(), quit.id().clone());
             MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
-                let command = if event.id == screenshot_id {
+                let command = if event.id == show_id {
+                    bring_to_front(); // nothing for the window to do: it is only brought forward
+                    return;
+                } else if event.id == screenshot_id {
                     Command::Screenshot
                 } else if event.id == listening_id {
                     Command::ToggleListening

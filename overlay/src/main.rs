@@ -158,6 +158,7 @@ fn main() -> ExitCode {
                 match Tray::new(&labels, &tooltip, move |command| {
                     careertwin_overlay::tray::reveal();
                     let name = match command {
+                        Command::Show => return,
                         Command::Screenshot => "screenshot",
                         Command::ToggleListening => "listening",
                         Command::Quit => "quit",

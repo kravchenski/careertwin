@@ -1130,6 +1130,14 @@ impl App {
                 self.app_changed();
             }
             note(ui, &t("tray_note"));
+            ui.add_enabled_ui(self.app.tray_icon, |ui| {
+                let mut hide = self.app.hide_from_taskbar;
+                if ui.checkbox(&mut hide, t("hide_taskbar")).changed() {
+                    self.app.hide_from_taskbar = hide;
+                    self.app_changed();
+                }
+            });
+            note(ui, &t("taskbar_note"));
         }
         if crate::capture_exclude::supported() {
             let mut hide = self.app.hide_from_sharing;

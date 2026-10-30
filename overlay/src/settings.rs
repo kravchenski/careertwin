@@ -378,6 +378,8 @@ pub struct AppSettings {
     pub first_word_seconds: i64,
     /// Windows: an icon in the notification area, like the one for location in use.
     pub tray_icon: bool,
+    /// Windows: no button for the window in the taskbar; the tray icon brings it forward and quits (needs the icon).
+    pub hide_from_taskbar: bool,
 }
 
 pub const PARALLEL_MODES: [&str; 3] = ["off", "hedged", "all"];
@@ -403,6 +405,7 @@ impl Default for AppSettings {
             parallel_accounts: "hedged".to_owned(),
             first_word_seconds: 15,
             tray_icon: true,
+            hide_from_taskbar: true,
         }
     }
 }
@@ -460,6 +463,9 @@ impl AppSettings {
         if let Some(Value::Bool(flag)) = data.get("tray_icon") {
             settings.tray_icon = *flag;
         }
+        if let Some(Value::Bool(flag)) = data.get("hide_from_taskbar") {
+            settings.hide_from_taskbar = *flag;
+        }
         settings
     }
 
@@ -480,6 +486,7 @@ impl AppSettings {
             "parallel_accounts": self.parallel_accounts,
             "first_word_seconds": self.first_word_seconds,
             "tray_icon": self.tray_icon,
+            "hide_from_taskbar": self.hide_from_taskbar,
         });
         write_private(path, &serde_json::to_string_pretty(&value).unwrap_or_default())
     }
@@ -643,6 +650,7 @@ mod tests {
             parallel_accounts: "all".into(),
             first_word_seconds: 8,
             tray_icon: false,
+            hide_from_taskbar: false,
         };
         let settings = AppSettings { screenshot_key: "Ctrl+Alt+K".into(), ..settings };
         settings.save(&path).unwrap();
@@ -653,7 +661,7 @@ mod tests {
     fn a_look_that_cannot_be_read_is_the_default_one() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
-        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes"}"##)
+        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes", "hide_from_taskbar": 1}"##)
             .unwrap();
         assert_eq!(AppSettings::load(&path), AppSettings::default());
     }
