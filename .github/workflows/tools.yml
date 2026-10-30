@@ -1,0 +1,60 @@
+name: Tools
+
+# The command-line tools in tools/: the release decision that the Auto release workflow runs, and the link checker.
+# Formatting, lints and tests, with and without the link checker's dependencies.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "tools/**"
+      - ".github/workflows/tools.yml"
+  pull_request:
+    paths:
+      - "tools/**"
+      - ".github/workflows/tools.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Format, lint, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
+
+      - name: Cache the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/target
+          key: tools-${{ runner.os }}-${{ hashFiles('tools/Cargo.lock') }}
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Lints (the release tool alone, then with the link checker)
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked --all-features
+
+      - name: What the release tool says about this repository
+        run: cargo run --quiet --locked --bin next-release -- --root ..

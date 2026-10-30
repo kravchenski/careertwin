@@ -1,0 +1,39 @@
+[package]
+name = "careertwin-tools"
+version = "0.1.0"
+edition = "2024"
+description = "Command-line tools of the repository: the next release, and a check of the company links"
+publish = false
+
+[lib]
+name = "careertwin_tools"
+path = "src/lib.rs"
+
+# What the release workflow runs on a bare runner: no dependencies at all, so it builds in a second.
+[[bin]]
+name = "next-release"
+path = "src/bin/next_release.rs"
+
+[[bin]]
+name = "check-links"
+path = "src/bin/check_links.rs"
+required-features = ["links"]
+
+[[test]]
+name = "links"
+required-features = ["links"]
+
+[features]
+default = []
+# The link checker: HTTP requests and JSON.
+links = ["dep:reqwest", "dep:serde_json", "dep:tokio"]
+
+[dependencies]
+reqwest = { version = "0.13.5", optional = true, default-features = false, features = ["rustls"] }
+serde_json = { version = "1.0.154", optional = true, features = ["preserve_order"] }
+tokio = { version = "1.54.1", optional = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+wiremock = "0.6.5"

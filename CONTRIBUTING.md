@@ -57,7 +57,7 @@ against the repository listing before committing them. The `Prep` workflow runs 
 
 ## Releases
 
-Releases are automatic. Every push to `master` runs *Auto release* (`.github/workflows/autorelease.yml`), which reads the commit titles since the last `vX.Y.Z` tag with `scripts/next_release.py`:
+Releases are automatic. Every push to `master` runs *Auto release* (`.github/workflows/autorelease.yml`), which reads the commit titles since the last `vX.Y.Z` tag with `next-release` (Rust, in `tools/`):
 
 | Since the last release | Result |
 |---|---|
@@ -66,7 +66,7 @@ Releases are automatic. Every push to `master` runs *Auto release* (`.github/wor
 | a breaking change (`feat!:`, or `BREAKING CHANGE:` in the body) | minor while the major version is 0, major after |
 | only `docs:`, `chore:`, `test:`, `ci:`, `style:`, `refactor:`, `build:` | no release |
 
-When there is something to release the workflow writes the version into `pyproject.toml` and `uv.lock` in a `chore: release vX.Y.Z` commit, tags it and starts *Release* on the tag. Run `python3 scripts/next_release.py` to see what the next push would do (it changes nothing without `--apply`). To skip one release put `[skip release]` in a commit message; to stop them altogether set the repository variable `AUTO_RELEASE` to `false` (Settings → Secrets and variables → Actions → Variables). Raising the version in `pyproject.toml` by hand and merging it also releases exactly that version. The workflow pushes the version commit to `master` with the workflow token, so it needs a `master` that the token may push to (a branch protection rule must let GitHub Actions bypass it).
+When there is something to release the workflow writes the version into `pyproject.toml`, `uv.lock` and `overlay/` in a `chore: release vX.Y.Z` commit, tags it and starts *Release* on the tag. Run `cargo run -q --manifest-path tools/Cargo.toml --bin next-release` to see what the next push would do (it changes nothing without `--apply`). To skip one release put `[skip release]` in a commit message; to stop them altogether set the repository variable `AUTO_RELEASE` to `false` (Settings → Secrets and variables → Actions → Variables). Raising the version in `pyproject.toml` by hand and merging it also releases exactly that version. The workflow pushes the version commit to `master` with the workflow token, so it needs a `master` that the token may push to (a branch protection rule must let GitHub Actions bypass it).
 
 *Release* builds the portable Windows zip, a Windows setup program (`.exe`, Inno Setup, built on a Windows runner) and a macOS disk image (`.dmg`, built on a macOS runner), and attaches them to a GitHub release together with `SHA256SUMS.txt`. Before publishing, it installs the setup on its Windows machine, imports the packages and draws the window from the installed program, then uninstalls it; on the macOS machine it mounts the dmg, checks the signature and does the same from the app inside. Each build takes about ten minutes and the macOS minutes cost ten times as much on a private repository, so a flood of `fix:` commits is a flood of releases: batch them, or use `[skip release]`.
 

@@ -1,8 +1,8 @@
 name: Auto release
 
 # Every push to master that carries a feat:, fix: or perf: commit since the last release becomes a release:
-# the version is chosen from the commit titles (scripts/next_release.py), written into pyproject.toml and
-# uv.lock in a "chore: release vX.Y.Z" commit, tagged, and the Release workflow is started on that tag. That
+# the version is chosen from the commit titles (tools/src/release.rs), written into pyproject.toml, uv.lock and
+# overlay/ in a "chore: release vX.Y.Z" commit, tagged, and the Release workflow is started on that tag. That
 # workflow builds the Windows zip and setup program and the macOS dmg, checks each one and publishes them.
 #
 # docs:, chore:, test:, ci:, style:, refactor: and build: commits alone make no release; put [skip release] in a
@@ -31,9 +31,15 @@ jobs:
         with:
           fetch-depth: 0  # the tags and the whole history are what the decision reads
 
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
       - name: Decide the version
         id: next
-        run: python3 scripts/next_release.py --apply | tee -a "$GITHUB_OUTPUT"
+        # the tool has no dependencies, so this builds in a second; the compiler's own messages go to stderr.
+        # bash with pipefail: if the build or the tool fails, so does the step (it must not read as "nothing to release")
+        shell: bash
+        run: cargo run --quiet --locked --manifest-path tools/Cargo.toml --bin next-release -- --apply | tee -a "$GITHUB_OUTPUT"
 
       - name: Commit the version, tag it and start the build
         if: steps.next.outputs.version != ''
