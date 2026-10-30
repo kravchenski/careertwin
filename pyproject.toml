@@ -16,7 +16,6 @@ dependencies = [
     "lxml>=5.0",
     "pdfminer.six>=20231228",
     "python-docx>=1.0",
-    "qdrant-client>=1.0",
     "langgraph>=0.2",
     "langchain-core>=0.3",
     "langchain-openai>=0.2",

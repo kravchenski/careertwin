@@ -14,7 +14,7 @@ GitHub · CV file · website ──► collectors ──► Career graph ──�
 
 `graph/schema.py` holds the Pydantic model: profile, experience, education, projects,
 skills, technologies, achievements and the evidence behind each claim. `to_search_text()` flattens it for
-matching. `storage/qdrant.py` can keep graphs in a Qdrant collection.
+matching.
 
 | Collector | Reads |
 |---|---|
