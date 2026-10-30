@@ -1,0 +1,73 @@
+name: Nix
+
+# The flake builds the Rust interview window for NixOS and gives a development shell. This builds it from
+# source on a machine with Nix, which is the only way to know the package still works.
+on:
+  push:
+    branches: [master]
+    paths:
+      - flake.nix
+      - flake.lock
+      - nix/**
+      - overlay/**
+      - prep/assets/fonts/**
+      - .github/workflows/nix.yml
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - nix/**
+      - overlay/Cargo.toml
+      - overlay/Cargo.lock
+      - .github/workflows/nix.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the window with Nix
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Pin the inputs (when flake.lock is not in the repository yet)
+        run: |
+          if [ ! -f flake.lock ]; then nix flake lock; echo "flake.lock was made here: commit it" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Evaluate the flake
+        run: nix flake check --no-build
+
+      - name: Build the window
+        run: nix build .#careertwin-overlay --print-build-logs
+
+      - name: It starts and says its version
+        run: |
+          out=$(./result/bin/careertwin-overlay --version)
+          echo "$out"
+          case "$out" in "careertwin-overlay "*) ;; *) echo "unexpected output: $out"; exit 1 ;; esac
+          test -x ./result/bin/careertwin-interview-ctl
+          test -f ./result/share/applications/careertwin-interview.desktop
+          test -f ./result/share/icons/hicolor/256x256/apps/careertwin-interview.png
+
+      - name: The development shell works
+        run: nix develop --command sh -c 'cargo --version && cmake --version && parec --version'
+
+      - name: Keep the lock
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flake.lock
+          path: flake.lock
+          if-no-files-found: ignore
+          retention-days: 14

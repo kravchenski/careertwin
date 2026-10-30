@@ -12,7 +12,7 @@ use careertwin_overlay::ui::settings_ui::Tab;
 use careertwin_overlay::ui::{App, Entry, Event, Source, theme};
 use careertwin_overlay::update::{Asset, Available, Release};
 use egui_kittest::Harness;
-use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::kittest::Queryable;
 use tokio_util::sync::CancellationToken;
 
 const DEMO: &str = include_str!("../../prep/tests/fixtures/ABOUT.demo.md");

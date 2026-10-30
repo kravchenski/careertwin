@@ -59,6 +59,26 @@ may warn that the publisher is unknown (More info, Run anyway) and the Mac refus
 unpacks the Linux tarball on GitHub's own machines before it publishes, but **nobody has tried the Windows and macOS
 builds by hand**, and call audio is not on the Mac.
 
+**NixOS.** The repository is a flake, because the prebuilt Linux tarball cannot run on NixOS (there is no `/usr/lib` for it
+to find its graphics and keyboard libraries). `nix run github:kravchenski/careertwin` starts the window, `nix profile install
+github:kravchenski/careertwin` installs it, and in a NixOS configuration:
+
+```nix
+{
+  inputs.careertwin.url = "github:kravchenski/careertwin";
+  # ...
+  environment.systemPackages = [ inputs.careertwin.packages.${pkgs.stdenv.hostPlatform.system}.default ];
+  hardware.graphics.enable = true;       # the window draws with OpenGL
+  services.pipewire = { enable = true; pulse.enable = true; };   # hearing the call: parec and pactl
+}
+```
+
+The package wraps the window with the libraries it opens at run time and puts `parec`, `pactl`, `grim`, `maim`, `scrot` and
+`xdg-open` at the end of `PATH` (the ones your system has come first). `careertwin-interview-ctl screenshot` is in the package
+for a compositor key. `nix develop` gives a shell to build the window (`cd overlay && cargo run --release`) and to work on the
+Python side (`uv`). The `Nix` workflow builds the package from source on every change to it; **nobody has run it on a NixOS
+machine yet**, and `flake.lock` is not in the repository until the first run makes one.
+
 **The Rust window.** The window in the releases is the Rust one (`overlay/`, [its README](../overlay/README.md)). It
 has four settings tabs (*Interview*, *Practice*, *AI*, *General*), a model for each of three jobs (answers,
 screenshots, speech recognition), several API keys per provider and a base URL, themes of your own, the dot

@@ -189,3 +189,32 @@ def test_the_overlay_workflow_compiles_and_lints_on_every_system():
     assert overlay["strategy"]["matrix"]["os"] == ["ubuntu-latest", "windows-latest", "macos-14"]
     commands = " ".join(step.get("run", "") for step in overlay["steps"])
     assert "cargo clippy --all-targets -- -D warnings" in commands and "cargo test --locked" in commands
+
+
+# ---- NixOS -------------------------------------------------------------------------------------------------------------
+
+
+def test_the_flake_builds_the_rust_window_and_reads_its_version_and_lock_from_the_crate():
+    flake = (ROOT / "flake.nix").read_text()
+    package = (ROOT / "nix/package.nix").read_text()
+    assert "careertwin-overlay = pkgs.callPackage ./nix/package.nix" in flake and "devShells" in flake
+    assert "fromTOML (builtins.readFile ../overlay/Cargo.toml)" in package  # one version, the release's
+    assert "cargoLock.lockFile = ../overlay/Cargo.lock" in package
+    assert "mainProgram = \"careertwin-overlay\"" in package and "careertwin-interview-ctl" in package
+
+
+def test_the_window_is_wrapped_with_the_libraries_it_opens_and_the_tools_it_starts():
+    runtime = (ROOT / "nix/runtime.nix").read_text()
+    package = (ROOT / "nix/package.nix").read_text()
+    for needed in ("wayland", "libxkbcommon", "libGL", "pulseaudio", "grim", "xdg-utils", "/run/opengl-driver/lib"):
+        assert needed in runtime, needed
+    assert "--prefix LD_LIBRARY_PATH" in package and "--suffix PATH" in package  # the system's own tools come first
+
+
+def test_the_nix_workflow_builds_the_package_and_runs_it():
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github/workflows/nix.yml").read_text())
+    steps = [step.get("name", "") for step in workflow["jobs"]["build"]["steps"]]
+    assert "Build the window" in steps and "It starts and says its version" in steps
+    assert "nix build .#careertwin-overlay" in (ROOT / ".github/workflows/nix.yml").read_text()
