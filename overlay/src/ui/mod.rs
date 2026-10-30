@@ -1,8 +1,10 @@
 //! The window: the answer on top, a line to ask on, and Settings in a window of their own.
 
 pub mod answer;
+pub mod chrome;
 pub mod equalizer;
 pub mod icon;
+pub mod markdown;
 pub mod settings_ui;
 pub mod text;
 pub mod text_more;
@@ -18,7 +20,7 @@ use egui::{Align, Layout, RichText, ScrollArea, Ui};
 
 use crate::brief::{InterviewBrief, ProjectDossier};
 use crate::capture_exclude;
-use crate::coach::{Coach, CoachConfig, Request};
+use crate::coach::{Coach, CoachConfig, Parallel, Request};
 use crate::export;
 use crate::hearing;
 use crate::library::Library;
@@ -30,10 +32,10 @@ use crate::questions::{Kind, classify};
 use crate::screenshot::{self, Shot};
 use crate::session::{self, CoachModel, Context, Retrieve, Session, State, Timing};
 use crate::settings::{AppSettings, Settings, load_all};
-use crate::transcript::{SCREENSHOT, TranscriptLog, YOU};
+use crate::transcript::{INTERVIEWER, SCREENSHOT, TranscriptLog, YOU};
 use crate::update::{self, Available, Release};
 
-use theme::{accent, danger, muted, on_accent, strong};
+use theme::{accent, danger, muted, strong};
 
 /// What the tasks that run off the window tell it.
 pub enum Event {
@@ -61,6 +63,16 @@ pub enum Event {
     },
     Downloaded(Result<PathBuf, String>),
     Exported(Result<Vec<PathBuf>, String>),
+}
+
+/// What was chosen in the menu at the right of the top bar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum MenuChoice {
+    Settings,
+    Interview(String),
+    Pinned(bool),
+    Updates,
+    Quit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,6 +138,10 @@ pub struct App {
     pub analyzing: Option<String>,
     /// Listening was started once; later changes switch the sources and the recogniser in place.
     hearing_on: bool,
+    /// Listening is switched off for now (the tray menu, or the pause key).
+    pub paused: bool,
+    /// The tray menu asked to quit; the window closes at its next frame.
+    quit_requested: bool,
     /// The listening settings the session runs with, to tell when they changed.
     hearing_applied: String,
     pub notice: Option<(String, bool)>,
@@ -134,6 +150,10 @@ pub struct App {
     pub settings_ui: settings_ui::State,
     pub update_ui: update_ui::State,
     pub level: equalizer::Level,
+    /// How the dots move from one mood to the next.
+    motion: equalizer::Motion,
+    /// Where the line under the question field was in the last frame: the waves rise up to it.
+    wave_top: Option<f32>,
     /// The time of the frame being drawn, in seconds: what the audio level is stamped with.
     clock: f64,
     /// What the window was last told, so a change is applied once.
@@ -156,6 +176,16 @@ struct Applied {
 
 impl App {
     pub fn new(paths: Paths, handle: tokio::runtime::Handle, repaint: Arc<dyn Fn() + Send + Sync>) -> Self {
+        Self::with_model(paths, handle, repaint, None)
+    }
+
+    /// As [`App::new`], with the model that answers: `None` is the coach that asks the provider of the settings.
+    pub fn with_model(
+        paths: Paths,
+        handle: tokio::runtime::Handle,
+        repaint: Arc<dyn Fn() + Send + Sync>,
+        model: Option<Arc<dyn session::Model>>,
+    ) -> Self {
         let (settings, app) = load_all(&paths);
         let library = Library::load(&paths.context_file());
         let (brief, problems) = crate::library::build_brief(&paths.about, library.current());
@@ -171,7 +201,7 @@ impl App {
         let (events, heard) = channel();
         let session = Session::new(
             context.clone(),
-            Arc::new(CoachModel { coach: coach.clone(), handle: handle.clone() }),
+            model.unwrap_or_else(|| Arc::new(CoachModel { coach: coach.clone(), handle: handle.clone() })),
             events,
             log,
             crate::languages::normalize(Some(&settings.language)).as_deref(),
@@ -216,6 +246,8 @@ impl App {
             project: None,
             analyzing: None,
             hearing_on: false,
+            paused: false,
+            quit_requested: false,
             hearing_applied: String::new(),
             notice: None,
             capturing: None,
@@ -223,6 +255,8 @@ impl App {
             settings_ui: settings_ui::State::default(),
             update_ui: update_ui::State::default(),
             level: equalizer::Level::default(),
+            motion: equalizer::Motion::default(),
+            wave_top: None,
             clock: 0.0,
             applied: Applied::default(),
             excluded_at: None,
@@ -259,6 +293,9 @@ impl App {
             model: non_empty(&self.settings.model),
             vision_model: non_empty(&self.settings.vision_model),
             fallback_models: self.settings.fallbacks(),
+            parallel: Parallel::parse(&self.app.parallel_accounts),
+            first_word: u64::try_from(self.app.first_word_seconds).ok().filter(|n| *n > 0).map(Duration::from_secs),
+            hedge: None,
         });
     }
 
@@ -300,6 +337,7 @@ impl App {
         if let Err(error) = self.app.save(&self.paths.app_file()) {
             self.say(&format!("Could not save the settings: {error}"), true);
         }
+        self.apply_coach();
     }
 
     pub fn library_changed(&mut self) {
@@ -462,8 +500,90 @@ impl App {
         self.session.stop();
     }
 
+    /// The round button: pause listening, resume it, or switch listening on when nothing is set to listen.
+    pub fn toggle_listening(&mut self) {
+        if !(self.settings.listen || self.settings.use_mic) {
+            self.settings.listen = true;
+            self.settings_changed();
+            if !self.hearing_on {
+                self.start_hearing();
+            }
+            return;
+        }
+        self.pause_hearing(!self.paused);
+    }
+
+    /// Whether the window is listening to anything right now.
+    pub fn listening_now(&self) -> bool {
+        (self.settings.listen || self.settings.use_mic) && !self.paused
+    }
+
+    /// The menu or the tray asked to quit.
+    pub fn quitting(&self) -> bool {
+        self.quit_requested
+    }
+
+    /// The Ask pill: an answer for the last thing the interviewer said, whether or not it sounded like a question.
+    pub fn ask_heard(&mut self) {
+        if self.busy() {
+            return;
+        }
+        let heard = self
+            .session
+            .with_log(|log| log.turns.iter().any(|turn| turn.speaker == INTERVIEWER && turn.text != SCREENSHOT));
+        if heard {
+            self.session.hint_now();
+        } else {
+            let message = self.t("nothing_heard");
+            self.say(&message, false);
+        }
+    }
+
+    /// Show the answer before or after the one shown.
+    pub fn step_answer(&mut self, forward: bool) {
+        let last = self.entries.len().saturating_sub(1);
+        self.shown = if forward { (self.shown + 1).min(last) } else { self.shown.saturating_sub(1) };
+    }
+
+    /// Copy the answer shown: the paragraph, or the lines to say when there is no paragraph.
+    pub fn copy_answer(&self, ctx: &egui::Context) {
+        if let Some(entry) = self.entries.get(self.shown.min(self.entries.len().saturating_sub(1)))
+            && !entry.raw.is_empty()
+        {
+            let parts = sections(&entry.raw);
+            ctx.copy_text(if parts.answer.is_empty() {
+                parts.points.join("\n").replace("**", "")
+            } else {
+                parts.answer
+            });
+        }
+    }
+
     pub fn pause_hearing(&mut self, paused: bool) {
+        self.paused = paused;
         self.session.pause(paused);
+    }
+
+    /// What the icon in the notification area shows: the look, the words for its tooltip, and whether listening is on.
+    pub fn tray_state(&self) -> (crate::tray::Look, String, bool) {
+        let (look, key) = match self.state {
+            State::Thinking => (crate::tray::Look::Active, "thinking"),
+            State::Listening if !self.paused => (crate::tray::Look::Active, "tray_listening"),
+            State::Paused => (crate::tray::Look::Idle, "tray_paused"),
+            _ => (crate::tray::Look::Idle, "ready"),
+        };
+        let words = if self.paused && key == "ready" { self.t("tray_paused") } else { self.t(key) };
+        (look, format!("CareerTwin Interview: {words}"), !self.paused)
+    }
+
+    /// The words of the tray menu.
+    pub fn tray_labels(&self) -> crate::tray::Labels {
+        crate::tray::Labels {
+            show: self.t("tray_show"),
+            screenshot: self.t("screenshot"),
+            listening: self.t("tray_listening"),
+            quit: self.t("tray_quit"),
+        }
     }
 
     /// What a session event changes in the window.
@@ -537,6 +657,11 @@ impl App {
             }
             E::State(state) => {
                 self.state = state;
+                match state {
+                    State::Paused => self.paused = true,
+                    State::Listening => self.paused = false,
+                    _ => {}
+                }
                 if state != State::Thinking {
                     self.caption.clear();
                 }
@@ -622,6 +747,8 @@ impl App {
                         let question = std::mem::take(&mut self.input);
                         self.ask(&question);
                     }
+                    "listening" => self.pause_hearing(!self.paused),
+                    "quit" => self.quit_requested = true,
                     _ => {}
                 },
                 Event::Models(result) => self.settings_ui.models_loaded(result),
@@ -747,7 +874,9 @@ impl App {
     }
 
     fn apply_window(&mut self, ctx: &egui::Context) {
-        let palette = theme::from_settings(&self.app);
+        // the system theme follows the system's dark or light mode (dark when the system does not say)
+        let system_dark = !matches!(ctx.system_theme(), Some(egui::Theme::Light));
+        let palette = theme::from_settings_for(&self.app, system_dark);
         let palette_changed = self.applied.palette != Some(palette);
         if palette_changed {
             self.applied.palette = Some(palette);
@@ -790,53 +919,126 @@ impl App {
         }
     }
 
-    fn equalizer_dots(&self) -> bool {
-        matches!(self.app.equalizer.as_str(), "both" | "dots")
-    }
-
     fn equalizer_background(&self) -> bool {
-        matches!(self.app.equalizer.as_str(), "both" | "background")
+        self.app.equalizer == "background"
     }
 
+    /// The top bar: the round pause button and the dots at the left, the two pills in the middle, the menu at the right.
     fn header(&mut self, ui: &mut Ui) {
-        let busy = self.thinking();
-        let bar = ui.horizontal(|ui| {
-            let status = if self.capturing.is_some() {
-                self.t("looking")
-            } else if busy {
-                self.t("thinking")
-            } else {
-                self.t("ready")
-            };
-            if self.equalizer_dots() {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(86.0, 26.0), egui::Sense::hover());
-                let time = ui.input(|input| input.time);
-                ui.painter().rect_filled(rect, 13.0, theme::mix(theme::panel(), theme::text(), 0.09));
-                equalizer::dots(&ui.painter().with_clip_rect(rect), rect, self.level.value(), self.mood(), time);
-            } else {
-                let dot = if busy || self.capturing.is_some() { accent() } else { theme::good() };
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                ui.painter().circle_filled(rect.center(), 4.0, dot);
-            }
-            ui.label(RichText::new(status).color(muted()));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new(self.t("settings")).color(muted())).frame(false)).clicked() {
-                    self.settings_open = !self.settings_open;
-                }
-                let shot = egui::Button::new(self.t("screenshot")).min_size(egui::vec2(0.0, 34.0));
-                if ui
-                    .add_enabled(self.settings.screenshot_enabled && !self.busy(), shot)
-                    .on_hover_text("Ctrl+Shift+Enter")
-                    .clicked()
-                {
-                    self.start_screenshot();
-                }
-            });
-        });
-        // the empty part of the bar drags the window, as the frame would
-        let drag = ui.interact(bar.response.rect, ui.scope_id().with("drag"), egui::Sense::click_and_drag());
+        const BAR: f32 = 54.0;
+        let width = ui.available_width();
+        let bar = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(width, BAR));
+        // the bar drags the window; it is registered first, so every control on it is above it and gets its clicks
+        let drag = ui.interact(bar, ui.scope_id().with("bar-drag"), egui::Sense::click_and_drag());
         if drag.drag_started() && self.settings.frameless {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+        }
+        let keys = width >= 760.0; // the keys beside the names of the pills need room
+        let busy = self.busy();
+        let (ask_label, shot_label) = (self.t("ask"), self.t("screenshot"));
+        let ask_caps = chrome::shortcut(&[], chrome::Cap::Enter);
+        let shot_caps = match &self.screenshot_key {
+            Some(key) => chrome::caps_of(key),
+            None => chrome::shortcut(&["Shift"], chrome::Cap::Enter),
+        };
+        let pills = chrome::pill_width(ui, &ask_label, &ask_caps, keys)
+            + 14.0
+            + chrome::pill_width(ui, &shot_label, &shot_caps, keys);
+        let (mut toggle, mut ask, mut shot, mut menu) = (false, false, false, None);
+        ui.allocate_ui_with_layout(egui::vec2(width, BAR), Layout::left_to_right(Align::Center), |ui| {
+            let listening = self.listening_now();
+            let name = self.t(if listening {
+                "pause_listening"
+            } else if self.settings.listen || self.settings.use_mic {
+                "resume_listening"
+            } else {
+                "start_listening"
+            });
+            toggle =
+                chrome::round_button(ui, if listening { chrome::Glyph::Pause } else { chrome::Glyph::Play }, &name)
+                    .clicked();
+            ui.add_space(12.0);
+            if keys {
+                let status = if self.capturing.is_some() {
+                    self.t("looking")
+                } else if self.thinking() {
+                    self.t("thinking")
+                } else {
+                    self.t("ready")
+                };
+                ui.label(RichText::new(status).color(muted()));
+            }
+            // the pills sit in the middle of the bar, not of what is left of it
+            let gap = ((width - pills) / 2.0 - ui.min_rect().width()).max(10.0);
+            ui.add_space(gap);
+            ask = chrome::pill(ui, &ask_label, &ask_caps, keys, !busy, &self.t("ask_hint")).clicked();
+            ui.add_space(14.0);
+            shot = chrome::pill(ui, &shot_label, &shot_caps, keys, self.settings.screenshot_enabled && !busy, "")
+                .clicked();
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let response = chrome::menu_mark(ui, &self.t("menu"));
+                menu = egui::Popup::menu(&response)
+                    .align(egui::RectAlign::BOTTOM_END)
+                    .show(|ui| self.menu_items(ui))
+                    .and_then(|shown| shown.inner);
+            });
+        });
+        if toggle {
+            self.toggle_listening();
+        }
+        if ask {
+            self.ask_heard();
+        }
+        if shot {
+            self.start_screenshot();
+        }
+        if let Some(choice) = menu {
+            self.menu_chosen(choice);
+        }
+    }
+
+    /// What the menu offers; `Some` when one was chosen.
+    fn menu_items(&self, ui: &mut Ui) -> Option<MenuChoice> {
+        let mut choice = None;
+        ui.set_min_width(230.0);
+        if ui.button(self.t("settings")).clicked() {
+            choice = Some(MenuChoice::Settings);
+        }
+        ui.separator();
+        ui.label(RichText::new(self.t("interview")).small().color(muted()));
+        for item in &self.library.interviews {
+            if ui.selectable_label(item.id == self.library.active, &item.name).clicked() {
+                choice = Some(MenuChoice::Interview(item.id.clone()));
+            }
+        }
+        ui.separator();
+        let mut pinned = self.settings.pinned;
+        if ui.checkbox(&mut pinned, self.t("keep_on_top")).changed() {
+            choice = Some(MenuChoice::Pinned(pinned));
+        }
+        if ui.button(self.t("check_now")).clicked() {
+            choice = Some(MenuChoice::Updates);
+        }
+        ui.separator();
+        if ui.button(self.t("tray_quit")).clicked() {
+            choice = Some(MenuChoice::Quit);
+        }
+        choice
+    }
+
+    fn menu_chosen(&mut self, choice: MenuChoice) {
+        match choice {
+            MenuChoice::Settings => self.settings_open = true,
+            MenuChoice::Interview(id) => {
+                self.library.active = id;
+                self.library_changed();
+            }
+            MenuChoice::Pinned(on) => {
+                self.settings.pinned = on;
+                self.settings_changed();
+            }
+            MenuChoice::Updates => self.check_for_update(true),
+            MenuChoice::Quit => self.quit_requested = true,
         }
     }
 
@@ -855,31 +1057,31 @@ impl App {
         });
     }
 
+    /// The line to type a question on, and the button that gets its answer (or stops the one being written).
     fn question_row(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            let ask_width = 92.0;
-            let hint = self.t("question_hint");
-            let idle = !self.busy();
+            let thinking = self.thinking();
+            let can = !self.input.trim().is_empty() && !self.busy();
+            let (label, button_width) = (self.t(if thinking { "stop" } else { "get_answer" }), 120.0);
+            let (hint, busy) = (self.t("manual_hint"), self.busy());
             let edit = egui::TextEdit::singleline(&mut self.input)
-                .hint_text(hint)
-                .desired_width(ui.available_width() - ask_width - 12.0)
-                .margin(egui::vec2(10.0, 8.0));
-            let response = ui.add_enabled(idle, edit).accessible_name(self.t("question_hint"));
+                .hint_text(&hint)
+                .frame(egui::Frame::NONE)
+                .desired_width(ui.available_width() - button_width - 12.0)
+                .margin(egui::vec2(4.0, 8.0));
+            let response = ui.add_enabled(!busy, edit).accessible_name(&hint);
             let enter = response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
-            if self.thinking() {
-                if ui.add(egui::Button::new(self.t("stop")).min_size(egui::vec2(ask_width, 34.0))).clicked() {
+            let color = if can || thinking { strong() } else { muted() };
+            let action = egui::Button::new(RichText::new(label).font(theme::semibold(14.0)).color(color)).frame(false);
+            let pressed = ui.add_enabled(can || thinking, action).clicked();
+            if thinking {
+                if pressed {
                     self.stop();
                 }
-            } else {
-                let ask = egui::Button::new(RichText::new(self.t("ask")).color(on_accent()))
-                    .fill(accent())
-                    .min_size(egui::vec2(ask_width, 34.0));
-                let can = !self.input.trim().is_empty() && !self.busy();
-                if (ui.add_enabled(can, ask).clicked() || (enter && can)) && can {
-                    let question = std::mem::take(&mut self.input);
-                    self.ask(&question);
-                    response.request_focus();
-                }
+            } else if (pressed || (enter && can)) && can {
+                let question = std::mem::take(&mut self.input);
+                self.ask(&question);
+                response.request_focus();
             }
         });
     }
@@ -900,12 +1102,51 @@ impl App {
         let index = self.shown.min(self.entries.len() - 1);
         let translate = |key: &str| text::t(&self.settings.ui_code(), key, &[]);
         let mut details_open = self.details_open;
-        ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(self.thinking()).show(ui, |ui| {
+        let mut copy = false;
+        // the question and what can be done with its answer stay in place while the answer scrolls
+        {
             let entry = &self.entries[index];
             let title =
                 if entry.source == Source::Screenshot { translate("screenshot") } else { entry.question.clone() };
-            ui.label(RichText::new(title).font(theme::semibold(size)).color(muted()));
-            ui.add_space(4.0);
+            let model = entry
+                .fell_back
+                .as_ref()
+                .map(|model| text::t(&self.settings.ui_code(), "answered_by", &[("model", model)]));
+            let can_copy = !entry.raw.is_empty();
+            ui.horizontal(|ui| {
+                let right = 14.0
+                    + if can_copy { 44.0 } else { 0.0 }
+                    + model.as_ref().map_or(0.0, |text| text.len() as f32 * 6.0 + 12.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2((ui.available_width() - right).max(40.0), 24.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.add(
+                            egui::Label::new(RichText::new(title).font(theme::semibold(size)).color(muted()))
+                                .truncate(),
+                        );
+                    },
+                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_space(14.0); // clear of the scroll bar below
+                    if can_copy
+                        && ui
+                            .add(
+                                egui::Button::new(RichText::new(translate("copy")).color(muted()).small()).frame(false),
+                            )
+                            .clicked()
+                    {
+                        copy = true;
+                    }
+                    if let Some(model) = &model {
+                        ui.label(RichText::new(model).color(muted()).small());
+                    }
+                });
+            });
+        }
+        ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(self.thinking()).show(ui, |ui| {
+            ui.style_mut().interaction.selectable_labels = true; // the answer can be selected and copied by hand
+            let entry = &self.entries[index];
             if let Some(error) = &entry.error {
                 ui.label(RichText::new(error).color(danger()));
             } else if entry.raw.is_empty() {
@@ -915,56 +1156,36 @@ impl App {
             }
         });
         self.details_open = details_open;
+        if copy {
+            self.copy_answer(ui.ctx());
+        }
     }
 
+    /// The foot of the window: the keys that move through the answers, with which one is shown, and a notice.
     fn footer(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            let sources = self.brief.sources().into_iter().map(|(_, label)| label).collect::<Vec<_>>().join(" · ");
-            let name = self.library.current().name.clone();
-            let line = if sources.is_empty() { name } else { format!("{name} — {sources}") };
-            let last = self.entries.len().saturating_sub(1);
-            let shown = self.shown.min(last);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if self.entries.len() > 1 {
-                    if ui.add_enabled(shown < last, egui::Button::new("›").frame(false)).clicked() {
-                        self.shown = shown + 1;
-                    }
-                    ui.label(
-                        RichText::new(self.tf(
-                            "history",
-                            &[("n", &(shown + 1).to_string()), ("total", &self.entries.len().to_string())],
-                        ))
-                        .color(muted())
-                        .small(),
-                    );
-                    if ui.add_enabled(shown > 0, egui::Button::new("‹").frame(false)).clicked() {
-                        self.shown = shown - 1;
-                    }
-                }
-                if let Some(entry) = self.entries.get(shown) {
-                    if !entry.raw.is_empty()
-                        && ui
-                            .add(egui::Button::new(RichText::new(self.t("copy")).color(muted()).small()).frame(false))
-                            .clicked()
-                    {
-                        let parts = sections(&entry.raw);
-                        let text = if parts.answer.is_empty() {
-                            parts.points.join("\n").replace("**", "")
-                        } else {
-                            parts.answer
-                        };
-                        ui.ctx().copy_text(text);
-                    }
-                    if let Some(model) = &entry.fell_back {
-                        ui.label(RichText::new(self.tf("answered_by", &[("model", model)])).color(muted()).small());
-                    }
-                }
-                // what is left to the left of those: the interview and what the answers know, cut to fit
-                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                    ui.add(egui::Label::new(RichText::new(line).color(muted()).small()).truncate());
-                });
+        let total = self.entries.len();
+        if total > 0 {
+            let shown = self.shown.min(total - 1);
+            let (back, forward) = (chrome::shortcut(&[], chrome::Cap::Left), chrome::shortcut(&[], chrome::Cap::Right));
+            let counter = format!("{}/{total}", shown + 1);
+            let width = ui.available_width();
+            let middle = chrome::counter_width(ui, &counter);
+            let sides = chrome::step_width(ui, &back);
+            let (mut earlier, mut later) = (false, false);
+            ui.horizontal(|ui| {
+                earlier = chrome::step(ui, &back, shown > 0, &self.t("prev_answer")).clicked();
+                ui.add_space(((width - middle) / 2.0 - sides - 8.0).max(4.0));
+                chrome::counter(ui, &counter);
+                ui.add_space(((width - middle) / 2.0 - sides - 8.0).max(4.0));
+                later = chrome::step(ui, &forward, shown + 1 < total, &self.t("next_answer")).clicked();
             });
-        });
+            if earlier {
+                self.step_answer(false);
+            }
+            if later {
+                self.step_answer(true);
+            }
+        }
         if let Some((message, error)) = self.notice.clone() {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(message).color(if error { danger() } else { accent() }).small());
@@ -979,13 +1200,13 @@ impl App {
     pub fn show(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
         self.drain();
+        if self.quit_requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         self.capture_step();
         self.apply_window(&ctx);
         self.keep_out_of_captures();
-        let key = egui::KeyboardShortcut::new(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::Enter);
-        if ctx.input_mut(|input| input.consume_shortcut(&key)) {
-            self.start_screenshot();
-        }
+        self.shortcuts(&ctx);
         if capture_exclude::supported() {
             ctx.request_repaint_after(capture_exclude::REASSERT_EVERY);
         }
@@ -996,18 +1217,24 @@ impl App {
         let opacity = if hidden { 0.0 } else { self.settings.opacity as f32 / 100.0 };
         if !hidden {
             egui::CentralPanel::default().frame(theme::panel_frame(opacity)).show(ui, |ui| {
-                if self.equalizer_background() {
-                    let time = if self.app.animate { ctx.input(|input| input.time) } else { 0.0 };
-                    // above the line with the interview and the history, so no dot sits under that text
-                    let mut rect = ui.max_rect().expand(8.0);
-                    rect.set_bottom(rect.bottom() - 44.0);
-                    equalizer::background(
-                        &ui.painter().with_clip_rect(rect.shrink(6.0)),
-                        rect,
-                        self.level.value(),
-                        self.mood(),
-                        time,
+                // not behind the settings: a wave of dots next to a form is noise, and it returns when they close
+                if self.equalizer_background() && !self.settings_open {
+                    // from the line under the question field down to the keys that step through the answers
+                    let panel = ui.max_rect();
+                    let top = self.wave_top.unwrap_or(panel.top() + 130.0).max(panel.top());
+                    let rect = egui::Rect::from_min_max(
+                        egui::pos2(panel.left() - 8.0, top + 4.0),
+                        egui::pos2(panel.right() + 8.0, panel.bottom() - 40.0),
                     );
+                    let (columns, _) = equalizer::grid(rect.width(), rect.height());
+                    let (mood, time) = (self.mood(), ctx.input(|input| input.time));
+                    let (bars, color) = if self.app.animate {
+                        (self.motion.bars(columns, time, self.level.smoothed(), mood), self.motion.color(mood, time))
+                    } else {
+                        (equalizer::heights(columns, 0.0, self.level.value(), mood), equalizer::mood_color(mood))
+                    };
+                    let strength = if self.entries.is_empty() { 1.0 } else { 0.5 };
+                    equalizer::background(&ui.painter().with_clip_rect(rect.shrink(6.0)), rect, &bars, color, strength);
                 }
                 self.header(ui);
                 self.caption_line(ui);
@@ -1015,12 +1242,12 @@ impl App {
                 self.question_row(ui);
                 ui.add_space(6.0);
                 ui.separator();
+                self.wave_top = Some(ui.cursor().top());
                 let footer_height = 28.0;
                 let height = (ui.available_height() - footer_height).max(40.0);
                 ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| self.answer_area(ui));
                 self.footer(ui);
             });
-            self.resize_grip(&ctx);
         }
         self.settings_window(&ctx);
         self.update_window(&ctx);
@@ -1036,26 +1263,37 @@ impl App {
         self.level.tick(now);
         let moving = self.app.animate && self.app.equalizer != "off";
         if moving {
-            ctx.request_repaint_after(Duration::from_millis(33));
+            // at the pace of the screen: a slower repaint shows as steps in the motion of the dots
+            ctx.request_repaint_after(Duration::from_millis(8));
         } else if self.thinking() {
             ctx.request_repaint_after(Duration::from_millis(60));
         }
     }
 
-    /// A corner to pull when the window has no frame.
-    fn resize_grip(&self, ctx: &egui::Context) {
-        if !self.settings.frameless {
-            return;
+    /// The keys written on the pills and at the foot of the window. The one with more modifiers is looked at first, so
+    /// that Ctrl+Shift+Enter is not taken for Ctrl+Enter.
+    fn shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, KeyboardShortcut, Modifiers};
+        let command = Modifiers::COMMAND;
+        if ctx.input_mut(|input| input.consume_shortcut(&KeyboardShortcut::new(command | Modifiers::SHIFT, Key::Enter)))
+        {
+            self.start_screenshot();
         }
-        let rect = ctx.content_rect();
-        let grip = egui::Rect::from_min_size(rect.right_bottom() - egui::vec2(18.0, 18.0), egui::vec2(18.0, 18.0));
-        egui::Area::new(egui::Id::unique("grip")).fixed_pos(grip.min).order(egui::Order::Foreground).show(ctx, |ui| {
-            let response = ui.allocate_rect(grip, egui::Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeNwSe);
-            theme::grip(ui.painter(), grip.right_bottom());
-            if response.drag_started() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(egui::viewport::ResizeDirection::SouthEast));
+        if ctx.input_mut(|input| input.consume_shortcut(&KeyboardShortcut::new(command, Key::Enter))) {
+            self.ask_heard();
+        }
+        // in a line that has text the same keys move the cursor by a word, so they are left to it
+        if self.input.is_empty() || !ctx.egui_wants_keyboard_input() {
+            if ctx.input_mut(|input| input.consume_shortcut(&KeyboardShortcut::new(command, Key::ArrowLeft))) {
+                self.step_answer(false);
             }
-        });
+            if ctx.input_mut(|input| input.consume_shortcut(&KeyboardShortcut::new(command, Key::ArrowRight))) {
+                self.step_answer(true);
+            }
+        }
+        if self.thinking() && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape)) {
+            self.stop();
+        }
     }
 }
 
@@ -1065,12 +1303,16 @@ pub fn window_options(settings: &Settings, app: &AppSettings) -> eframe::NativeO
         .with_title("CareerTwin · Interview")
         .with_app_id("careertwin-interview")
         .with_icon(icon::shared(&app.app_icon, theme::from_settings(app).accent))
-        .with_inner_size([900.0, 420.0])
-        .with_min_inner_size([560.0, 280.0])
+        .with_inner_size([820.0, 440.0])
+        .with_min_inner_size([520.0, 260.0])
         .with_transparent(true)
         .with_decorations(!settings.frameless);
     if settings.pinned {
         viewport = viewport.with_always_on_top();
+    }
+    // no taskbar button: the arrow in the notification area brings the window forward and quits (so the icon is needed)
+    if cfg!(windows) && app.tray_icon && app.hide_from_taskbar {
+        viewport = viewport.with_taskbar(false);
     }
     eframe::NativeOptions { viewport, ..Default::default() }
 }

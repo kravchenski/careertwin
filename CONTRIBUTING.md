@@ -35,6 +35,12 @@ from Linux without a mingw toolchain: the `Overlay` workflow compiles and lints 
 `overlay/src/ui/text.rs` (English, Russian) and `text_more.rs` (the other five languages); a test keeps every key in every language
 with the same `{placeholders}`. Every input in the settings gets a name for screen readers (`named()` in `settings_ui.rs`).
 
+## NixOS
+
+`flake.nix` and `nix/` build the Rust window for NixOS (`nix build .#careertwin-overlay`) and give `nix develop`. The `Nix` workflow
+builds it on every change to the crate, the lock or `nix/`. When `overlay/Cargo.lock` changes, nothing else needs touching (the
+package reads the lock itself); a new library the window opens at run time goes in `nix/runtime.nix`.
+
 ## CareerTwin Prep (Rust)
 
 ```bash

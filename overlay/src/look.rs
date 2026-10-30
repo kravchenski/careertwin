@@ -19,9 +19,19 @@ pub const PRESETS: [Preset; 7] = [
 ];
 
 pub const DEFAULT_THEME: &str = "midnight";
+/// The theme that is dark or light as the system is.
+pub const SYSTEM_THEME: &str = "system";
+/// The themes the system's dark and light mode choose.
+pub const SYSTEM_DARK: &str = "midnight";
+pub const SYSTEM_LIGHT: &str = "paper";
 
 pub fn is_preset(name: &str) -> bool {
     PRESETS.iter().any(|(known, ..)| *known == name)
+}
+
+/// Whether a saved theme name is one the window knows: a preset, `custom` or `system`.
+pub fn is_theme(name: &str) -> bool {
+    name == "custom" || name == SYSTEM_THEME || is_preset(name)
 }
 
 /// A colour as `#rrggbb`, the way the person types it and the file keeps it.
@@ -39,17 +49,34 @@ pub fn parse_hex(text: &str) -> Option<[u8; 3]> {
 }
 
 /// (panel, text, accent) of the theme the settings choose; a custom colour that cannot be read is the midnight one.
-pub fn colors(app: &AppSettings) -> ([u8; 3], [u8; 3], [u8; 3]) {
+/// `system_dark` is whether the system is in dark mode, which the `system` theme follows. An accent chosen apart from
+/// the theme replaces the theme's own.
+pub fn colors_for(app: &AppSettings, system_dark: bool) -> ([u8; 3], [u8; 3], [u8; 3]) {
     let midnight = PRESETS[0];
-    if app.theme == "custom" {
-        return (
+    let theme = if app.theme == SYSTEM_THEME {
+        if system_dark { SYSTEM_DARK } else { SYSTEM_LIGHT }
+    } else {
+        app.theme.as_str()
+    };
+    let (panel, text, mut accent) = if theme == "custom" {
+        (
             parse_hex(&app.custom_panel).unwrap_or(midnight.1),
             parse_hex(&app.custom_text).unwrap_or(midnight.2),
             parse_hex(&app.custom_accent).unwrap_or(midnight.3),
-        );
+        )
+    } else {
+        let (_, panel, text, accent) = PRESETS.iter().find(|(name, ..)| *name == theme).copied().unwrap_or(midnight);
+        (panel, text, accent)
+    };
+    if let Some(chosen) = parse_hex(&app.accent) {
+        accent = chosen;
     }
-    let (_, panel, text, accent) = PRESETS.iter().find(|(name, ..)| *name == app.theme).copied().unwrap_or(midnight);
     (panel, text, accent)
+}
+
+/// As [`colors_for`] with the system in dark mode: for where the system is not asked (the window is not open yet).
+pub fn colors(app: &AppSettings) -> ([u8; 3], [u8; 3], [u8; 3]) {
+    colors_for(app, true)
 }
 
 #[cfg(test)]
@@ -78,5 +105,19 @@ mod tests {
         let (panel, _, accent) = colors(&app);
         assert_eq!((panel, accent), ([19, 20, 30], [255, 0, 128])); // a colour that cannot be read is the midnight one
         assert!(is_preset("paper") && !is_preset("custom") && !is_preset("nope"));
+    }
+
+    #[test]
+    fn the_system_theme_follows_dark_and_light_and_an_accent_of_its_own_wins_over_any_theme() {
+        let mut app = AppSettings { theme: "system".into(), ..AppSettings::default() };
+        assert_eq!(colors_for(&app, true).0, PRESETS[0].1);
+        assert_eq!(colors_for(&app, false).0, PRESETS[6].1); // paper
+        app.accent = "#ff0080".into();
+        assert_eq!(colors_for(&app, true).2, [255, 0, 128]);
+        assert_eq!(colors_for(&app, false).2, [255, 0, 128]);
+        assert_eq!(colors_for(&app, false).0, PRESETS[6].1); // only the accent changed
+        app.accent = "not a colour".into();
+        assert_eq!(colors_for(&app, true).2, PRESETS[0].3); // an accent that cannot be read is the theme's own
+        assert!(is_theme("system") && is_theme("custom") && is_theme("amber") && !is_theme("neon"));
     }
 }

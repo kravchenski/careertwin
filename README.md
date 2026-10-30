@@ -51,6 +51,8 @@ tarball. Nothing is signed, so Windows may say the publisher is unknown (More in
 right-click, Open the first time. The Windows and macOS builds are checked by GitHub's machines; nobody has tried
 them by hand yet.
 
+**NixOS:** `nix run github:kravchenski/careertwin` (a flake; see [docs/INTERVIEW.md](docs/INTERVIEW.md#run-it)).
+
 **Linux** (CachyOS and other Arch-based systems):
 
 ```bash

@@ -1,5 +1,11 @@
-//! The app icon: the one that ships, the same in other colours, or an image of the person's own.
+//! The app icon: the one that ships, the same in other colours, or an image of the person's own (PNG, JPEG or ICO).
+//!
+//! A file chosen by the person is untrusted input however kindly it was meant: it may be damaged, it may be a file that
+//! only claims to be an image, or a small file that decodes to gigabytes. So it is read with a ceiling on its size, only
+//! a regular file is opened, the kind of image is taken from its content (not its name), and the decoder is given limits
+//! on the picture's sides and on the memory it may take, so a bomb fails before it is built.
 
+use std::io::{Cursor, Read};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -21,9 +27,59 @@ pub fn default_icon() -> IconData {
     decode(DEFAULT_PNG).unwrap_or_default()
 }
 
+/// The largest file that is read as an icon.
+pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
+/// The largest side of a picture that is decoded. An icon needs 256; 4096 leaves room for a photograph.
+pub const MAX_SIDE: u32 = 4096;
+/// The most memory the decoder may ask for.
+const MAX_ALLOC: u64 = 128 * 1024 * 1024;
+
+/// The kinds of image an icon may be, whatever the file is called.
+fn allowed(format: image::ImageFormat) -> bool {
+    matches!(format, image::ImageFormat::Png | image::ImageFormat::Jpeg | image::ImageFormat::Ico)
+}
+
 fn decode(bytes: &[u8]) -> Result<IconData, String> {
-    let image = image::load_from_memory(bytes).map_err(|error| error.to_string())?;
+    let mut reader =
+        image::ImageReader::new(Cursor::new(bytes)).with_guessed_format().map_err(|error| error.to_string())?;
+    match reader.format() {
+        Some(format) if allowed(format) => {}
+        Some(_) => return Err("only PNG, JPEG and ICO images can be used".into()),
+        None => return Err("this is not a PNG, JPEG or ICO image".into()),
+    }
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_alloc = Some(MAX_ALLOC);
+    reader.limits(limits);
+    let image = reader.decode().map_err(|error| error.to_string())?;
     Ok(square(&image))
+}
+
+/// The bytes of a regular file of at most [`MAX_FILE_BYTES`]: a folder, a device such as /dev/zero or a pipe is refused
+/// before anything is read from it, and a file that grows while it is read is cut off at the ceiling.
+fn read_file(path: &Path) -> Result<Vec<u8>, String> {
+    let file = std::fs::File::open(path).map_err(|error| {
+        // Windows will not open a folder at all and says "Access is denied": say what it is instead
+        if std::fs::metadata(path).is_ok_and(|meta| !meta.is_file()) {
+            "this is not a file".to_owned()
+        } else {
+            error.to_string()
+        }
+    })?;
+    let meta = file.metadata().map_err(|error| error.to_string())?;
+    if !meta.is_file() {
+        return Err("this is not a file".into());
+    }
+    if meta.len() > MAX_FILE_BYTES {
+        return Err(format!("the file is over {} MB", MAX_FILE_BYTES / (1024 * 1024)));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes).map_err(|error| error.to_string())?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(format!("the file is over {} MB", MAX_FILE_BYTES / (1024 * 1024)));
+    }
+    Ok(bytes)
 }
 
 /// A square of [`SIZE`] pixels cut from the middle of the image (an icon is square).
@@ -117,12 +173,7 @@ pub fn load(setting: &str, accent: egui::Color32) -> Result<IconData, String> {
             .ok_or_else(|| format!("there is no icon named {name}"))?;
         return Ok(recolour(&default_icon(), *turn));
     }
-    let path = Path::new(setting);
-    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    if bytes.len() > 20 * 1024 * 1024 {
-        return Err("the file is over 20 MB".into());
-    }
-    decode(&bytes)
+    decode(&read_file(Path::new(setting))?)
 }
 
 pub fn shared(setting: &str, accent: egui::Color32) -> Arc<IconData> {
@@ -242,5 +293,110 @@ mod tests {
             .filter(|(a, b)| a[..3].iter().zip(b[..3].iter()).any(|(x, y)| x.abs_diff(*y) > 8))
             .count();
         assert!(differing < 200, "the base hue changes (almost) nothing: {differing}");
+    }
+
+    fn png_bytes(width: u32, height: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        image::RgbaImage::new(width, height).write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
+        out
+    }
+
+    #[test]
+    fn png_jpeg_and_ico_files_all_become_icons_and_an_ico_gives_its_largest_picture() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut red = image::RgbaImage::new(64, 64);
+        red.pixels_mut().for_each(|px| *px = image::Rgba([220, 20, 20, 255]));
+        let jpeg = dir.path().join("a.jpeg");
+        image::DynamicImage::ImageRgba8(red.clone()).to_rgb8().save(&jpeg).unwrap();
+        assert_eq!(load(jpeg.to_str().unwrap(), ACCENT).unwrap().width, SIZE);
+        // an ICO with a small picture and a large one: the large one is used
+        let ico = dir.path().join("app.ico");
+        let mut small = image::RgbaImage::new(16, 16);
+        small.pixels_mut().for_each(|px| *px = image::Rgba([0, 0, 255, 255]));
+        let mut large = image::RgbaImage::new(128, 128);
+        large.pixels_mut().for_each(|px| *px = image::Rgba([0, 255, 0, 255]));
+        let mut frames = Vec::new();
+        for picture in [&small, &large] {
+            frames.push(
+                image::codecs::ico::IcoFrame::as_png(
+                    picture.as_raw(),
+                    picture.width(),
+                    picture.height(),
+                    image::ExtendedColorType::Rgba8,
+                )
+                .unwrap(),
+            );
+        }
+        image::codecs::ico::IcoEncoder::new(std::fs::File::create(&ico).unwrap()).encode_images(&frames).unwrap();
+        let icon = load(ico.to_str().unwrap(), ACCENT).unwrap();
+        assert_eq!((icon.width, pixel(&icon, SIZE / 2, SIZE / 2)), (SIZE, [0, 255, 0, 255]));
+        // the content decides, not the name: a PNG called .ico and an ICO called .png are both read
+        std::fs::copy(&ico, dir.path().join("really-ico.png")).unwrap();
+        std::fs::write(dir.path().join("really-png.ico"), png_bytes(32, 32)).unwrap();
+        assert!(load(dir.path().join("really-ico.png").to_str().unwrap(), ACCENT).is_ok());
+        assert!(load(dir.path().join("really-png.ico").to_str().unwrap(), ACCENT).is_ok());
+    }
+
+    #[test]
+    fn a_picture_that_is_too_big_or_not_an_allowed_kind_is_refused_before_it_is_built() {
+        let dir = tempfile::tempdir().unwrap();
+        // 5000 x 5000 of one colour is a small file that would take 100 MB: over the limit on the sides
+        let bomb = dir.path().join("bomb.png");
+        std::fs::write(&bomb, png_bytes(MAX_SIDE + 904, MAX_SIDE + 904)).unwrap();
+        assert!(std::fs::metadata(&bomb).unwrap().len() < 1_000_000);
+        let started = std::time::Instant::now();
+        let refused = load(bomb.to_str().unwrap(), ACCENT).unwrap_err();
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{refused}");
+        // a kind that is not on the list, even when the name says PNG
+        let mut gif = Vec::new();
+        image::RgbaImage::new(8, 8).write_to(&mut Cursor::new(&mut gif), image::ImageFormat::Bmp).unwrap();
+        let named = dir.path().join("bitmap.png");
+        std::fs::write(&named, &gif).unwrap();
+        assert!(load(named.to_str().unwrap(), ACCENT).unwrap_err().contains("only PNG, JPEG and ICO"));
+        // text, an empty file and a file that is only a signature
+        for (name, bytes) in
+            [("text.png", b"hello".to_vec()), ("empty.png", Vec::new()), ("sig.png", b"\x89PNG\r\n\x1a\n".to_vec())]
+        {
+            std::fs::write(dir.path().join(name), bytes).unwrap();
+            assert!(load(dir.path().join(name).to_str().unwrap(), ACCENT).is_err(), "{name}");
+        }
+    }
+
+    #[test]
+    fn only_a_regular_file_of_a_sane_size_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load(dir.path().to_str().unwrap(), ACCENT).unwrap_err().contains("not a file"));
+        #[cfg(unix)]
+        for device in ["/dev/zero", "/dev/null"] {
+            if Path::new(device).exists() {
+                let started = std::time::Instant::now();
+                assert!(load(device, ACCENT).is_err(), "{device}");
+                assert!(started.elapsed() < std::time::Duration::from_secs(1), "{device} was read");
+            }
+        }
+        let big = dir.path().join("big.png");
+        let file = std::fs::File::create(&big).unwrap();
+        file.set_len(MAX_FILE_BYTES + 1).unwrap(); // sparse: costs no disk
+        assert!(load(big.to_str().unwrap(), ACCENT).unwrap_err().contains("over 8 MB"));
+    }
+
+    #[test]
+    fn damaged_pictures_fail_cleanly_and_never_panic() {
+        // every prefix and a few corruptions of real files: an error or a picture, never a crash
+        let png = png_bytes(40, 40);
+        let mut jpeg = Vec::new();
+        image::RgbImage::new(40, 40).write_to(&mut Cursor::new(&mut jpeg), image::ImageFormat::Jpeg).unwrap();
+        for original in [&png, &jpeg] {
+            for cut in (0..original.len()).step_by((original.len() / 40).max(1)) {
+                let _ = decode(&original[..cut]);
+            }
+            for position in (0..original.len()).step_by((original.len() / 60).max(1)) {
+                let mut damaged = original.clone();
+                damaged[position] ^= 0xff;
+                let _ = decode(&damaged);
+                damaged[position] = 0;
+                let _ = decode(&damaged);
+            }
+        }
     }
 }

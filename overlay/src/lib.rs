@@ -32,6 +32,7 @@ pub mod session;
 pub mod settings;
 pub mod speech;
 pub mod transcript;
+pub mod tray;
 pub mod update;
 pub mod vad;
 

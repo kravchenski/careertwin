@@ -3,10 +3,10 @@
 
 use std::path::PathBuf;
 
-use egui::{ComboBox, RichText, ScrollArea, TextEdit, Ui};
+use egui::{ComboBox, RichText, ScrollArea, Stroke, TextEdit, Ui};
 use serde_json::json;
 
-use super::theme::{accent, danger, good, muted, on_accent, semibold, strong, warn};
+use super::theme::{accent, danger, good, muted, on_accent, semibold, strong, text as text_color, warn};
 use super::{App, Event, text, theme};
 use crate::accounts::Account;
 use crate::coach::Request;
@@ -54,6 +54,8 @@ pub struct State {
     /// The screenshot key as it is being typed.
     pub key_text: String,
     pub key_text_ready: bool,
+    /// The pictures of the icon tiles, made once: keyed by the setting and the accent colour.
+    pub icons: std::collections::HashMap<String, egui::TextureHandle>,
 }
 
 impl Default for State {
@@ -83,6 +85,7 @@ impl Default for State {
             dossier_of: String::new(),
             key_text: String::new(),
             key_text_ready: false,
+            icons: std::collections::HashMap::new(),
         }
     }
 }
@@ -99,9 +102,13 @@ impl State {
     }
 }
 
+/// A heading for a group. Space goes before it, not after: the heading belongs to what follows, and a group is
+/// further from the one before than its own lines are from each other. The first of a page starts at the top.
 fn section(ui: &mut Ui, title: &str) {
-    ui.add_space(10.0);
-    ui.label(RichText::new(title).font(semibold(16.0)).color(strong()));
+    if ui.min_rect().height() > 1.0 {
+        ui.add_space(24.0);
+    }
+    ui.label(RichText::new(title).font(semibold(19.0)).color(strong()));
     ui.add_space(2.0);
 }
 
@@ -112,6 +119,16 @@ fn note(ui: &mut Ui, text: &str) {
 thread_local! {
     /// The label of the row being drawn: what a screen reader calls the input in it.
     static NAME: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    /// The width of the label column of the page being drawn: as wide as its longest label, so a field is never far
+    /// from the words that name it.
+    static COLUMN: std::cell::Cell<f32> = const { std::cell::Cell::new(190.0) };
+    /// A hint for the label of the next row: shown when the pointer rests on it, not as a line of its own.
+    static HINT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// The next row's label explains itself in a tooltip.
+fn hint_next(text: &str) {
+    HINT.with(|hint| text.clone_into(&mut hint.borrow_mut()));
 }
 
 /// Gives an input the name a screen reader reads: the label of its row, or one given.
@@ -143,8 +160,15 @@ impl<R> Named for egui::InnerResponse<R> {
 
 fn row<R>(ui: &mut Ui, label: &str, content: impl FnOnce(&mut Ui) -> R) -> R {
     ui.horizontal(|ui| {
-        ui.allocate_ui_with_layout(egui::vec2(150.0, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.label(RichText::new(label).color(muted()));
+        // a column of one width, so every field of a page starts on the same line
+        let width = COLUMN.with(std::cell::Cell::get);
+        ui.allocate_ui_with_layout(egui::vec2(width, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.set_min_width(width);
+            let shown = ui.label(RichText::new(label).color(muted()));
+            let hint = HINT.with(|hint| std::mem::take(&mut *hint.borrow_mut()));
+            if !hint.is_empty() {
+                shown.on_hover_text(hint);
+            }
         });
         NAME.with(|name| label.clone_into(&mut name.borrow_mut()));
         let result = content(ui);
@@ -188,16 +212,21 @@ impl App {
             return;
         }
         let mut open = true;
+        // 720 x 640, or the window less a margin when that is smaller
+        let room = ctx.content_rect().size();
+        let size = egui::vec2(720.0_f32.min((room.x - 40.0).max(320.0)), 640.0_f32.min((room.y - 40.0).max(260.0)));
         egui::Window::new(t("settings"))
             .id(egui::Id::unique("settings"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(true)
-            .default_size([720.0, 640.0])
-            .min_size([520.0, 420.0])
+            // a fixed size, so its edges and corners are not handles: the pointer there does not turn into a resize arrow
+            .resizable(false)
+            .fixed_size(size)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
                     for (tab, key) in [
                         (Tab::Interview, "tab_interview"),
                         (Tab::Practice, "tab_practice"),
@@ -205,15 +234,50 @@ impl App {
                         (Tab::General, "tab_general"),
                     ] {
                         let selected = self.settings_ui.tab == tab;
-                        let label =
-                            RichText::new(t(key)).font(semibold(15.0)).color(if selected { accent() } else { muted() });
-                        if ui.add(egui::Button::new(label).frame(false).selected(selected)).clicked() {
+                        let name = t(key);
+                        // a tab with room around its word: 16 on each side, 10 above and below
+                        let galley = ui.painter().layout_no_wrap(
+                            name.clone(),
+                            semibold(14.0),
+                            if selected { strong() } else { muted() },
+                        );
+                        let (rect, response) =
+                            ui.allocate_exact_size(galley.size() + egui::vec2(32.0, 20.0), egui::Sense::click());
+                        response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, selected, &name));
+                        let color = if selected {
+                            strong()
+                        } else if response.hovered() {
+                            text_color()
+                        } else {
+                            muted()
+                        };
+                        ui.painter().galley_with_override_text_color(
+                            rect.center() - galley.size() / 2.0,
+                            galley.clone(),
+                            color,
+                        );
+                        if selected {
+                            let y = rect.bottom() - 1.0;
+                            ui.painter().line_segment(
+                                [egui::pos2(rect.left() + 16.0, y), egui::pos2(rect.right() - 16.0, y)],
+                                Stroke::new(2.0, accent()),
+                            );
+                        }
+                        if response.clicked() {
                             self.settings_ui.tab = tab;
                         }
-                        ui.add_space(8.0);
                     }
                 });
+                ui.add_space(4.0);
                 ui.separator();
+                COLUMN.with(|column| {
+                    column.set(match self.settings_ui.tab {
+                        Tab::Interview => 110.0,
+                        Tab::Practice => 130.0,
+                        Tab::Ai => 255.0,
+                        Tab::General => 190.0,
+                    });
+                });
                 ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.settings_ui.tab {
                     Tab::Interview => self.tab_interview(ui),
                     Tab::Practice => self.tab_practice(ui),
@@ -256,12 +320,14 @@ impl App {
                         }
                     }
                 })
-                .named_as(&t("interview"));
+                .named_as(&t("interview"))
+                .response
+                .on_hover_text(t("interview_note"));
             new = ui.button(t("new")).clicked();
             if ui.button(t("rename")).clicked() {
                 self.settings_ui.rename = Some(self.library.current().name.clone());
             }
-            delete = ui.button(RichText::new(t("delete")).color(danger())).clicked();
+            delete = ui.button(t("delete")).clicked();
         });
         if let Some(name) = self.settings_ui.rename.as_mut() {
             ui.horizontal(|ui| {
@@ -269,7 +335,6 @@ impl App {
                 rename_done = ui.button("OK").clicked();
             });
         }
-        note(ui, &t("interview_note"));
         if let Some(id) = switch_to {
             self.library.active = id;
             self.library_changed();
@@ -346,8 +411,7 @@ impl App {
                         }
                     })
                     .named_as(&name);
-                if ui.add(egui::Button::new(RichText::new(t("remove")).color(danger()).small()).frame(false)).clicked()
-                {
+                if ui.add(egui::Button::new(RichText::new(t("remove")).color(muted()).small()).frame(false)).clicked() {
                     remove = Some(index);
                 }
             });
@@ -456,7 +520,7 @@ impl App {
             self.settings_ui.dossier_of.clone_from(&folder);
             self.settings_ui.dossier.clone_from(&project.dossier);
         }
-        ui.label(RichText::new(t("dossier")).color(muted()));
+        ui.label(RichText::new(t("dossier")).color(muted())).on_hover_text(t("dossier_note"));
         ui.add(
             TextEdit::multiline(&mut self.settings_ui.dossier)
                 .desired_rows(8)
@@ -488,13 +552,12 @@ impl App {
                     Err(error) => self.say(&error.to_string(), true),
                 }
             }
-            if ui.button(RichText::new(t("project_forget")).color(danger())).clicked() {
+            if ui.button(t("project_forget")).clicked() {
                 crate::project::forget(&self.paths.interview_dir(), std::path::Path::new(&folder));
                 self.settings_ui.dossier_of.clear();
                 self.library_changed();
             }
         });
-        note(ui, &t("dossier_note"));
     }
 
     // ---- Practice --------------------------------------------------------------------------------------------
@@ -504,18 +567,23 @@ impl App {
         let t = |key: &str| text::t(&lang, key, &[]);
         let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
         let _ = (&t, &tf);
-        ui.horizontal(|ui| {
-            super::theme::step_mark(ui, done);
-            ui.label(RichText::new(format!("{number}. {title}")).font(semibold(15.0)).color(strong()));
-            if optional {
-                ui.label(RichText::new(t("optional")).color(muted()).small());
-            }
+        ui.add_space(10.0);
+        // the line under a step sits right under it, and the tighter spacing stays inside the step
+        ui.scope(|ui| {
+            ui.spacing_mut().interact_size.y = 20.0;
+            ui.spacing_mut().item_spacing.y = 1.0;
+            ui.horizontal(|ui| {
+                super::theme::step_mark(ui, done);
+                ui.label(RichText::new(format!("{number}. {title}")).font(semibold(14.0)).color(strong()));
+                if optional {
+                    ui.label(RichText::new(t("optional")).color(muted()).small());
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(28.0);
+                ui.label(RichText::new(detail).color(if done { muted() } else { warn() }).small());
+            });
         });
-        ui.horizontal(|ui| {
-            ui.add_space(26.0);
-            ui.label(RichText::new(detail).color(if done { muted() } else { warn() }).small());
-        });
-        ui.add_space(-4.0);
     }
 
     fn tab_practice(&mut self, ui: &mut Ui) {
@@ -800,26 +868,22 @@ impl App {
             }
             let (mut use_name, mut remove_name) = (None, None);
             for account in &here {
-                egui::Frame::new()
-                    .fill(super::theme::field())
-                    .corner_radius(8)
-                    .inner_margin(egui::Margin::symmetric(12, 8))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(&account.name).font(semibold(15.0)).color(strong()));
-                            ui.label(RichText::new(account.tail()).color(muted()).small());
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.add(egui::Button::new(RichText::new(t("remove")).color(danger()))).clicked() {
-                                    remove_name = Some(account.name.clone());
-                                }
-                                if account.key == self.settings.gateway_key {
-                                    ui.label(RichText::new(t("in_use")).color(accent()));
-                                } else if ui.button(t("use")).clicked() {
-                                    use_name = Some(account.name.clone());
-                                }
-                            });
+                egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&account.name).font(semibold(14.0)).color(strong()));
+                        ui.label(RichText::new(account.tail()).color(muted()).small());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(t("remove")).clicked() {
+                                remove_name = Some(account.name.clone());
+                            }
+                            if account.key == self.settings.gateway_key {
+                                ui.label(RichText::new(t("in_use")).color(accent()));
+                            } else if ui.button(t("use")).clicked() {
+                                use_name = Some(account.name.clone());
+                            }
                         });
                     });
+                });
             }
             if let Some(name) = use_name {
                 self.settings.use_account(&name);
@@ -860,11 +924,48 @@ impl App {
             note(ui, &t("keys_note"));
         }
 
+        // a local gateway (Switchyard, Ollama, LM Studio) spreads the load over its accounts itself: these are for the
+        // accounts saved here
+        if known.is_none_or(|provider| provider.cloud) {
+            let mut app_changed = false;
+            hint_next(&t("parallel_note"));
+            row(ui, &t("parallel"), |ui| {
+                let label = t(&format!("parallel_{}", self.app.parallel_accounts));
+                ComboBox::from_id_salt("parallel")
+                    .selected_text(label)
+                    .width(320.0)
+                    .show_ui(ui, |ui| {
+                        for mode in crate::settings::PARALLEL_MODES {
+                            if ui
+                                .selectable_label(self.app.parallel_accounts == mode, t(&format!("parallel_{mode}")))
+                                .clicked()
+                            {
+                                self.app.parallel_accounts = mode.to_owned();
+                                app_changed = true;
+                            }
+                        }
+                    })
+                    .named();
+            });
+            row(ui, &t("first_word"), |ui| {
+                app_changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut self.app.first_word_seconds)
+                            .range(crate::settings::FIRST_WORD_RANGE)
+                            .suffix(" s"),
+                    )
+                    .named()
+                    .changed();
+            });
+            if app_changed {
+                self.app_changed();
+            }
+        }
+
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
-        ui.label(RichText::new(t("model_ask")).font(semibold(15.0)).color(strong()));
+        ui.label(RichText::new(t("model_ask")).font(semibold(14.0)).color(strong())).on_hover_text(t("model_ask_note"));
         changed |= model_picker(ui, &mut self.settings.model, &models, "auto", &t("model_ask"));
-        note(ui, &t("model_ask_note"));
         row(ui, &t("fallbacks"), |ui| {
             changed |= ui
                 .add(
@@ -876,11 +977,11 @@ impl App {
                 .changed();
         });
         ui.add_space(10.0);
-        ui.label(RichText::new(t("model_screenshot")).font(semibold(15.0)).color(strong()));
+        ui.label(RichText::new(t("model_screenshot")).font(semibold(14.0)).color(strong()))
+            .on_hover_text(t("model_shot_note"));
         changed |= model_picker(ui, &mut self.settings.vision_model, &models, "", &t("model_screenshot"));
-        note(ui, &t("model_shot_note"));
         ui.add_space(10.0);
-        ui.label(RichText::new(t("model_audio")).font(semibold(15.0)).color(strong()));
+        ui.label(RichText::new(t("model_audio")).font(semibold(14.0)).color(strong())).on_hover_text(t("audio_note"));
         row(ui, &t("engine"), |ui| {
             let label = if self.settings.stt_engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
             ComboBox::from_id_salt("engine")
@@ -930,7 +1031,6 @@ impl App {
                     .named();
             });
         }
-        note(ui, &t("audio_note"));
 
         ui.add_space(12.0);
         ui.horizontal(|ui| {
@@ -998,29 +1098,6 @@ impl App {
                 })
                 .named();
         });
-        row(ui, &t("window_language"), |ui| {
-            let current = self.settings.ui_language.clone();
-            let label = crate::languages::UI_LANGUAGES
-                .iter()
-                .find(|(code, _)| *code == current)
-                .map_or(t("auto"), |(_, name)| (*name).to_owned());
-            ComboBox::from_id_salt("ui_language")
-                .selected_text(label)
-                .width(220.0)
-                .show_ui(ui, |ui| {
-                    if ui.selectable_label(current == "auto", t("auto")).clicked() {
-                        self.settings.ui_language = "auto".into();
-                        changed = true;
-                    }
-                    for (code, name) in crate::languages::UI_LANGUAGES {
-                        if ui.selectable_label(current == *code, *name).clicked() {
-                            self.settings.ui_language = (*code).to_owned();
-                            changed = true;
-                        }
-                    }
-                })
-                .named();
-        });
 
         changed |= self.hearing_section(ui);
 
@@ -1045,7 +1122,10 @@ impl App {
         });
 
         section(ui, &t("screenshot_section"));
-        changed |= ui.checkbox(&mut self.settings.screenshot_enabled, t("screenshot_enabled")).changed();
+        changed |= ui
+            .checkbox(&mut self.settings.screenshot_enabled, t("screenshot_enabled"))
+            .on_hover_text(t("screenshot_note"))
+            .changed();
         let tools = crate::screenshot::available_tools();
         row(ui, &t("screenshot_tool"), |ui| {
             let current = self.settings.screenshot_tool.clone();
@@ -1066,7 +1146,6 @@ impl App {
                 })
                 .named();
         });
-        note(ui, &t("screenshot_note"));
         if cfg!(windows) {
             ui.horizontal(|ui| {
                 let key = self.screenshot_key.clone().unwrap_or_else(|| self.app.screenshot_key.clone());
@@ -1089,6 +1168,20 @@ impl App {
                 }
             });
         }
+        if cfg!(windows) {
+            let mut tray = self.app.tray_icon;
+            if ui.checkbox(&mut tray, t("tray_icon")).on_hover_text(t("tray_note")).changed() {
+                self.app.tray_icon = tray;
+                self.app_changed();
+            }
+            ui.add_enabled_ui(self.app.tray_icon, |ui| {
+                let mut hide = self.app.hide_from_taskbar;
+                if ui.checkbox(&mut hide, t("hide_taskbar")).on_hover_text(t("taskbar_note")).changed() {
+                    self.app.hide_from_taskbar = hide;
+                    self.app_changed();
+                }
+            });
+        }
         if crate::capture_exclude::supported() {
             let mut hide = self.app.hide_from_sharing;
             if ui.checkbox(&mut hide, t("hide_from_sharing")).changed() {
@@ -1100,7 +1193,7 @@ impl App {
 
         section(ui, &t("updates"));
         let mut check = self.app.check_updates;
-        if ui.checkbox(&mut check, t("check_updates")).changed() {
+        if ui.checkbox(&mut check, t("check_updates")).on_hover_text(t("update_note")).changed() {
             self.app.check_updates = check;
             self.app_changed();
         }
@@ -1118,7 +1211,6 @@ impl App {
                 None => {}
             }
         });
-        note(ui, &t("update_note"));
 
         section(ui, &t("data"));
         changed |= ui.checkbox(&mut self.settings.save_transcripts, t("save_transcripts")).changed();
@@ -1133,13 +1225,13 @@ impl App {
             }
         });
         ui.add_space(8.0);
-        let reset = ui.button(RichText::new(t("reset")).color(danger()));
+        let reset = ui.button(t("reset"));
         if reset.clicked() {
             self.settings_ui.confirm_reset = true;
         }
         if self.settings_ui.confirm_reset {
             ui.horizontal(|ui| {
-                if ui.button(RichText::new("OK").color(danger())).clicked() {
+                if ui.button("OK").clicked() {
                     let keep = self.settings.clone();
                     self.settings = crate::settings::Settings::default();
                     let _ = keep;
@@ -1162,7 +1254,7 @@ impl App {
         let t = |key: &str| text::t(&lang, key, &[]);
         let mut changed = false;
         section(ui, &t("hearing"));
-        changed |= ui.checkbox(&mut self.settings.listen, t("listen_call")).changed();
+        changed |= ui.checkbox(&mut self.settings.listen, t("listen_call")).on_hover_text(t("hearing_note")).changed();
         let sources =
             self.settings_ui.sources.get_or_insert_with(|| crate::audio::list_sources().unwrap_or_default()).clone();
         let pick = |ui: &mut Ui, id: &str, value: &mut String, automatic: bool| -> bool {
@@ -1205,7 +1297,6 @@ impl App {
                 changed |= pick(ui, "mic_source", &mut self.settings.mic_source, false);
             });
         }
-        note(ui, &t("hearing_note"));
         changed
     }
 
@@ -1215,17 +1306,52 @@ impl App {
         let t = |key: &str| text::t(&lang, key, &[]);
         let mut changed = false;
         section(ui, &t("appearance"));
+
+        // the language of the window comes first: whoever cannot read it needs it before anything else
+        ui.label(RichText::new(t("window_language")).color(muted()));
+        ui.horizontal_wrapped(|ui| {
+            let current = self.settings.ui_language.clone();
+            let mut pick = |ui: &mut Ui, code: &str, name: &str| {
+                if ui.selectable_label(current == code, name).clicked() && current != code {
+                    self.settings.ui_language = code.to_owned();
+                    changed = true;
+                }
+            };
+            pick(ui, "auto", &t("auto"));
+            for (code, name) in crate::languages::UI_LANGUAGES {
+                pick(ui, code, name);
+            }
+        });
+
+        ui.add_space(10.0);
         ui.label(RichText::new(t("theme")).color(muted()));
         let mut chosen: Option<String> = None;
         let current = self.app.theme.clone();
+        let system_dark = !matches!(ui.ctx().system_theme(), Some(egui::Theme::Light));
         ui.horizontal_wrapped(|ui| {
-            for (name, panel, _, accent_color) in super::theme::PRESETS {
-                if swatch(ui, &t(&format!("theme_{name}")), panel, accent_color, current == name) {
+            ui.spacing_mut().item_spacing = egui::vec2(10.0, 10.0);
+            for (name, panel, text_rgb, accent_rgb) in super::theme::PRESETS {
+                if swatch(ui, &t(&format!("theme_{name}")), (panel, text_rgb, accent_rgb), None, current == name) {
                     chosen = Some(name.to_owned());
                 }
             }
-            let (panel, _, accent_color) = crate::look::colors(&self.app);
-            if swatch(ui, &t("theme_custom"), panel, accent_color, current == "custom") {
+            let (dark, light) = (super::theme::PRESETS[0], super::theme::PRESETS[6]);
+            if swatch(
+                ui,
+                &t("theme_system"),
+                (dark.1, dark.2, dark.3),
+                Some((light.1, light.2, light.3)),
+                current == crate::look::SYSTEM_THEME,
+            ) {
+                chosen = Some(crate::look::SYSTEM_THEME.to_owned());
+            }
+            let own = crate::look::colors_for(&self.app, system_dark);
+            let (custom_panel, custom_text) = (
+                crate::look::parse_hex(&self.app.custom_panel).unwrap_or(own.0),
+                crate::look::parse_hex(&self.app.custom_text).unwrap_or(own.1),
+            );
+            let custom_accent = crate::look::parse_hex(&self.app.custom_accent).unwrap_or(own.2);
+            if swatch(ui, &t("theme_custom"), (custom_panel, custom_text, custom_accent), None, current == "custom") {
                 chosen = Some("custom".to_owned());
             }
         });
@@ -1255,6 +1381,33 @@ impl App {
             }
         }
 
+        // the accent, apart from the theme: any theme, in the colour of your choice
+        ui.add_space(10.0);
+        ui.label(RichText::new(t("accent_colour")).color(muted()));
+        let mut accent_choice: Option<String> = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+            let theme_own = crate::look::parse_hex(&self.app.accent).is_none();
+            if ui.selectable_label(theme_own, t("accent_own")).clicked() {
+                accent_choice = Some(String::new());
+            }
+            for (_, _, _, rgb) in super::theme::PRESETS {
+                let hex = crate::look::hex(rgb);
+                if accent_chip(ui, rgb, self.app.accent.eq_ignore_ascii_case(&hex)) {
+                    accent_choice = Some(hex);
+                }
+            }
+            let shown = crate::look::colors_for(&self.app, system_dark).2;
+            let mut rgb = crate::look::parse_hex(&self.app.accent).unwrap_or(shown);
+            if ui.color_edit_button_srgb(&mut rgb).named_as(&t("accent_colour")).changed() {
+                accent_choice = Some(crate::look::hex(rgb));
+            }
+        });
+        if let Some(choice) = accent_choice {
+            self.app.accent = choice;
+            self.app_changed();
+        }
+
         ui.add_space(8.0);
         row(ui, &t("equalizer"), |ui| {
             let mut style = self.app.equalizer.clone();
@@ -1267,14 +1420,13 @@ impl App {
             }
         });
         let mut animate = self.app.animate;
-        if ui.checkbox(&mut animate, t("animate")).changed() {
+        if ui.checkbox(&mut animate, t("animate")).on_hover_text(t("eq_note")).changed() {
             self.app.animate = animate;
             self.app_changed();
         }
-        note(ui, &t("eq_note"));
 
         ui.add_space(8.0);
-        ui.label(RichText::new(t("app_icon")).color(muted()));
+        ui.label(RichText::new(t("app_icon")).color(muted())).on_hover_text(t("icon_note"));
         self.icon_picker(ui);
 
         ui.add_space(8.0);
@@ -1289,40 +1441,86 @@ impl App {
         changed
     }
 
+    /// Use the image at `path` as the icon, when it is a PNG, JPEG or ICO the window can read.
+    fn use_icon(&mut self, path: &str) {
+        match super::icon::load(path, accent()) {
+            Ok(_) => {
+                self.settings_ui.icon_error = None;
+                self.settings_ui.icons.clear();
+                self.settings_ui.icon_path = path.to_owned();
+                self.app.app_icon = path.to_owned();
+                self.app_changed();
+            }
+            Err(why) => self.settings_ui.icon_error = Some(why),
+        }
+    }
+
     fn icon_picker(&mut self, ui: &mut Ui) {
         let lang = self.settings.ui_code();
         let t = |key: &str| text::t(&lang, key, &[]);
         let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
-        let _ = (&t, &tf);
+        // a file dropped on the window is the icon
+        let dropped = ui.ctx().input(|input| input.raw.dropped_files.first().map(|file| file.path().to_path_buf()));
+        if let Some(path) = dropped {
+            self.use_icon(&path.to_string_lossy());
+        }
+        let hovering = ui.ctx().input(|input| !input.raw.hovered_files.is_empty());
+        let area_top = ui.cursor().top();
+
         let current = self.app.app_icon.clone();
-        let mut chosen: Option<String> = None;
-        ui.horizontal_wrapped(|ui| {
-            let mut tile = |ui: &mut Ui, setting: &str, label: &str| {
-                let selected = current == setting;
+        // what the tiles show: the icon that ships, its colours, and the person's own picture when there is one
+        let mut tiles: Vec<(String, String)> =
+            vec![(String::new(), t("icon_default")), ("theme".to_owned(), t("icon_theme"))];
+        for (name, _) in super::icon::VARIANTS.iter().skip(1) {
+            tiles.push((format!("builtin:{name}"), (*name).to_owned()));
+        }
+        let own = !(current.is_empty() || current == "theme" || super::icon::is_builtin(&current));
+        if own {
+            let name = std::path::Path::new(&current)
+                .file_name()
+                .map_or_else(|| t("icon_yours"), |name| name.to_string_lossy().into_owned());
+            tiles.push((current.clone(), name));
+        }
+        // each picture is decoded and sent to the graphics card once, not every frame
+        let accent_key = super::theme::hex_of(accent());
+        for (setting, _) in &tiles {
+            let key = format!("{setting}|{accent_key}");
+            if let std::collections::hash_map::Entry::Vacant(slot) = self.settings_ui.icons.entry(key.clone()) {
                 let icon = super::icon::load(setting, accent()).unwrap_or_default();
                 let image =
                     egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
-                let texture = ui.ctx().load_texture(format!("icon-{setting}"), image, egui::TextureOptions::LINEAR);
+                slot.insert(ui.ctx().load_texture(format!("icon-{key}"), image, egui::TextureOptions::LINEAR));
+            }
+        }
+        let mut chosen: Option<String> = None;
+        ui.horizontal_wrapped(|ui| {
+            for (setting, label) in &tiles {
+                let selected = current == *setting;
+                let texture = &self.settings_ui.icons[&format!("{setting}|{accent_key}")];
                 ui.vertical(|ui| {
+                    ui.set_max_width(82.0);
                     let response = ui
                         .add(
-                            egui::Button::image(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(52.0, 52.0)))
+                            egui::Button::image(egui::Image::new(texture).fit_to_exact_size(egui::vec2(52.0, 52.0)))
                                 .selected(selected),
                         )
                         .named_as(label);
-                    ui.label(RichText::new(label).small().color(if selected { accent() } else { muted() }));
+                    ui.add(
+                        egui::Label::new(RichText::new(label).small().color(if selected { accent() } else { muted() }))
+                            .truncate(),
+                    );
                     if response.clicked() {
-                        chosen = Some(setting.to_owned());
+                        chosen = Some(setting.clone());
                     }
                 });
-            };
-            tile(ui, "", &t("icon_default"));
-            tile(ui, "theme", &t("icon_theme"));
-            for (name, _) in super::icon::VARIANTS.iter().skip(1) {
-                tile(ui, &format!("builtin:{name}"), name);
             }
         });
-        ui.add_space(4.0);
+        if let Some(setting) = chosen {
+            self.settings_ui.icon_error = None;
+            self.app.app_icon = setting;
+            self.app_changed();
+        }
+        ui.add_space(6.0);
         ui.label(RichText::new(t("icon_custom")).color(muted()));
         ui.horizontal(|ui| {
             let width = (ui.available_width() - 170.0).max(120.0);
@@ -1335,31 +1533,78 @@ impl App {
                 .clicked()
             {
                 let path = self.settings_ui.icon_path.trim().trim_matches('"').to_owned();
-                match super::icon::load(&path, accent()) {
-                    Ok(_) => chosen = Some(path),
-                    Err(why) => self.settings_ui.icon_error = Some(why),
-                }
+                self.use_icon(&path);
             }
         });
-        if let Some(why) = &self.settings_ui.icon_error {
-            ui.label(RichText::new(tf("icon_bad", &[("why", why)])).color(danger()).small());
+        if let Some(why) = self.settings_ui.icon_error.clone() {
+            ui.label(RichText::new(tf("icon_bad", &[("why", &why)])).color(danger()).small());
         }
-        note(ui, &t("icon_note"));
-        if let Some(setting) = chosen {
-            self.settings_ui.icon_error = None;
-            self.app.app_icon = setting;
-            self.app_changed();
+        if hovering {
+            // a file is being dragged over the window: say where it goes
+            let area = egui::Rect::from_min_max(
+                egui::pos2(ui.min_rect().left(), area_top),
+                egui::pos2(ui.min_rect().right(), ui.cursor().top()),
+            );
+            ui.painter().rect_stroke(area.expand(4.0), 4.0, Stroke::new(2.0, accent()), egui::StrokeKind::Outside);
+            ui.painter().text(
+                area.center_top() + egui::vec2(0.0, 4.0),
+                egui::Align2::CENTER_TOP,
+                t("icon_drop"),
+                super::theme::sans(13.0),
+                accent(),
+            );
         }
     }
 }
 
-/// A theme as a small card: its background with its accent on it, and its name. True when it was clicked.
-fn swatch(ui: &mut Ui, name: &str, panel: [u8; 3], accent_color: [u8; 3], selected: bool) -> bool {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(74.0, 62.0), egui::Sense::click());
+/// A colour set to look at: (panel, text, accent).
+type Look3 = ([u8; 3], [u8; 3], [u8; 3]);
+
+fn rgb(value: [u8; 3]) -> egui::Color32 {
+    egui::Color32::from_rgb(value[0], value[1], value[2])
+}
+
+/// A theme as a small window of its own colours: a panel with two lines of text and a button in the accent, and the name
+/// under it. `right` is a second look for the other half (the system theme is dark and light). True when it was clicked.
+fn swatch(ui: &mut Ui, name: &str, left: Look3, right: Option<Look3>, selected: bool) -> bool {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(92.0, 80.0), egui::Sense::click());
     response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, name));
+    let card = egui::Rect::from_min_size(rect.min, egui::vec2(92.0, 56.0));
     let painter = ui.painter();
-    let fill = egui::Color32::from_rgb(panel[0], panel[1], panel[2]);
-    painter.rect_filled(rect, 8.0, fill);
+    let round = 6u8;
+    let half = card.center().x;
+    let draw = |painter: &egui::Painter, area: egui::Rect, look: Look3, corners: egui::CornerRadius| {
+        painter.rect_filled(area, corners, rgb(look.0));
+        let text = rgb(look.1);
+        let x = area.left() + 10.0;
+        painter.rect_filled(
+            egui::Rect::from_min_size(egui::pos2(x, area.top() + 11.0), egui::vec2(34.0, 5.0)),
+            2.0,
+            text.gamma_multiply(0.75),
+        );
+        painter.rect_filled(
+            egui::Rect::from_min_size(egui::pos2(x, area.top() + 22.0), egui::vec2(22.0, 5.0)),
+            2.0,
+            text.gamma_multiply(0.38),
+        );
+        painter.rect_filled(
+            egui::Rect::from_min_size(egui::pos2(x, area.bottom() - 17.0), egui::vec2(26.0, 9.0)),
+            3.0,
+            rgb(look.2),
+        );
+    };
+    match right {
+        None => draw(painter, card, left, egui::CornerRadius::same(round)),
+        Some(other) => {
+            let (l, r) = (
+                egui::Rect::from_min_max(card.min, egui::pos2(half, card.max.y)),
+                egui::Rect::from_min_max(egui::pos2(half, card.min.y), card.max),
+            );
+            let corners = |nw, ne, se, sw| egui::CornerRadius { nw, ne, se, sw };
+            draw(painter, l, left, corners(round, 0, 0, round));
+            draw(painter, r, other, corners(0, round, round, 0));
+        }
+    }
     let border = if selected {
         accent()
     } else if response.hovered() {
@@ -1368,25 +1613,33 @@ fn swatch(ui: &mut Ui, name: &str, panel: [u8; 3], accent_color: [u8; 3], select
         super::theme::line()
     };
     painter.rect_stroke(
-        rect,
-        8.0,
+        card,
+        round,
         egui::Stroke::new(if selected { 2.0 } else { 1.0 }, border),
         egui::StrokeKind::Inside,
     );
-    painter.circle_filled(
-        rect.center() - egui::vec2(0.0, 8.0),
-        10.0,
-        egui::Color32::from_rgb(accent_color[0], accent_color[1], accent_color[2]),
-    );
-    let label =
-        if super::theme::luminance(fill) < 0.5 { egui::Color32::from_gray(210) } else { egui::Color32::from_gray(50) };
     painter.text(
-        rect.center_bottom() - egui::vec2(0.0, 9.0),
+        egui::pos2(rect.center().x, rect.bottom() - 9.0),
         egui::Align2::CENTER_CENTER,
         name,
-        theme::sans(11.5),
-        label,
+        theme::sans(12.0),
+        if selected { strong() } else { muted() },
     );
+    response.clicked()
+}
+
+/// A colour to pick as the accent, as a dot; a ring says which one is in use. True when it was clicked.
+fn accent_chip(ui: &mut Ui, color: [u8; 3], selected: bool) -> bool {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::click());
+    let name = crate::look::hex(color);
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &name));
+    let painter = ui.painter();
+    painter.circle_filled(rect.center(), 10.0, rgb(color));
+    if selected {
+        painter.circle_stroke(rect.center(), 12.5, egui::Stroke::new(2.0, strong()));
+    } else if response.hovered() {
+        painter.circle_stroke(rect.center(), 12.5, egui::Stroke::new(1.0, muted()));
+    }
     response.clicked()
 }
 

@@ -42,7 +42,7 @@ pub fn apply_all(windows: &[isize], affinity: u32, apply: impl Fn(isize, u32) ->
 }
 
 #[cfg(windows)]
-mod native {
+pub mod native {
     use std::ffi::c_void;
 
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
@@ -63,7 +63,7 @@ mod native {
         1
     }
 
-    fn windows_of_this_process() -> Vec<isize> {
+    pub fn windows_of_this_process() -> Vec<isize> {
         let mut found: Vec<isize> = Vec::new();
         // SAFETY: the callback only reads handles and pushes to `found`, which lives until `EnumWindows` returns.
         unsafe { EnumWindows(Some(collect), std::ptr::addr_of_mut!(found) as *mut c_void as LPARAM) };

@@ -357,13 +357,15 @@ pub struct AppSettings {
     pub skipped_version: String,
     /// Seconds since the epoch of the last look for a new version.
     pub last_update_check: i64,
-    /// A theme that comes with the window, or `custom`.
+    /// A theme that comes with the window, `custom`, or `system` (dark or light as the system is).
     pub theme: String,
+    /// `#rrggbb` of an accent chosen apart from the theme, or empty for the theme's own.
+    pub accent: String,
     /// The three colours of the custom theme, as `#rrggbb`.
     pub custom_panel: String,
     pub custom_text: String,
     pub custom_accent: String,
-    /// `both`, `dots` (next to the status), `background` or `off`.
+    /// `background` (the dot matrix behind the window) or `off`.
     pub equalizer: String,
     /// The equalizer and its background move.
     pub animate: bool,
@@ -371,9 +373,21 @@ pub struct AppSettings {
     pub hide_from_sharing: bool,
     /// Windows: the key that takes a screenshot from any program, as `Ctrl+Shift+Enter`.
     pub screenshot_key: String,
+    /// How the accounts of one address are asked: `off` (one at a time), `hedged` (the next one when the first is
+    /// slow) or `all` (together). The first to answer wins.
+    pub parallel_accounts: String,
+    /// Seconds an account may be silent before the next one is tried; 0 never gives up early.
+    pub first_word_seconds: i64,
+    /// Windows: an icon in the notification area, like the one for location in use.
+    pub tray_icon: bool,
+    /// Windows: no button for the window in the taskbar; the tray icon brings it forward and quits (needs the icon).
+    pub hide_from_taskbar: bool,
 }
 
-pub const EQUALIZER_STYLES: [&str; 4] = ["both", "dots", "background", "off"];
+pub const PARALLEL_MODES: [&str; 3] = ["off", "hedged", "all"];
+pub const FIRST_WORD_RANGE: std::ops::RangeInclusive<i64> = 0..=60;
+
+pub const EQUALIZER_STYLES: [&str; 2] = ["background", "off"];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -383,13 +397,18 @@ impl Default for AppSettings {
             skipped_version: String::new(),
             last_update_check: 0,
             theme: "midnight".to_owned(),
+            accent: String::new(),
             custom_panel: "#13141e".to_owned(),
             custom_text: "#d7dae8".to_owned(),
             custom_accent: "#bcb4ff".to_owned(),
-            equalizer: "both".to_owned(),
+            equalizer: "background".to_owned(),
             animate: true,
             hide_from_sharing: true,
             screenshot_key: crate::hotkey::DEFAULT.to_owned(),
+            parallel_accounts: "hedged".to_owned(),
+            first_word_seconds: 15,
+            tray_icon: true,
+            hide_from_taskbar: true,
         }
     }
 }
@@ -412,8 +431,11 @@ impl AppSettings {
             settings.last_update_check = seconds;
         }
         let text = |key: &str| data.get(key).and_then(Value::as_str).map(|value| value.trim().to_owned());
-        if let Some(theme) = text("theme").filter(|theme| theme == "custom" || crate::look::is_preset(theme)) {
+        if let Some(theme) = text("theme").filter(|theme| crate::look::is_theme(theme)) {
             settings.theme = theme;
+        }
+        if let Some(accent) = text("accent").filter(|accent| crate::look::parse_hex(accent).is_some()) {
+            settings.accent = accent;
         }
         for (key, slot) in [
             ("custom_panel", &mut settings.custom_panel),
@@ -424,7 +446,10 @@ impl AppSettings {
                 *slot = color;
             }
         }
-        if let Some(style) = text("equalizer").filter(|style| EQUALIZER_STYLES.contains(&style.as_str())) {
+        // the strip of dots by the pause button was taken out: what was saved for it, or for both, is the background
+        let saved = text("equalizer")
+            .map(|style| if matches!(style.as_str(), "both" | "dots") { "background".to_owned() } else { style });
+        if let Some(style) = saved.filter(|style| EQUALIZER_STYLES.contains(&style.as_str())) {
             settings.equalizer = style;
         }
         if let Some(Value::Bool(flag)) = data.get("animate") {
@@ -436,6 +461,20 @@ impl AppSettings {
         if let Some(key) = text("screenshot_key").filter(|key| crate::hotkey::parse(key).is_some()) {
             settings.screenshot_key = key;
         }
+        if let Some(mode) = text("parallel_accounts").filter(|mode| PARALLEL_MODES.contains(&mode.as_str())) {
+            settings.parallel_accounts = mode;
+        }
+        if let Some(seconds) =
+            data.get("first_word_seconds").and_then(Value::as_i64).filter(|n| FIRST_WORD_RANGE.contains(n))
+        {
+            settings.first_word_seconds = seconds;
+        }
+        if let Some(Value::Bool(flag)) = data.get("tray_icon") {
+            settings.tray_icon = *flag;
+        }
+        if let Some(Value::Bool(flag)) = data.get("hide_from_taskbar") {
+            settings.hide_from_taskbar = *flag;
+        }
         settings
     }
 
@@ -446,6 +485,7 @@ impl AppSettings {
             "skipped_version": self.skipped_version,
             "last_update_check": self.last_update_check,
             "theme": self.theme,
+            "accent": self.accent,
             "custom_panel": self.custom_panel,
             "custom_text": self.custom_text,
             "custom_accent": self.custom_accent,
@@ -453,6 +493,10 @@ impl AppSettings {
             "animate": self.animate,
             "hide_from_sharing": self.hide_from_sharing,
             "screenshot_key": self.screenshot_key,
+            "parallel_accounts": self.parallel_accounts,
+            "first_word_seconds": self.first_word_seconds,
+            "tray_icon": self.tray_icon,
+            "hide_from_taskbar": self.hide_from_taskbar,
         });
         write_private(path, &serde_json::to_string_pretty(&value).unwrap_or_default())
     }
@@ -606,13 +650,18 @@ mod tests {
             skipped_version: "0.5.1".into(),
             last_update_check: 1_700_000_000,
             theme: "custom".into(),
+            accent: "#ff7a59".into(),
             custom_panel: "#101820".into(),
             custom_text: "#e0e8f0".into(),
             custom_accent: "#ff7a59".into(),
-            equalizer: "background".into(),
+            equalizer: "off".into(),
             animate: false,
             hide_from_sharing: false,
             screenshot_key: "ctrl + alt + k".into(),
+            parallel_accounts: "all".into(),
+            first_word_seconds: 8,
+            tray_icon: false,
+            hide_from_taskbar: false,
         };
         let settings = AppSettings { screenshot_key: "Ctrl+Alt+K".into(), ..settings };
         settings.save(&path).unwrap();
@@ -623,8 +672,25 @@ mod tests {
     fn a_look_that_cannot_be_read_is_the_default_one() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
-        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter"}"##)
+        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "accent": "pink", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes", "hide_from_taskbar": 1}"##)
             .unwrap();
         assert_eq!(AppSettings::load(&path), AppSettings::default());
+    }
+
+    #[test]
+    fn the_strip_of_dots_that_was_taken_out_is_read_as_the_background() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("app.json");
+        for (saved, expected) in [
+            ("both", "background"),
+            ("dots", "background"),
+            ("background", "background"),
+            ("off", "off"),
+            ("loud", "background"),
+        ] {
+            std::fs::write(&path, format!(r#"{{"equalizer": "{saved}"}}"#)).unwrap();
+            assert_eq!(AppSettings::load(&path).equalizer, expected, "{saved}");
+        }
+        assert_eq!(AppSettings::default().equalizer, "background");
     }
 }
