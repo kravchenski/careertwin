@@ -30,6 +30,8 @@ struct Shell {
     control: Option<control::Server>,
     #[cfg(windows)]
     _hotkey: Option<careertwin_overlay::hotkey::Hotkey>,
+    #[cfg(windows)]
+    tray: Option<careertwin_overlay::tray::Tray>,
 }
 
 impl eframe::App for Shell {
@@ -39,6 +41,11 @@ impl eframe::App for Shell {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.app.show(ui);
+        #[cfg(windows)]
+        if let Some(tray) = &mut self.tray {
+            let (look, tooltip, listening) = self.app.tray_state();
+            tray.update(look, &tooltip, listening);
+        }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -126,6 +133,7 @@ fn main() -> ExitCode {
                 match careertwin_overlay::hotkey::start(
                     &app.app.screenshot_key,
                     move || {
+                        careertwin_overlay::tray::reveal(); // a minimized window is not drawn, so it could not take the shot
                         let _ = sender.send(Event::Remote("screenshot".to_owned()));
                         wake();
                     },
@@ -142,12 +150,39 @@ fn main() -> ExitCode {
                     }
                 }
             };
+            #[cfg(windows)]
+            let tray = if app.app.tray_icon {
+                use careertwin_overlay::tray::{Command, Tray};
+                let (sender, wake, log) = (app.tx.clone(), repaint.clone(), app.paths.log_file());
+                let (labels, (_, tooltip, _)) = (app.tray_labels(), app.tray_state());
+                match Tray::new(&labels, &tooltip, move |command| {
+                    careertwin_overlay::tray::reveal();
+                    let name = match command {
+                        Command::Show => return,
+                        Command::Screenshot => "screenshot",
+                        Command::ToggleListening => "listening",
+                        Command::Quit => "quit",
+                    };
+                    let _ = sender.send(Event::Remote(name.to_owned()));
+                    wake();
+                }) {
+                    Ok(tray) => Some(tray),
+                    Err(error) => {
+                        careertwin_overlay::log::note(&log, &format!("tray icon: {error}"));
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             Ok(Box::new(Shell {
                 app,
                 _runtime: runtime,
                 control: server,
                 #[cfg(windows)]
                 _hotkey: hotkey,
+                #[cfg(windows)]
+                tray,
             }))
         }),
     );

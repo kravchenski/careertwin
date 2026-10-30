@@ -95,6 +95,26 @@ Left, on purpose or for lack of a way to test it here:
 * **Error texts** of the older routes still return the exception message to the caller, and a few have no upper
   bound on a list in the body. Both need the token and neither can reach a secret.
 
+## The window's own picture
+
+The Rust window (`overlay/`) reads one kind of untrusted file: the image you choose as its icon (a PNG, a JPEG or
+an ICO, from the path field or dropped on Settings). Checked on 2026-10-30:
+
+* **Known vulnerabilities.** The advisory database (OSV) was queried for all 563 crates of `overlay/Cargo.lock`.
+  Nothing is reported against `image` 0.25.10, `png` 0.18.1, `zune-jpeg` 0.5.15 (the JPEG reader) or the ICO reader
+  that is part of `image`. Four crates carry an *unmaintained* notice and no vulnerability: `ttf-parser`
+  (RUSTSEC-2026-0192, through `pdf-extract`, which reads a CV), and `zbus_names`, `zvariant`, `zvariant_derive`
+  (RUSTSEC-2026-0371/0370/0372, through the screen-reader support on Linux).
+* **What a hostile file can do.** It is opened only when it is a regular file (not a device, a pipe or a
+  link to one), at most 8 MB, at most 4096 pixels a side, decoded with a 128 MiB allocation limit, so a small file
+  that unpacks into gigabytes (a decompression bomb) is refused before it is built. The format is decided by what
+  is in the file, not by its name: a script called `icon.png` is refused, and a PNG called `icon.ico` is read as
+  a PNG. Metadata and colour profiles are not interpreted. A refused file shows a message and the icon in use stays.
+  Tests for each case are in `overlay/src/ui/icon.rs`; the window's own tests drop a script with a picture's name
+  and a missing file on the settings and check the icon does not change.
+* **Not covered:** the decoders are libraries we did not write; a flaw nobody has reported yet would be in them.
+  The crates are pinned by `Cargo.lock`, and the `overlay` workflow builds from that lock only.
+
 ## What this does not cover
 
 * **Anything that already runs as you.** A process under your user account can read `.env`, `ABOUT.md`, the token
