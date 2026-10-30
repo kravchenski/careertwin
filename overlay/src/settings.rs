@@ -367,6 +367,10 @@ pub struct AppSettings {
     pub equalizer: String,
     /// The equalizer and its background move.
     pub animate: bool,
+    /// Windows: leave the window out of screen sharing and recordings (it stays on your own monitor).
+    pub hide_from_sharing: bool,
+    /// Windows: the key that takes a screenshot from any program, as `Ctrl+Shift+Enter`.
+    pub screenshot_key: String,
 }
 
 pub const EQUALIZER_STYLES: [&str; 4] = ["both", "dots", "background", "off"];
@@ -384,6 +388,8 @@ impl Default for AppSettings {
             custom_accent: "#bcb4ff".to_owned(),
             equalizer: "both".to_owned(),
             animate: true,
+            hide_from_sharing: true,
+            screenshot_key: crate::hotkey::DEFAULT.to_owned(),
         }
     }
 }
@@ -424,6 +430,12 @@ impl AppSettings {
         if let Some(Value::Bool(flag)) = data.get("animate") {
             settings.animate = *flag;
         }
+        if let Some(Value::Bool(flag)) = data.get("hide_from_sharing") {
+            settings.hide_from_sharing = *flag;
+        }
+        if let Some(key) = text("screenshot_key").filter(|key| crate::hotkey::parse(key).is_some()) {
+            settings.screenshot_key = key;
+        }
         settings
     }
 
@@ -439,6 +451,8 @@ impl AppSettings {
             "custom_accent": self.custom_accent,
             "equalizer": self.equalizer,
             "animate": self.animate,
+            "hide_from_sharing": self.hide_from_sharing,
+            "screenshot_key": self.screenshot_key,
         });
         write_private(path, &serde_json::to_string_pretty(&value).unwrap_or_default())
     }
@@ -597,7 +611,10 @@ mod tests {
             custom_accent: "#ff7a59".into(),
             equalizer: "background".into(),
             animate: false,
+            hide_from_sharing: false,
+            screenshot_key: "ctrl + alt + k".into(),
         };
+        let settings = AppSettings { screenshot_key: "Ctrl+Alt+K".into(), ..settings };
         settings.save(&path).unwrap();
         assert_eq!(AppSettings::load(&path), settings);
     }
@@ -606,7 +623,7 @@ mod tests {
     fn a_look_that_cannot_be_read_is_the_default_one() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
-        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes"}"##)
+        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter"}"##)
             .unwrap();
         assert_eq!(AppSettings::load(&path), AppSettings::default());
     }

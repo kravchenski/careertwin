@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 use egui::{Align, Layout, RichText, ScrollArea, Ui};
 
 use crate::brief::{InterviewBrief, ProjectDossier};
+use crate::capture_exclude;
 use crate::coach::{Coach, CoachConfig, Request};
 use crate::export;
 use crate::hearing;
@@ -127,6 +128,10 @@ pub struct App {
     clock: f64,
     /// What the window was last told, so a change is applied once.
     applied: Applied,
+    /// When the capture exclusion was last set (Windows may drop it, so it is set again every couple of seconds).
+    excluded_at: Option<Instant>,
+    /// The key that takes a screenshot from any program, once it is registered (Windows).
+    pub screenshot_key: Option<String>,
 }
 
 #[derive(Default, PartialEq)]
@@ -136,6 +141,7 @@ struct Applied {
     scale: i64,
     pinned: Option<bool>,
     frameless: Option<bool>,
+    hidden: Option<bool>,
 }
 
 impl App {
@@ -209,6 +215,8 @@ impl App {
             level: equalizer::Level::default(),
             clock: 0.0,
             applied: Applied::default(),
+            excluded_at: None,
+            screenshot_key: None,
         };
         this.apply_coach();
         this.load_project();
@@ -700,6 +708,21 @@ impl App {
 
     // ---- the window itself -----------------------------------------------------------------------------------
 
+    /// Keep the window out of screen sharing when that is asked for (and back in when it no longer is).
+    fn keep_out_of_captures(&mut self) {
+        if !capture_exclude::supported() {
+            return;
+        }
+        let due = self.excluded_at.is_none_or(|at| at.elapsed() >= capture_exclude::REASSERT_EVERY);
+        if due || self.applied.hidden != Some(self.app.hide_from_sharing) {
+            self.excluded_at = Some(Instant::now());
+            self.applied.hidden = Some(self.app.hide_from_sharing);
+            if self.app.hide_from_sharing || due {
+                capture_exclude::set(self.app.hide_from_sharing);
+            }
+        }
+    }
+
     fn apply_window(&mut self, ctx: &egui::Context) {
         let palette = theme::from_settings(&self.app);
         let palette_changed = self.applied.palette != Some(palette);
@@ -934,6 +957,14 @@ impl App {
         self.drain();
         self.capture_step();
         self.apply_window(&ctx);
+        self.keep_out_of_captures();
+        let key = egui::KeyboardShortcut::new(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::Enter);
+        if ctx.input_mut(|input| input.consume_shortcut(&key)) {
+            self.start_screenshot();
+        }
+        if capture_exclude::supported() {
+            ctx.request_repaint_after(capture_exclude::REASSERT_EVERY);
+        }
         if self.capturing.is_some() {
             ctx.request_repaint_after(Duration::from_millis(10));
         }

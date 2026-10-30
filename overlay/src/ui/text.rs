@@ -4,6 +4,16 @@
 const TABLE: &[(&str, &str, &str)] = &[
     ("ready", "Ready", "Готово"),
     ("you_said", "You:", "Вы:"),
+    ("screenshot_key", "Screenshot key", "Клавиша скриншота"),
+    ("screenshot_key_now", "The screenshot key works in any program: {key}", "Клавиша скриншота работает в любой программе: {key}"),
+    ("screenshot_key_restart", "{key} will be the screenshot key the next time the window starts", "{key} станет клавишей скриншота при следующем запуске окна"),
+    ("screenshot_key_bad", "Use a modifier and a key, like Ctrl+Shift+Enter", "Нужны модификатор и клавиша, например Ctrl+Shift+Enter"),
+    ("hide_from_sharing", "Hide this window from screen sharing", "Скрывать окно при показе экрана"),
+    (
+        "hide_note",
+        "Zoom, Teams, Meet, OBS and screenshots do not see the window; you still do. Older Windows shows a black box instead. Check the rules of each employer: many forbid help during an interview.",
+        "Zoom, Teams, Meet, OBS и скриншоты не видят окно, вы его видите. На старых Windows вместо него чёрный прямоугольник. Проверьте правила работодателя: многие запрещают помощь на собеседовании.",
+    ),
     ("heard", "Heard", "Слышу"),
     ("listening_to", "Listening to {name}", "Слушаю {name}"),
     ("hearing", "Listening", "Слух"),

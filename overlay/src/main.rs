@@ -1,5 +1,8 @@
 //! CareerTwin Interview, in Rust.
 
+// A release build on Windows is a window, not a console program.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -23,6 +26,8 @@ struct Shell {
     app: App,
     _runtime: tokio::runtime::Runtime,
     control: Option<control::Server>,
+    #[cfg(windows)]
+    _hotkey: Option<careertwin_overlay::hotkey::Hotkey>,
 }
 
 impl eframe::App for Shell {
@@ -40,7 +45,16 @@ impl eframe::App for Shell {
     }
 }
 
+/// A window program has no console of its own: `--help` and `--version` write to the one that started it.
+#[cfg(windows)]
+fn attach_console() {
+    // SAFETY: attaches this process to the console of its parent, if it has one.
+    unsafe { windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS) };
+}
+
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    attach_console();
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         println!("{HELP}");
@@ -81,7 +95,36 @@ fn main() -> ExitCode {
             })
             .map_err(|error| eprintln!("the screenshot key works only while this window has the focus: {error}"))
             .ok();
-            Ok(Box::new(Shell { app, _runtime: runtime, control: server }))
+            #[cfg(windows)]
+            let hotkey = {
+                let (sender, wake, log) = (app.tx.clone(), repaint.clone(), app.paths.log_file());
+                let note_log = log.clone();
+                match careertwin_overlay::hotkey::start(
+                    &app.app.screenshot_key,
+                    move || {
+                        let _ = sender.send(Event::Remote("screenshot".to_owned()));
+                        wake();
+                    },
+                    move |text| careertwin_overlay::log::note(&note_log, text),
+                ) {
+                    Ok(hotkey) => {
+                        app.screenshot_key = Some(hotkey.name.clone());
+                        Some(hotkey)
+                    }
+                    Err(error) => {
+                        careertwin_overlay::log::note(&log, &error);
+                        app.say(&error, true);
+                        None
+                    }
+                }
+            };
+            Ok(Box::new(Shell {
+                app,
+                _runtime: runtime,
+                control: server,
+                #[cfg(windows)]
+                _hotkey: hotkey,
+            }))
         }),
     );
     match result {

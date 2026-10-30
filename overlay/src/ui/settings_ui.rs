@@ -51,6 +51,9 @@ pub struct State {
     /// The dossier as it is being edited, and the project folder it belongs to.
     pub dossier: String,
     pub dossier_of: String,
+    /// The screenshot key as it is being typed.
+    pub key_text: String,
+    pub key_text_ready: bool,
 }
 
 impl Default for State {
@@ -78,6 +81,8 @@ impl Default for State {
             sources: None,
             dossier: String::new(),
             dossier_of: String::new(),
+            key_text: String::new(),
+            key_text_ready: false,
         }
     }
 }
@@ -989,6 +994,36 @@ impl App {
                 });
         });
         note(ui, &t("screenshot_note"));
+        if cfg!(windows) {
+            ui.horizontal(|ui| {
+                let key = self.screenshot_key.clone().unwrap_or_else(|| self.app.screenshot_key.clone());
+                ui.label(RichText::new(tf("screenshot_key_now", &[("key", &key)])).color(muted()).small());
+            });
+            if !self.settings_ui.key_text_ready {
+                self.settings_ui.key_text_ready = true;
+                self.settings_ui.key_text.clone_from(&self.app.screenshot_key);
+            }
+            row(ui, &t("screenshot_key"), |ui| {
+                let edit = ui.add(TextEdit::singleline(&mut self.settings_ui.key_text).desired_width(200.0));
+                let valid = crate::hotkey::parse(&self.settings_ui.key_text).is_some();
+                if edit.lost_focus() && valid && self.settings_ui.key_text != self.app.screenshot_key {
+                    self.app.screenshot_key = self.settings_ui.key_text.clone();
+                    self.app_changed();
+                    self.say(&tf("screenshot_key_restart", &[("key", &self.app.screenshot_key)]), false);
+                }
+                if !valid {
+                    ui.label(RichText::new(t("screenshot_key_bad")).color(danger()).small());
+                }
+            });
+        }
+        if crate::capture_exclude::supported() {
+            let mut hide = self.app.hide_from_sharing;
+            if ui.checkbox(&mut hide, t("hide_from_sharing")).changed() {
+                self.app.hide_from_sharing = hide;
+                self.app_changed();
+            }
+            note(ui, &t("hide_note"));
+        }
 
         section(ui, &t("updates"));
         let mut check = self.app.check_updates;

@@ -1,9 +1,13 @@
 //! Capture the screen for coding tasks and slides the interviewer shares.
 //!
 //! Linux asks a tool of the session (grim on Wayland, which writes a JPEG in about 30 ms; spectacle,
-//! gnome-screenshot, maim, scrot); macOS has `screencapture`. Windows captures in-process and is not in this
-//! build yet.
+//! gnome-screenshot, maim, scrot); macOS has `screencapture`. Windows captures in-process through GDI: the screen
+//! that holds the window in front, or all of them.
 
+// On Windows the tool table and the child-process runner are not used: the capture is in-process.
+#![cfg_attr(windows, allow(dead_code))]
+
+#[cfg(not(windows))]
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -21,8 +25,8 @@ pub enum ScreenshotError {
     Unavailable(String),
     #[error("{tool} failed: {why}")]
     Failed { tool: String, why: String },
-    #[error("Screenshots on Windows are not in this version of the Rust window yet")]
-    Windows,
+    #[error("Windows could not capture the screen: {0}")]
+    Windows(String),
 }
 
 /// A captured screen: JPEG when it could be made, since it is ten times smaller than PNG.
@@ -64,9 +68,12 @@ pub fn on_path(program: &str) -> bool {
         .is_some_and(|paths| std::env::split_paths(&paths).any(|folder| folder.join(program).is_file()))
 }
 
+/// The two ways Windows captures: the screen with the window in front, or every screen.
+pub const WINDOWS_TOOLS: [&str; 2] = ["primary-screen", "all-screens"];
+
 pub fn available_tools() -> Vec<String> {
     if cfg!(target_os = "windows") {
-        return vec!["primary-screen".to_owned(), "all-screens".to_owned()];
+        return WINDOWS_TOOLS.iter().map(|name| (*name).to_owned()).collect();
     }
     tools_with(on_path, std::env::var_os("WAYLAND_DISPLAY").is_some())
 }
@@ -119,9 +126,17 @@ fn run(mut command: Command, limit: Duration) -> std::io::Result<std::process::O
 
 /// The screen (or one `output`, where the tool can) as a [`Shot`], as fast as the tool allows.
 pub fn capture(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError> {
-    if cfg!(target_os = "windows") {
-        return Err(ScreenshotError::Windows);
+    #[cfg(windows)]
+    {
+        let _ = output;
+        return windows::capture(tool == "all-screens");
     }
+    #[cfg(not(windows))]
+    capture_with_tool(tool, output)
+}
+
+#[cfg(not(windows))]
+fn capture_with_tool(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError> {
     let chosen = choose(tool, &available_tools())?;
     let limit = Duration::from_secs(20);
     if chosen == "grim" {
@@ -152,6 +167,43 @@ pub fn capture(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError
     Ok(Shot { data: bytes, mime: "image/png" })
 }
 
+/// The long side of a picture sent to the model: more pixels cost time and say nothing more about a task.
+pub const MAX_SIDE: u32 = 2560;
+
+/// Pixels as a GDI bitmap gives them (blue, green, red, unused) to the red, green, blue of a picture.
+pub fn bgra_to_rgb(pixels: &[u8]) -> Vec<u8> {
+    let mut rgb = Vec::with_capacity(pixels.len() / 4 * 3);
+    for pixel in pixels.chunks_exact(4) {
+        rgb.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
+    }
+    rgb
+}
+
+/// A JPEG of `width` by `height` pixels of RGB, scaled down when it is larger than [`MAX_SIDE`].
+pub fn encode_jpeg(rgb: Vec<u8>, width: u32, height: u32) -> Result<Shot, String> {
+    use image::{ExtendedColorType, ImageBuffer, Rgb, imageops};
+    let picture: ImageBuffer<Rgb<u8>, Vec<u8>> =
+        ImageBuffer::from_raw(width, height, rgb).ok_or_else(|| "the picture has the wrong size".to_owned())?;
+    let longest = width.max(height);
+    let picture = if longest > MAX_SIDE {
+        let scale = f64::from(MAX_SIDE) / f64::from(longest);
+        let (w, h) = ((f64::from(width) * scale).round() as u32, (f64::from(height) * scale).round() as u32);
+        imageops::resize(&picture, w.max(1), h.max(1), imageops::FilterType::Triangle)
+    } else {
+        picture
+    };
+    let mut data = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut data, JPEG_QUALITY as u8)
+        .encode(picture.as_raw(), picture.width(), picture.height(), ExtendedColorType::Rgb8)
+        .map_err(|error| error.to_string())?;
+    Ok(Shot { data, mime: "image/jpeg" })
+}
+
+#[cfg(windows)]
+#[path = "screenshot_windows.rs"]
+mod windows;
+
+#[cfg(not(windows))]
 fn capture_file(tool: &str, output: Option<&str>, path: &Path, limit: Duration) -> Result<(), ScreenshotError> {
     let (_, template, _) =
         TOOLS.iter().find(|(name, _, _)| *name == tool).ok_or_else(|| ScreenshotError::Unavailable(tool.to_owned()))?;
@@ -210,5 +262,18 @@ mod tests {
         let started = std::time::Instant::now();
         let result = run(command, Duration::from_millis(100)).unwrap();
         assert!(!result.status.success() && started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn windows_pixels_become_a_jpeg_and_a_large_screen_is_scaled_down() {
+        let (width, height) = (8u32, 4u32);
+        let bgra: Vec<u8> = (0..width * height).flat_map(|_| [10u8, 20, 30, 0]).collect();
+        assert_eq!(&bgra_to_rgb(&bgra)[..3], &[30, 20, 10]);
+        let shot = encode_jpeg(bgra_to_rgb(&bgra), width, height).unwrap();
+        assert!(is_jpeg(&shot.data) && shot.mime == "image/jpeg");
+        let wide = encode_jpeg(vec![200u8; 5120 * 100 * 3], 5120, 100).unwrap();
+        let decoded = image::load_from_memory(&wide.data).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (2560, 50));
+        assert!(encode_jpeg(vec![0; 5], 8, 4).is_err());
     }
 }
