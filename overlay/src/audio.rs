@@ -833,8 +833,9 @@ mod tests {
         let state = Arc::new(Mutex::new(("speaker.monitor".to_owned(), Vec::<String>::new())));
         let (state_read, started) = (state.clone(), Arc::new(AtomicUsize::new(0)));
         let count = started.clone();
+        // the follower looks at the audio by itself only every hour: the test makes each look, so no timing matters
         let follower = Arc::new(FollowingSource::new(
-            Duration::from_millis(40),
+            Duration::from_secs(3600),
             |_| {},
             Box::new(move || Ok(state_read.lock().unwrap().clone())),
             Box::new(move |name| {
@@ -848,11 +849,19 @@ mod tests {
         ));
         let runner = follower.clone();
         let handle = std::thread::spawn(move || runner.run(&mut |_| true));
-        std::thread::sleep(Duration::from_millis(60));
-        *state.lock().unwrap() = ("speaker.monitor".into(), vec!["usb.monitor".into()]); // one check sees it...
-        std::thread::sleep(Duration::from_millis(50));
+        for _ in 0..200 {
+            if follower.current().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(follower.current().as_deref(), Some("speaker.monitor"));
+        *state.lock().unwrap() = ("speaker.monitor".into(), vec!["usb.monitor".into()]); // one look sees it...
+        follower.watch_once();
+        assert_eq!(follower.current().as_deref(), Some("speaker.monitor"), "one look is not enough to move");
         *state.lock().unwrap() = ("speaker.monitor".into(), Vec::new()); // ...the next does not
-        std::thread::sleep(Duration::from_millis(200));
+        follower.watch_once();
+        follower.watch_once();
         assert_eq!(follower.current().as_deref(), Some("speaker.monitor"));
         follower.close();
         handle.join().unwrap().unwrap();
