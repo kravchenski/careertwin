@@ -1035,7 +1035,8 @@ impl App {
         let opacity = if hidden { 0.0 } else { self.settings.opacity as f32 / 100.0 };
         if !hidden {
             egui::CentralPanel::default().frame(theme::panel_frame(opacity)).show(ui, |ui| {
-                if self.equalizer_background() {
+                // not behind the settings: a wave of dots next to a form is noise, and it returns when they close
+                if self.equalizer_background() && !self.settings_open {
                     let time = if self.app.animate { ctx.input(|input| input.time) } else { 0.0 };
                     // above the line with the interview and the history, so no dot sits under that text
                     let mut rect = ui.max_rect().expand(8.0);

@@ -69,9 +69,11 @@ pub fn derive(panel: [u8; 3], text: [u8; 3], accent: [u8; 3]) -> Palette {
         line: mix(panel, text, 0.18),
         code: if dark { mix(panel, black, 0.4) } else { mix(panel, text, 0.06) },
         window: mix(panel, text, 0.05),
-        good: if dark { rgb(143, 191, 154) } else { rgb(40, 130, 70) },
-        warn: if dark { rgb(255, 207, 122) } else { rgb(170, 110, 0) },
-        danger: if dark { rgb(255, 154, 154) } else { rgb(190, 50, 50) },
+        // one accent: what is done is the accent, what needs attention is plain emphasis, and a muted red is kept for
+        // errors alone
+        good: accent,
+        warn: if dark { white } else { black },
+        danger: if dark { rgb(222, 128, 128) } else { rgb(168, 58, 58) },
     }
 }
 
@@ -176,30 +178,37 @@ pub fn apply(ctx: &egui::Context, scale: f32) {
     let p = palette();
     let mut style = (*ctx.global_style()).clone();
     let size = |points: f32| points * scale;
+    // a scale with real steps: 12 for what is secondary, 14 for what is read, 19 for the sections, 22 for a window
     style.text_styles = [
-        (TextStyle::Heading, sans(size(20.0))),
-        (TextStyle::Body, sans(size(15.0))),
+        (TextStyle::Heading, semibold(size(20.0))),
+        (TextStyle::Body, sans(size(14.0))),
         (TextStyle::Button, semibold(size(14.0))),
-        (TextStyle::Small, sans(size(12.5))),
-        (TextStyle::Monospace, mono(size(14.0))),
+        (TextStyle::Small, sans(size(12.0))),
+        (TextStyle::Monospace, mono(size(13.5))),
     ]
     .into();
-    style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-    style.spacing.button_padding = egui::vec2(14.0, 7.0);
-    style.spacing.interact_size.y = 32.0;
+    style.spacing.item_spacing = egui::vec2(10.0, 6.0);
+    style.spacing.button_padding = egui::vec2(12.0, 6.0);
+    style.spacing.interact_size.y = 30.0;
     let visuals = &mut style.visuals;
     *visuals = if p.dark { egui::Visuals::dark() } else { egui::Visuals::light() };
     visuals.override_text_color = Some(p.text);
     visuals.panel_fill = Color32::TRANSPARENT;
     visuals.window_fill = p.window;
     visuals.window_stroke = Stroke::new(1.0, p.line);
-    visuals.window_corner_radius = CornerRadius::same(10);
+    // one small radius per layer, each inside the one around it: the panel 10, a window 6, a control 4
+    visuals.window_corner_radius = CornerRadius::same(6);
+    visuals.menu_corner_radius = CornerRadius::same(6);
+    // a tight shadow that says how high the window floats; the hairline does the separating
+    let shadow = egui::Shadow { offset: [0, 2], blur: 8, spread: 0, color: Color32::from_black_alpha(90) };
+    visuals.window_shadow = shadow;
+    visuals.popup_shadow = shadow;
     visuals.extreme_bg_color = p.field;
     visuals.faint_bg_color = mix(p.panel, p.text, 0.05);
     visuals.hyperlink_color = p.accent;
     visuals.selection.bg_fill = mix(p.panel, p.accent, 0.45);
     visuals.selection.stroke = Stroke::new(1.0, p.strong);
-    let radius = CornerRadius::same(8);
+    let radius = CornerRadius::same(4);
     for widget in [
         &mut visuals.widgets.noninteractive,
         &mut visuals.widgets.inactive,
@@ -238,7 +247,7 @@ pub fn panel_frame(opacity: f32) -> egui::Frame {
             p.panel.b(),
             (opacity.clamp(0.35, 1.0) * 232.0) as u8,
         ))
-        .corner_radius(CornerRadius::same(14))
+        .corner_radius(CornerRadius::same(10))
         .inner_margin(Margin::symmetric(18, 14))
         .stroke(Stroke::new(1.0, p.line))
 }

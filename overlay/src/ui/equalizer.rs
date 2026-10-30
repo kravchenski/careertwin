@@ -74,7 +74,7 @@ fn mood_color(mood: Mood) -> Color32 {
     match mood {
         Mood::Idle | Mood::Paused => theme::muted(),
         Mood::Listening => theme::accent(),
-        Mood::Thinking => theme::warn(),
+        Mood::Thinking => theme::strong(),
         Mood::Error => theme::danger(),
     }
 }
