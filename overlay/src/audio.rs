@@ -820,7 +820,13 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(follower.current().as_deref(), Some("usb.monitor"));
-        std::thread::sleep(Duration::from_millis(100));
+        // the new source has to be running and heard from before the follower is closed, however slow the machine
+        for _ in 0..500 {
+            if started.load(Ordering::SeqCst) == 2 && heard.lock().unwrap().contains(&9) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
         follower.close();
         handle.join().unwrap().unwrap();
         assert_eq!(*announced.lock().unwrap(), ["speaker.monitor", "usb.monitor"]);
@@ -849,12 +855,13 @@ mod tests {
         ));
         let runner = follower.clone();
         let handle = std::thread::spawn(move || runner.run(&mut |_| true));
-        for _ in 0..200 {
-            if follower.current().is_some() {
+        for _ in 0..500 {
+            if started.load(Ordering::SeqCst) == 1 {
                 break;
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+        assert_eq!(started.load(Ordering::SeqCst), 1, "the first source did not start");
         assert_eq!(follower.current().as_deref(), Some("speaker.monitor"));
         *state.lock().unwrap() = ("speaker.monitor".into(), vec!["usb.monitor".into()]); // one look sees it...
         follower.watch_once();
