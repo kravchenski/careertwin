@@ -948,6 +948,26 @@ fn the_account_modes_are_shown_for_a_provider_with_accounts_and_not_for_a_local_
 }
 
 #[test]
+fn a_status_word_shows_no_text_cursor_but_an_answer_can_be_selected() {
+    let mut fixture = fixture("en");
+    fixture.app.entries.push(answered("What is a left join?", REPLY));
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 520.0);
+    harness.run_steps(3);
+    let status = harness.get_by_label("Ready").rect().center();
+    harness.hover_at(status);
+    harness.run_steps(2);
+    assert_ne!(
+        harness.output().platform_output.cursor_icon,
+        egui::CursorIcon::Text,
+        "the status word is not text to pick"
+    );
+    let answer = harness.get_by_label_contains("keeps every row").rect();
+    harness.hover_at(egui::pos2(answer.left() + 30.0, answer.center().y));
+    harness.run_steps(2);
+    assert_eq!(harness.output().platform_output.cursor_icon, egui::CursorIcon::Text, "the answer is");
+}
+
+#[test]
 fn the_edges_and_corners_of_the_settings_window_are_not_resize_handles() {
     let mut fixture = fixture("en");
     fixture.app.settings_open = true;

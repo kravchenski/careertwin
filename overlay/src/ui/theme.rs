@@ -195,6 +195,8 @@ pub fn apply(ctx: &egui::Context, scale: f32) {
     style.spacing.item_spacing = egui::vec2(10.0, 6.0);
     style.spacing.button_padding = egui::vec2(12.0, 6.0);
     style.spacing.interact_size.y = 30.0;
+    // text on the window is read, not picked up: no text cursor over a name or a status (an answer turns this back on)
+    style.interaction.selectable_labels = false;
     let visuals = &mut style.visuals;
     *visuals = if p.dark { egui::Visuals::dark() } else { egui::Visuals::light() };
     visuals.override_text_color = Some(p.text);

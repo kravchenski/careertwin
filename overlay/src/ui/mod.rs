@@ -1145,6 +1145,7 @@ impl App {
             });
         }
         ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(self.thinking()).show(ui, |ui| {
+            ui.style_mut().interaction.selectable_labels = true; // the answer can be selected and copied by hand
             let entry = &self.entries[index];
             if let Some(error) = &entry.error {
                 ui.label(RichText::new(error).color(danger()));
