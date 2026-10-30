@@ -17,6 +17,8 @@ pub mod look;
 pub mod models;
 pub mod paths;
 pub mod prepare;
+pub mod project;
+pub mod project_text;
 pub mod prompt_text;
 pub mod prompts;
 pub mod providers;

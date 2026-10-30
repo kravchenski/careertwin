@@ -49,6 +49,42 @@ pub fn user_prompt(
     code: &str,
     listening: Option<&str>,
 ) -> String {
+    let background = brief.render(Some(kind));
+    build_prompt(&background, question, kind, history, language, style, layout, code, listening)
+}
+
+/// A question about the project being defended: the same, but with the lean background (see
+/// `InterviewBrief::render_for_project`) and the part of the dossier that bears on the question. This keeps the
+/// request under the limit of a free provider and sends the first words sooner.
+#[allow(clippy::too_many_arguments)]
+pub fn project_prompt(
+    brief: &InterviewBrief,
+    question: &str,
+    kind: Kind,
+    history: &[String],
+    language: Option<&str>,
+    style: &str,
+    layout: &str,
+    code: &str,
+    dossier: &str,
+    listening: Option<&str>,
+) -> String {
+    let background = brief.render_for_project(dossier);
+    build_prompt(&background, question, kind, history, language, style, layout, code, listening)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_prompt(
+    background: &str,
+    question: &str,
+    kind: Kind,
+    history: &[String],
+    language: Option<&str>,
+    style: &str,
+    layout: &str,
+    code: &str,
+    listening: Option<&str>,
+) -> String {
     let name =
         languages::name(Some(language.filter(|code| !code.is_empty()).unwrap_or_else(|| detect_language(question))));
     let recent = if history.is_empty() {
@@ -62,9 +98,8 @@ pub fn user_prompt(
         .and_then(|key| LISTENING_HINTS.iter().find(|(name, _)| *name == key))
         .map_or(String::new(), |(_, text)| format!("{text}\n"));
     format!(
-        "{}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\nINTERVIEWER'S QUESTION: {question}\nTYPE: {}. {}\n\
+        "{background}\n\n{excerpts}RECENT CONVERSATION\n{recent}\n\nINTERVIEWER'S QUESTION: {question}\nTYPE: {}. {}\n\
 INTERVIEW LANGUAGE: {name}. Write your reply in {name}.\n{}\n{}\n{heard}",
-        brief.render(Some(kind)),
         kind.as_str(),
         kind_hint(kind),
         style_hint(style),
@@ -342,5 +377,23 @@ mod tests {
         assert_eq!(suggestion.plain_points(), ["I use Docker"]);
         assert!(suggestion.raw.starts_with("POINTS:") && suggestion.raw.ends_with("Yes."));
         assert_eq!(parse_suggestion(SKIP).sections.answer, SKIP);
+    }
+
+    #[test]
+    fn a_project_prompt_is_much_smaller_and_carries_the_dossier_part_and_the_code() {
+        let mut brief = InterviewBrief::new("## Contact\nmax@example.com\n\n## Skills\nPython\n\n## Interview stories\n"
+            .to_owned()
+            .as_str());
+        brief.candidate.push_str(&"filler line\n".repeat(2000));
+        brief.documents.push(crate::brief::Document::new("cv.pdf", &"cv ".repeat(3000), "cv"));
+        brief.project = Some(crate::brief::ProjectDossier { name: "bot".into(), dossier: "d".repeat(9000) });
+        let args = |code| ("How does the bot stop flooding?", Kind::Technical, ["Interviewer: hi".to_owned()], code);
+        let (question, kind, history, code) = args("--- a.py ---\nlimit()");
+        let full = user_prompt(&brief, question, kind, &history, Some("en"), "standard", "lines", code, None);
+        let lean = project_prompt(&brief, question, kind, &history, Some("en"), "standard", "lines", code, "## Overview\nA bot.", None);
+        assert!(lean.len() * 3 < full.len(), "{} vs {}", lean.len(), full.len());
+        assert!(lean.contains("PROJECT THE CANDIDATE WILL DEFEND: bot\n## Overview\nA bot.") && lean.contains("--- a.py ---\nlimit()"));
+        assert!(lean.contains("INTERVIEWER'S QUESTION: How does the bot stop flooding?") && lean.contains("Interviewer: hi"));
+        assert!(!lean.contains("cv cv") && !lean.contains("filler line"));
     }
 }

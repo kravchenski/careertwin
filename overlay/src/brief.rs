@@ -13,6 +13,10 @@ pub const CV_CHARS: usize = 9_000;
 pub const JOB_CHARS: usize = 6_000;
 pub const DOSSIER_IN_PROMPT: usize = 12_000;
 pub const MAX_VOCABULARY: usize = 50;
+/// How much of the vacancy goes with a question about the project: the project is the subject, not the job ad.
+pub const VACANCY_FOR_PROJECT: usize = 600;
+/// The sections of ABOUT.md that help with a question about a project.
+const PROJECT_SECTIONS: [&str; 4] = ["education", "experience", "projects", "skills"];
 const LOW_PRIORITY_SECTIONS: [&str; 3] = ["applications log", "cv files", "contact"];
 /// Parts of ABOUT.md written for CV writing and bookkeeping, not for answering a question: the log of
 /// applications, CV file names, the job-ad matching rules and the project catalogue. Dropping them makes
@@ -140,6 +144,30 @@ impl InterviewBrief {
         parts.join("\n\n")
     }
 
+    /// The background for a question about the project being defended: who the candidate is (education, experience,
+    /// projects, skills), a short look at the vacancy and the part of the dossier that bears on the question. The
+    /// rest of ABOUT.md and the CV are left out, so the request stays under a small provider's limit.
+    pub fn render_for_project(&self, dossier: &str) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let profile = profile_for_project(&self.candidate);
+        if !profile.trim().is_empty() {
+            parts.push(format!("CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{profile}"));
+        }
+        if !self.job_description.is_empty() || !self.job_title.is_empty() {
+            let head = [self.job_title.as_str(), self.company.as_str()].iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join(" at ");
+            parts.push(format!("VACANCY: {head}\n{}", chars(&self.job_description, VACANCY_FOR_PROJECT)).trim().to_owned());
+        }
+        if !self.notes.is_empty() {
+            parts.push(format!("CANDIDATE NOTES FOR THIS INTERVIEW\n{}", chars(&self.notes, 600)));
+        }
+        if let Some(project) = &self.project
+            && !dossier.trim().is_empty()
+        {
+            parts.push(format!("PROJECT THE CANDIDATE WILL DEFEND: {}\n{dossier}", project.name));
+        }
+        parts.join("\n\n")
+    }
+
     /// The candidate's main technologies, so a coding task is solved in a language they know.
     pub fn stack_hint(&self, limit: usize) -> String {
         let mut terms = skill_terms(&self.candidate);
@@ -230,6 +258,18 @@ pub fn slim_for_answers(text: &str, knowledge: bool) -> String {
     let kept: String = split_sections(text)
         .into_iter()
         .filter(|part| !skip.iter().any(|name| part.to_lowercase().starts_with(name)))
+        .collect();
+    drop_project_catalog(&kept)
+}
+
+/// Only the sections of ABOUT.md that help defend a project, without the catalogue of every project.
+pub fn profile_for_project(text: &str) -> String {
+    let kept: String = split_sections(text)
+        .into_iter()
+        .filter(|part| {
+            let lower = part.to_lowercase();
+            PROJECT_SECTIONS.iter().any(|name| lower.starts_with(&format!("## {name}")))
+        })
         .collect();
     drop_project_catalog(&kept)
 }
@@ -465,5 +505,27 @@ mod tests {
         brief.job_title = "Python Data Engineer".into();
         let vocabulary = brief.vocabulary();
         assert!(vocabulary.starts_with("Vention") && vocabulary.contains("Docker") && vocabulary.contains("GIL"));
+    }
+
+    #[test]
+    fn a_project_question_gets_the_profile_a_short_vacancy_and_the_given_part_of_the_dossier_only() {
+        let mut brief = InterviewBrief::new(
+            "## Contact\nmax@example.com\n\n## Education\nBSc.\n\n## Experience\nIntern.\n\n## Projects\n### Project catalog\nbig list\n\n## Skills\nPython\n\n## Interview stories\nlong story\n",
+        );
+        brief.job_title = "Backend".into();
+        brief.company = "Acme".into();
+        brief.job_description = "x".repeat(5000);
+        brief.documents.push(Document::new("cv.pdf", "CV TEXT", "cv"));
+        brief.project = Some(ProjectDossier { name: "bot".into(), dossier: "whole dossier".into() });
+        let text = brief.render_for_project("## Overview\nA bot.");
+        for kept in ["## Education", "## Experience", "## Skills", "VACANCY: Backend at Acme", "PROJECT THE CANDIDATE WILL DEFEND: bot\n## Overview\nA bot."] {
+            assert!(text.contains(kept), "{kept} missing: {text}");
+        }
+        for dropped in ["max@example.com", "big list", "long story", "CV TEXT", "whole dossier", "SALARY POLICY"] {
+            assert!(!text.contains(dropped), "{dropped} should be out: {text}");
+        }
+        assert!(text.chars().count() < brief.render(None).chars().count() / 2);
+        brief.project = None;
+        assert!(!brief.render_for_project("").contains("PROJECT THE CANDIDATE"));
     }
 }

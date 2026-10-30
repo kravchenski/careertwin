@@ -147,8 +147,16 @@ impl Model for CoachModel {
     }
 }
 
-/// Finds the excerpts of the candidate's project that match a question.
-pub type Retrieve = Arc<dyn Fn(&str) -> String + Send + Sync>;
+/// What the search of the candidate's project found for a question: code excerpts and the part of the dossier
+/// that bears on it. Both are empty when the project has nothing to say about the question.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Found {
+    pub code: String,
+    pub dossier: String,
+}
+
+/// Finds what the candidate's project says about a question.
+pub type Retrieve = Arc<dyn Fn(&str) -> Found + Send + Sync>;
 
 /// What a request is made from, besides the question.
 pub struct Context {
@@ -783,18 +791,26 @@ impl Inner {
         // the question is the last turn of the log, except what is still being said
         let history = self.log.lock().expect("the lock is never held across a panic").history(6);
         let keep = history.len().saturating_sub(early.unwrap_or(1));
-        let code = context.retrieve.as_ref().map(|retrieve| retrieve(question)).unwrap_or_default();
-        let prompt = prompts::user_prompt(
-            &context.brief,
-            question,
-            classify(question),
-            &history[..keep],
-            language.as_deref(),
-            &context.style,
-            &context.layout,
-            &code,
-            listening,
-        );
+        let found = context.retrieve.as_ref().map(|retrieve| retrieve(question)).unwrap_or_default();
+        let (kind, history) = (classify(question), &history[..keep]);
+        let (style, layout) = (&context.style, &context.layout);
+        // a question the project answers gets the lean background: the dossier part and the code, not the whole CV
+        let prompt = if found.code.is_empty() {
+            prompts::user_prompt(&context.brief, question, kind, history, language.as_deref(), style, layout, "", listening)
+        } else {
+            prompts::project_prompt(
+                &context.brief,
+                question,
+                kind,
+                history,
+                language.as_deref(),
+                style,
+                layout,
+                &found.code,
+                &found.dossier,
+                listening,
+            )
+        };
         Request::text(SYSTEM, &prompt)
     }
 
@@ -1114,6 +1130,23 @@ mod tests {
         });
         let prompt = &f.model.asked()[0];
         assert!(prompt.contains("INTERVIEWER'S QUESTION: What is a left join?") && prompt.contains("TYPE: definition"));
+        f.session.stop();
+    }
+
+    #[test]
+    fn a_question_the_project_answers_gets_the_lean_request_with_the_code_and_the_dossier_part() {
+        let f = fixture(FakeModel::new(vec![Ok(vec!["ANSWER:\nThe middleware limits it."])]), quick());
+        {
+            let mut context = f.session.inner.context.lock().unwrap();
+            context.brief.documents.push(crate::brief::Document::new("cv.pdf", "A LONG CV TEXT", "cv"));
+            context.brief.project = Some(crate::brief::ProjectDossier { name: "bot".into(), dossier: "whole".into() });
+            context.retrieve = Some(Arc::new(|_| Found { code: "--- throttle.py ---\nlimit()".into(), dossier: "## Overview\nA bot.".into() }));
+        }
+        f.session.ask("How does the bot stop flooding?");
+        collect(&f.events, |seen| seen.iter().any(|event| matches!(event, Event::Done(_))));
+        let prompt = &f.model.asked()[0];
+        assert!(prompt.contains("RELEVANT CODE FROM THE PROJECT (excerpts)\n--- throttle.py ---") && prompt.contains("## Overview\nA bot."));
+        assert!(!prompt.contains("A LONG CV TEXT") && !prompt.contains("whole"));
         f.session.stop();
     }
 

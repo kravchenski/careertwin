@@ -36,6 +36,7 @@ regex = "1.13.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream", "rustls"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha1 = "0.10.6"
 sha2 = "0.11.1"
 thiserror = "2.0.21"
 uuid = { version = "1.29.0", features = ["v4"] }
