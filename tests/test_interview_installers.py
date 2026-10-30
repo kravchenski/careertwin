@@ -186,7 +186,7 @@ def test_the_overlay_workflow_compiles_and_lints_on_every_system():
     import yaml
 
     overlay = yaml.safe_load((ROOT / ".github/workflows/overlay.yml").read_text())["jobs"]["test"]
-    assert overlay["strategy"]["matrix"]["os"] == ["ubuntu-latest", "windows-latest", "macos-14"]
+    assert overlay["strategy"]["matrix"]["os"] == ["ubuntu-latest", "windows-latest", "macos-15"]
     commands = " ".join(step.get("run", "") for step in overlay["steps"])
     assert "cargo clippy --all-targets -- -D warnings" in commands and "cargo test --locked" in commands
 
