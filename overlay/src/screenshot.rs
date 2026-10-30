@@ -129,7 +129,7 @@ pub fn capture(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError
     #[cfg(windows)]
     {
         let _ = output;
-        return windows::capture(tool == "all-screens");
+        windows::capture(tool == "all-screens")
     }
     #[cfg(not(windows))]
     capture_with_tool(tool, output)
