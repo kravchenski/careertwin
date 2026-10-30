@@ -69,6 +69,17 @@ QFrame#row { background: rgba(255,255,255,0.05); border-radius: 8px; }
 """
 
 
+class Combo(QComboBox):
+    """A combo box whose drop-down list also stays out of screen captures: the list is a window of its own, which
+    the dialog's own exclusion does not cover, so a shared screen would show it alone."""
+
+    def showPopup(self) -> None:  # noqa: N802
+        container = self.view().window()
+        capture_exclude.exclude(int(container.winId()))  # before it appears
+        super().showPopup()
+        capture_exclude.exclude(int(container.winId()))  # and after, in case Qt made the window anew
+
+
 class DocRow(QWidget):
     """One attached document: include toggle, name, kind, size and remove."""
 
@@ -81,7 +92,7 @@ class DocRow(QWidget):
         self.include.setToolTip(item.path)
         size = QLabel(dialog.t("chars", n=f"{item.chars:,}"))
         size.setObjectName("hint")
-        self.kind = QComboBox()
+        self.kind = Combo()
         self.kind.addItem(dialog.t("kind_cv"), "cv")
         self.kind.addItem(dialog.t("kind_about"), "about")
         self.kind.setCurrentIndex(0 if item.kind == "cv" else 1)
@@ -152,7 +163,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         picker = QHBoxLayout()
         self.interview_label = QLabel()
-        self.interview_combo = QComboBox()
+        self.interview_combo = Combo()
         self.interview_combo.setMinimumWidth(260)
         self.new_interview = QPushButton()
         self.rename_interview = QPushButton()
@@ -414,7 +425,7 @@ class SettingsDialog(QDialog):
         self.vacancy_intro = self._hint()
         layout.addWidget(self.vacancy_intro)
         pick = QHBoxLayout()
-        self.pipeline = QComboBox()
+        self.pipeline = Combo()
         self.pipeline.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.use_selected = QPushButton()
         self.use_selected.clicked.connect(self._use_pipeline)
@@ -728,14 +739,14 @@ class SettingsDialog(QDialog):
     def _build_audio(self, page: QWidget) -> None:
         outer, form = self._form(page)
         self.listen = QCheckBox()
-        self.call_source = QComboBox()
+        self.call_source = Combo()
         self.refresh_sources = QPushButton()
         self.use_mic = QCheckBox()
-        self.mic_source = QComboBox()
-        self.stt_engine = QComboBox()
+        self.mic_source = Combo()
+        self.stt_engine = Combo()
         self.stt_engine.addItem("", "whisper")
         self.stt_engine.addItem("", "deepgram")
-        self.whisper_model = QComboBox()
+        self.whisper_model = Combo()
         self.deepgram_key = QLineEdit()
         self.deepgram_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.deepgram_test = QPushButton()
@@ -835,14 +846,14 @@ class SettingsDialog(QDialog):
         paste.addWidget(self.account_save)
         block.addLayout(paste)
         block.addWidget(self.accounts_note)
-        self.provider = QComboBox()
+        self.provider = Combo()
         for provider in PROVIDERS:
             self.provider.addItem(provider.label, provider.id)
         self.provider.addItem("", OTHER)
         self.provider_label = QLabel()
-        self.model_id = QComboBox()
+        self.model_id = Combo()
         self.model_id.setEditable(True)
-        self.vision_id = QComboBox()
+        self.vision_id = Combo()
         self.vision_id.setEditable(True)
         self.vision_hint = self._hint()
         self.load_models = QPushButton()
@@ -1013,12 +1024,12 @@ class SettingsDialog(QDialog):
     def _build_general(self, page: QWidget) -> None:
         outer, form = self._form(self._scrolled(page))
         self.answers_title, self.window_title = self._section(), self._section()
-        self.interview_language = QComboBox()
-        self.answer_style = QComboBox()
-        self.answer_layout = QComboBox()
+        self.interview_language = Combo()
+        self.answer_style = Combo()
+        self.answer_layout = Combo()
         self.full_answer = QCheckBox()
         self.language_labels = [QLabel() for _ in range(3)]
-        self.ui_language = QComboBox()
+        self.ui_language = Combo()
         self.pinned = QCheckBox()
         self.frameless = QCheckBox()
         self.shot_enabled = QCheckBox()

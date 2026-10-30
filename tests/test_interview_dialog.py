@@ -127,6 +127,20 @@ def test_menu_and_dialog_ask_windows_to_stay_out_of_captures(gui, monkeypatch):
     ]
 
 
+def test_a_drop_down_list_also_asks_windows_to_stay_out_of_captures(gui, monkeypatch):
+    from careertwin.interview import capture_exclude
+    from careertwin.interview.settings_dialog import Combo
+
+    excluded: list[int] = []
+    monkeypatch.setattr(capture_exclude, "exclude", lambda hwnd, user32=None: excluded.append(hwnd) or True)
+    assert isinstance(gui.dialog.provider, Combo)  # the provider list of the AI tab is one of them
+    gui.dialog.provider.showPopup()
+    gui.process()
+    popup = int(gui.dialog.provider.view().window().winId())
+    gui.dialog.provider.hidePopup()
+    assert excluded.count(popup) == 2 and popup != int(gui.dialog.winId())
+
+
 def test_adding_a_document_updates_the_list_and_the_window(gui):
     gui.dialog.add_files([gui.file("Alex_CV.txt"), gui.file("linkedin.txt", CV_TEXT + " More facts.")])
     gui.process()
