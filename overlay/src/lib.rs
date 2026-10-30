@@ -5,6 +5,7 @@
 //! the other while the port is finished.
 
 pub mod accounts;
+pub mod audio;
 pub mod brief;
 pub mod coach;
 pub mod control;
@@ -13,6 +14,7 @@ pub mod languages;
 pub mod lexicon;
 pub mod library;
 pub mod look;
+pub mod models;
 pub mod paths;
 pub mod prepare;
 pub mod prompt_text;
@@ -20,9 +22,12 @@ pub mod prompts;
 pub mod providers;
 pub mod questions;
 pub mod screenshot;
+pub mod session;
 pub mod settings;
+pub mod speech;
 pub mod transcript;
 pub mod update;
+pub mod vad;
 
 #[cfg(feature = "gui")]
 pub mod ui;
