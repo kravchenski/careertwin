@@ -36,6 +36,7 @@ impl eframe::App for Shell {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.control = None; // takes the socket file away, so the next window can listen
+        self.app.shutdown();
     }
 }
 
@@ -70,7 +71,8 @@ fn main() -> ExitCode {
             theme::install(&cc.egui_ctx, settings.font_scale as f32 / 100.0);
             let context = cc.egui_ctx.clone();
             let repaint: Arc<dyn Fn() + Send + Sync> = Arc::new(move || context.request_repaint());
-            let app = App::new(paths, handle, repaint.clone());
+            let mut app = App::new(paths, handle, repaint.clone());
+            app.start_hearing();
             let sender = app.tx.clone();
             let wake = repaint.clone();
             let server = control::Server::start(move |command| {

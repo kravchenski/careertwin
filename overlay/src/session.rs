@@ -370,6 +370,12 @@ impl Session {
         self.inner.language.lock().expect("the lock is never held across a panic").current.clone()
     }
 
+    /// Stop the answer being written (the Stop button); listening goes on.
+    pub fn cancel(&self) {
+        self.inner.cancel_current();
+        self.inner.event(Event::State(self.inner.idle_state()));
+    }
+
     pub fn stop(&self) {
         let inner = &self.inner;
         inner.stopping.store(true, Ordering::SeqCst);

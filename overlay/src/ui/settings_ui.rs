@@ -46,6 +46,11 @@ pub struct State {
     pub icon_path: String,
     pub icon_error: Option<String>,
     pub confirm_reset: bool,
+    /// The sound sources of the computer, looked up when the General tab first opens or on Refresh.
+    pub sources: Option<Vec<String>>,
+    /// The dossier as it is being edited, and the project folder it belongs to.
+    pub dossier: String,
+    pub dossier_of: String,
 }
 
 impl Default for State {
@@ -70,6 +75,9 @@ impl Default for State {
             icon_path: String::new(),
             icon_error: None,
             confirm_reset: false,
+            sources: None,
+            dossier: String::new(),
+            dossier_of: String::new(),
         }
     }
 }
@@ -345,6 +353,88 @@ impl App {
         if project_changed {
             self.interview_text_changed();
         }
+        self.project_panel(ui);
+    }
+
+    /// Reading the project, and the dossier the answers use: what it shows, and a place to correct it.
+    fn project_panel(&mut self, ui: &mut Ui) {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
+        let folder = self.library.current().project.trim().to_owned();
+        if folder.is_empty() {
+            note(ui, &t("project_note"));
+            return;
+        }
+        ui.horizontal(|ui| {
+            let busy = self.analyzing.is_some();
+            let label = if self.project.is_some() { t("project_reread") } else { t("project_read") };
+            if ui.add_enabled(!busy, egui::Button::new(label)).clicked() {
+                self.analyze_project();
+            }
+            if let Some(stage) = &self.analyzing {
+                let text = match stage.split_once(' ') {
+                    Some((_, files)) => tf("project_asking", &[("n", files)]),
+                    None => t("project_reading"),
+                };
+                ui.add(egui::Spinner::new());
+                ui.label(RichText::new(text).color(muted()).small());
+            }
+        });
+        let Some(project) = self.project.clone() else {
+            note(ui, &t("project_not_read"));
+            return;
+        };
+        note(
+            ui,
+            &tf(
+                "project_summary",
+                &[
+                    ("name", &project.name),
+                    ("files", &project.files.to_string()),
+                    ("size", &format!("{:.0}", project.characters as f64 / 1000.0)),
+                    ("when", &project.analyzed_at),
+                ],
+            ),
+        );
+        if self.settings_ui.dossier_of != folder {
+            self.settings_ui.dossier_of.clone_from(&folder);
+            self.settings_ui.dossier.clone_from(&project.dossier);
+        }
+        ui.label(RichText::new(t("dossier")).color(muted()));
+        ui.add(
+            TextEdit::multiline(&mut self.settings_ui.dossier)
+                .desired_rows(8)
+                .desired_width(f32::INFINITY)
+                .font(egui::TextStyle::Monospace),
+        );
+        ui.horizontal(|ui| {
+            let edited = self.settings_ui.dossier.trim() != project.dossier.trim();
+            if ui.add_enabled(edited, egui::Button::new(t("dossier_save"))).clicked() {
+                let mut edited_project = crate::project::ProjectContext::new(
+                    &project.path,
+                    &project.name,
+                    &project.dossier,
+                    project.files,
+                    project.characters,
+                    &project.analyzed_at,
+                    project.chunks.clone(),
+                );
+                match crate::project::save_dossier(&self.paths.interview_dir(), &mut edited_project, &self.settings_ui.dossier) {
+                    Ok(()) => {
+                        self.project = Some(std::sync::Arc::new(edited_project));
+                        self.library_changed();
+                    }
+                    Err(error) => self.say(&error.to_string(), true),
+                }
+            }
+            if ui.button(RichText::new(t("project_forget")).color(danger())).clicked() {
+                crate::project::forget(&self.paths.interview_dir(), std::path::Path::new(&folder));
+                self.settings_ui.dossier_of.clear();
+                self.library_changed();
+            }
+        });
+        note(ui, &t("dossier_note"));
     }
 
     // ---- Practice --------------------------------------------------------------------------------------------
@@ -855,6 +945,8 @@ impl App {
             });
         });
 
+        changed |= self.hearing_section(ui);
+
         section(ui, &t("answer_style"));
         row(ui, &t("style"), |ui| {
             for style in ANSWER_STYLES {
@@ -954,6 +1046,50 @@ impl App {
         if changed {
             self.settings_changed();
         }
+    }
+
+    /// The call and the microphone: what the window listens to.
+    fn hearing_section(&mut self, ui: &mut Ui) -> bool {
+        let lang = self.settings.ui_code();
+        let t = |key: &str| text::t(&lang, key, &[]);
+        let mut changed = false;
+        section(ui, &t("hearing"));
+        changed |= ui.checkbox(&mut self.settings.listen, t("listen_call")).changed();
+        let sources = self.settings_ui.sources.get_or_insert_with(|| crate::audio::list_sources().unwrap_or_default()).clone();
+        let pick = |ui: &mut Ui, id: &str, value: &mut String, automatic: bool| -> bool {
+            let mut changed = false;
+            let shown = if value.trim().is_empty() || value == "auto" { t(if automatic { "auto" } else { "default_mic" }) } else { value.clone() };
+            ComboBox::from_id_salt(id).selected_text(shown).width(320.0).show_ui(ui, |ui| {
+                let none = if automatic { "auto" } else { "" };
+                if ui.selectable_label(value == none, t(if automatic { "auto" } else { "default_mic" })).clicked() {
+                    *value = none.to_owned();
+                    changed = true;
+                }
+                for source in &sources {
+                    if ui.selectable_label(value == source, source).clicked() {
+                        value.clone_from(source);
+                        changed = true;
+                    }
+                }
+            });
+            changed
+        };
+        if self.settings.listen {
+            row(ui, &t("call_source"), |ui| {
+                changed |= pick(ui, "call_source", &mut self.settings.call_source, true);
+                if ui.button(t("refresh")).clicked() {
+                    self.settings_ui.sources = None;
+                }
+            });
+        }
+        changed |= ui.checkbox(&mut self.settings.use_mic, t("use_mic")).changed();
+        if self.settings.use_mic {
+            row(ui, &t("mic_source"), |ui| {
+                changed |= pick(ui, "mic_source", &mut self.settings.mic_source, false);
+            });
+        }
+        note(ui, &t("hearing_note"));
+        changed
     }
 
     /// Theme, equalizer, icon and the window itself: everything about how it looks.

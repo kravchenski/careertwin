@@ -16,7 +16,7 @@ use crate::vad::{FRAME_MS, FRAME_SAMPLES};
 pub struct AudioError(pub String);
 
 impl AudioError {
-    fn new(text: impl Into<String>) -> Self {
+    pub fn new(text: impl Into<String>) -> Self {
         Self(text.into())
     }
 }

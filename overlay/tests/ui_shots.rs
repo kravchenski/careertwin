@@ -7,7 +7,8 @@ use std::time::Instant;
 use careertwin_overlay::paths::Paths;
 use careertwin_overlay::questions::Kind;
 use careertwin_overlay::ui::settings_ui::Tab;
-use careertwin_overlay::ui::{App, Entry, Source, theme};
+use careertwin_overlay::session::{Event as Heard, State};
+use careertwin_overlay::ui::{App, Entry, Event, Source, theme};
 use careertwin_overlay::update::{Asset, Available, Release};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -278,6 +279,93 @@ fn a_custom_theme_uses_the_three_colours() {
     assert_eq!(theme::palette().accent, egui::Color32::from_rgb(255, 122, 89));
     shot(&mut harness, "tab-general-custom");
     theme::set_palette(theme::preset("midnight"));
+}
+
+fn tell(app: &App, events: Vec<Heard>) {
+    for event in events {
+        app.tx.send(Event::Heard(event)).unwrap();
+    }
+}
+
+#[test]
+fn a_question_heard_on_the_call_is_answered_in_the_window() {
+    let fixture = fixture("en");
+    tell(
+        &fixture.app,
+        vec![
+            Heard::State(State::Listening),
+            Heard::Partial("what is a left jo".into()),
+            Heard::Turn { speaker: "Interviewer".into(), text: "What is a left join?".into() },
+            Heard::SuggestionStart { question: "What is a left join?".into() },
+            Heard::Chunk("ANSWER:\nIt keeps ".into()),
+            Heard::Chunk("every left row.".into()),
+            Heard::Done("ANSWER:\nIt keeps every left row.".into()),
+            Heard::Status("The first model is rate limited or down: answered by backup/model".into()),
+        ],
+    );
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 420.0);
+    harness.run();
+    harness.get_by_label_contains("It keeps every left row.");
+    harness.get_by_label_contains("Answered by backup/model");
+    let app = harness.state();
+    assert_eq!((app.entries.len(), app.entries[0].source, app.entries[0].done), (1, Source::Heard, true));
+    assert_eq!(app.state, State::Listening);
+    shot(&mut harness, "overlay-heard");
+}
+
+#[test]
+fn words_still_being_said_show_as_a_line_and_a_cancelled_early_answer_goes_away() {
+    let fixture = fixture("en");
+    tell(
+        &fixture.app,
+        vec![
+            Heard::State(State::Listening),
+            Heard::SuggestionStart { question: "What is a left".into() },
+            Heard::Chunk("ANSWER:\nA join".into()),
+            Heard::Discard,
+            Heard::Partial("what is a left join and when".into()),
+        ],
+    );
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 420.0);
+    harness.run();
+    assert!(harness.state().entries.is_empty(), "the answer to half a question is dropped");
+    harness.get_by_label_contains("what is a left join and when");
+    harness.get_by_label("Heard");
+    shot(&mut harness, "overlay-hearing");
+}
+
+#[test]
+fn an_error_in_the_middle_of_an_answer_shows_in_its_place_and_a_stop_ends_it() {
+    let fixture = fixture("en");
+    tell(
+        &fixture.app,
+        vec![
+            Heard::State(State::Thinking),
+            Heard::SuggestionStart { question: "Why Rust?".into() },
+            Heard::Error("429: too many requests".into()),
+        ],
+    );
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 420.0);
+    harness.run();
+    harness.get_by_label_contains("429: too many requests");
+    assert!(harness.state().entries[0].done);
+}
+
+#[test]
+fn the_general_tab_says_what_is_listened_to() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::General;
+    fixture.app.settings.listen = true;
+    fixture.app.settings.use_mic = true;
+    fixture.app.settings_ui.sources = Some(vec!["alsa_output.pci.monitor".into()]);
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    harness.run();
+    harness.get_by_label("Listen to the call");
+    harness.get_by_label("Also listen to my microphone");
+    harness.get_by_label("Call sound");
+    harness.get_by_label("Microphone");
+    shot(&mut harness, "tab-general-hearing");
 }
 
 #[test]

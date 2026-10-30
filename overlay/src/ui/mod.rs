@@ -9,33 +9,37 @@ pub mod theme;
 pub mod update_ui;
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use egui::{Align, Layout, RichText, ScrollArea, Ui};
-use tokio_util::sync::CancellationToken;
 
-use crate::brief::InterviewBrief;
-use crate::coach::{Coach, CoachConfig, Reply, Request};
+use crate::brief::{InterviewBrief, ProjectDossier};
+use crate::coach::{Coach, CoachConfig, Request};
 use crate::export;
+use crate::hearing;
 use crate::library::Library;
 use crate::paths::Paths;
 use crate::prepare::{Analysis, BankQuestion};
-use crate::prompts::{self, SCREENSHOT_SYSTEM, SYSTEM, sections};
+use crate::project::{self, ProjectContext};
+use crate::prompts::sections;
 use crate::questions::{Kind, classify};
 use crate::screenshot::{self, Shot};
+use crate::session::{self, CoachModel, Context, Retrieve, Session, State, Timing};
 use crate::settings::{AppSettings, Settings, load_all};
-use crate::transcript::{INTERVIEWER, SCREENSHOT, TranscriptLog};
+use crate::transcript::{SCREENSHOT, TranscriptLog, YOU};
 use crate::update::{self, Available, Release};
 
 use theme::{accent, danger, muted, on_accent, strong};
 
 /// What the tasks that run off the window tell it.
 pub enum Event {
-    Chunk { id: u64, text: String },
-    Finished { id: u64, result: Result<Reply, String> },
+    /// What the interview session says: a question heard, the words of an answer, the level of the call.
+    Heard(session::Event),
     Shot(Result<Shot, String>),
+    Project(Result<Box<ProjectContext>, String>),
+    ProjectStage(String),
     Remote(String),
     Models(Result<Vec<String>, String>),
     KeyChecked { key: String, result: Result<bool, String> },
@@ -51,6 +55,8 @@ pub enum Event {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
     Typed,
+    /// A question heard on the call.
+    Heard,
     Screenshot,
 }
 
@@ -71,6 +77,8 @@ pub struct Entry {
 struct Capturing {
     since: Instant,
     started: bool,
+    /// When the key was pressed, so the answer can say how long the whole thing took.
+    pressed: Instant,
 }
 
 pub struct App {
@@ -90,14 +98,33 @@ pub struct App {
     pub input: String,
     pub details_open: bool,
     next_id: u64,
-    running: Option<(u64, CancellationToken)>,
-    pub log: TranscriptLog,
+    pub session: Session,
+    context: Arc<Mutex<Context>>,
+    /// What the session last said it was doing.
+    pub state: State,
+    /// The last thing it told about itself, shown under the header: loading the model, the output followed.
+    pub status: String,
+    /// The words still being said, or the last thing heard.
+    pub caption: String,
+    /// The language the call is in, once it is known.
+    pub heard_language: Option<String>,
+    /// A question typed here is on its way: its answer is `Typed`, not `Heard`.
+    typed: bool,
+    pub project: Option<Arc<ProjectContext>>,
+    /// The step of reading the project folder, while that runs.
+    pub analyzing: Option<String>,
+    /// Listening was started once; later changes switch the sources and the recogniser in place.
+    hearing_on: bool,
+    /// The listening settings the session runs with, to tell when they changed.
+    hearing_applied: String,
     pub notice: Option<(String, bool)>,
     capturing: Option<Capturing>,
     pub settings_open: bool,
     pub settings_ui: settings_ui::State,
     pub update_ui: update_ui::State,
     pub level: equalizer::Level,
+    /// The time of the frame being drawn, in seconds: what the audio level is stamped with.
+    clock: f64,
     /// What the window was last told, so a change is applied once.
     applied: Applied,
 }
@@ -118,8 +145,36 @@ impl App {
         let (brief, problems) = crate::library::build_brief(&paths.about, library.current());
         let (tx, rx) = channel();
         let log = TranscriptLog::new(paths.transcripts_dir(), &library.current().name);
+        let coach = Coach::new(CoachConfig::default());
+        let context = Arc::new(Mutex::new(Context {
+            brief: brief.clone(),
+            style: String::new(),
+            layout: String::new(),
+            retrieve: None,
+        }));
+        let (events, heard) = channel();
+        let session = Session::new(
+            context.clone(),
+            Arc::new(CoachModel { coach: coach.clone(), handle: handle.clone() }),
+            events,
+            log,
+            crate::languages::normalize(Some(&settings.language)).as_deref(),
+            Timing::default(),
+        );
+        {
+            // the session works on its own threads: what it says is carried to the window, which is woken
+            let (tx, repaint) = (tx.clone(), repaint.clone());
+            std::thread::spawn(move || {
+                for event in heard {
+                    if tx.send(Event::Heard(event)).is_err() {
+                        break;
+                    }
+                    repaint();
+                }
+            });
+        }
         let mut this = Self {
-            coach: Coach::new(CoachConfig::default()),
+            coach,
             paths,
             settings,
             app,
@@ -135,17 +190,29 @@ impl App {
             input: String::new(),
             details_open: false,
             next_id: 1,
-            running: None,
-            log,
+            session,
+            context,
+            state: State::Idle,
+            status: String::new(),
+            caption: String::new(),
+            heard_language: None,
+            typed: false,
+            project: None,
+            analyzing: None,
+            hearing_on: false,
+            hearing_applied: String::new(),
             notice: None,
             capturing: None,
             settings_open: false,
             settings_ui: settings_ui::State::default(),
             update_ui: update_ui::State::default(),
             level: equalizer::Level::default(),
+            clock: 0.0,
             applied: Applied::default(),
         };
         this.apply_coach();
+        this.load_project();
+        this.sync_context();
         this
     }
 
@@ -183,6 +250,25 @@ impl App {
             self.say(&format!("Could not save the settings: {error}"), true);
         }
         self.apply_coach();
+        self.sync_context();
+        if self.hearing_on {
+            let language = crate::languages::normalize(Some(&self.settings.language));
+            if language != self.session.language() {
+                self.session.set_language(language.as_deref());
+            }
+            if self.hearing_key() != self.hearing_applied {
+                self.start_hearing();
+            }
+        }
+    }
+
+    /// The settings that decide what is listened to and with what.
+    fn hearing_key(&self) -> String {
+        let s = &self.settings;
+        format!(
+            "{}|{}|{}|{}|{}|{}|{}|{}",
+            s.listen, s.call_source, s.use_mic, s.mic_source, s.stt_engine, s.whisper_model, s.deepgram_key, s.deepgram_model
+        )
     }
 
     pub fn app_changed(&mut self) {
@@ -198,7 +284,10 @@ impl App {
         let (brief, problems) = crate::library::build_brief(&self.paths.about, self.library.current());
         self.brief = brief;
         self.problems = problems;
-        self.log.title = self.library.current().name.clone();
+        let title = self.library.current().name.clone();
+        self.session.with_log(|log| log.title = title);
+        self.load_project();
+        self.sync_context();
     }
 
     pub fn say(&mut self, text: &str, error: bool) {
@@ -206,7 +295,36 @@ impl App {
     }
 
     pub fn busy(&self) -> bool {
-        self.running.is_some() || self.capturing.is_some()
+        self.thinking() || self.capturing.is_some()
+    }
+
+    /// An answer is being written.
+    pub fn thinking(&self) -> bool {
+        self.state == State::Thinking
+    }
+
+    /// What a request is made from: the interview, the style and the project, copied for the session's threads.
+    pub fn sync_context(&mut self) {
+        let retrieve: Option<Retrieve> = self.project.clone().map(|project| -> Retrieve { Arc::new(move |question: &str| project.find(question)) });
+        if let Ok(mut context) = self.context.lock() {
+            context.brief = self.brief.clone();
+            context.style = self.settings.answer_style.clone();
+            context.layout = self.settings.answer_layout.clone();
+            context.retrieve = retrieve;
+        }
+    }
+
+    /// The project of the open interview, read back from where it was analysed.
+    pub fn load_project(&mut self) {
+        let folder = self.library.current().project.trim().to_owned();
+        self.project = (!folder.is_empty())
+            .then(|| project::load(&self.paths.interview_dir(), std::path::Path::new(&folder)))
+            .flatten()
+            .map(Arc::new);
+        self.brief.project = self
+            .project
+            .as_ref()
+            .map(|project| ProjectDossier { name: project.name.clone(), dossier: project.dossier.clone() });
     }
 
     // ---- asking ----------------------------------------------------------------------------------------------
@@ -216,60 +334,14 @@ impl App {
         if question.is_empty() || self.busy() {
             return;
         }
-        let kind = classify(&question);
-        let history = self.log.history(6);
-        let prompt = prompts::user_prompt(
-            &self.brief,
-            &question,
-            kind,
-            &history,
-            self.language().as_deref(),
-            &self.settings.answer_style,
-            &self.settings.answer_layout,
-            "",
-            None,
-        );
-        self.log.add(INTERVIEWER, &question);
-        self.start(question, kind, Source::Typed, Request::text(SYSTEM, &prompt));
-    }
-
-    fn start(&mut self, question: String, kind: Kind, source: Source, request: Request) {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.entries.push(Entry {
-            id,
-            question,
-            kind,
-            source,
-            raw: String::new(),
-            done: false,
-            error: None,
-            fell_back: None,
-            first_ms: None,
-            started: Instant::now(),
-        });
-        self.shown = self.entries.len() - 1;
-        self.details_open = self.settings.show_full_answer;
-        let cancel = CancellationToken::new();
-        self.running = Some((id, cancel.clone()));
-        let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
-        self.handle.spawn(async move {
-            let (chunks, wake) = (tx.clone(), repaint.clone());
-            let result = coach
-                .ask(&request, &cancel, |piece| {
-                    let _ = chunks.send(Event::Chunk { id, text: piece.to_owned() });
-                    wake();
-                })
-                .await
-                .map_err(|error| error.message);
-            let _ = tx.send(Event::Finished { id, result });
-            repaint();
-        });
+        self.typed = true;
+        self.session.ask(&question);
     }
 
     pub fn stop(&mut self) {
-        if let Some((_, cancel)) = &self.running {
-            cancel.cancel();
+        self.session.cancel();
+        if let Some(entry) = self.entries.last_mut().filter(|entry| !entry.done) {
+            entry.done = true;
         }
     }
 
@@ -278,7 +350,8 @@ impl App {
         if self.busy() || !self.settings.screenshot_enabled {
             return;
         }
-        self.capturing = Some(Capturing { since: Instant::now(), started: false });
+        let now = Instant::now();
+        self.capturing = Some(Capturing { since: now, started: false, pressed: now });
         (self.repaint)();
     }
 
@@ -300,19 +373,205 @@ impl App {
     }
 
     fn shot_taken(&mut self, result: Result<Shot, String>) {
-        self.capturing = None;
+        let pressed = self.capturing.take().map(|capturing| capturing.pressed);
         match result {
             Err(error) => self.say(&error, true),
-            Ok(shot) => {
-                let prompt =
-                    prompts::screenshot_prompt(&self.brief, self.language().as_deref(), &self.settings.answer_layout);
-                self.log.add(INTERVIEWER, SCREENSHOT);
-                self.start(
-                    SCREENSHOT.to_owned(),
-                    Kind::Technical,
-                    Source::Screenshot,
-                    Request::screenshot(SCREENSHOT_SYSTEM, &prompt, &shot.data_url()),
-                );
+            Ok(shot) => self.session.ask_screenshot(&shot.data_url(), pressed),
+        }
+    }
+
+    // ---- hearing ---------------------------------------------------------------------------------------------
+
+    /// Begin listening to what the settings say, with the recogniser they name. Called once when the window opens;
+    /// after that a change of the settings switches the sources and the recogniser in place.
+    pub fn start_hearing(&mut self) {
+        self.hearing_applied = self.hearing_key();
+        self.caption.clear();
+        let first = !std::mem::replace(&mut self.hearing_on, true);
+        let sources = if self.settings.listen || self.settings.use_mic {
+            let (tx, repaint) = (self.tx.clone(), self.repaint.clone());
+            hearing::sources(&self.settings, move |name| {
+                let _ = tx.send(Event::Heard(session::Event::Source(name.to_owned())));
+                repaint();
+            })
+        } else {
+            Vec::new()
+        };
+        if sources.is_empty() {
+            if first {
+                self.session.start(None, Vec::new());
+            } else {
+                self.session.set_sources(Vec::new());
+            }
+            return;
+        }
+        // the recogniser may need a download first: it says how far it is through the same channel
+        let (events, forward) = channel();
+        {
+            let (tx, repaint) = (self.tx.clone(), self.repaint.clone());
+            std::thread::spawn(move || {
+                for event in forward {
+                    if tx.send(Event::Heard(event)).is_err() {
+                        break;
+                    }
+                    repaint();
+                }
+            });
+        }
+        match hearing::transcriber(&self.settings, &self.paths, &self.handle, &events) {
+            Ok(transcriber) if first => self.session.start(Some(transcriber), sources),
+            Ok(transcriber) => {
+                self.session.set_transcriber(Some(transcriber), false);
+                self.session.set_sources(sources);
+            }
+            Err(error) => {
+                self.state = State::Error;
+                self.say(&error, true);
+            }
+        }
+    }
+
+    /// Stop the threads that listen and answer; the window is closing.
+    pub fn shutdown(&mut self) {
+        self.session.stop();
+    }
+
+    pub fn pause_hearing(&mut self, paused: bool) {
+        self.session.pause(paused);
+    }
+
+    /// What a session event changes in the window.
+    fn heard(&mut self, event: session::Event) {
+        use session::Event as E;
+        match event {
+            E::Turn { speaker, text } => {
+                if text != SCREENSHOT {
+                    self.caption = if speaker == YOU { format!("{} {text}", self.t("you_said")) } else { text };
+                }
+            }
+            E::SuggestionStart { question } => {
+                let source = if question == SCREENSHOT {
+                    Source::Screenshot
+                } else if std::mem::take(&mut self.typed) {
+                    Source::Typed
+                } else {
+                    Source::Heard
+                };
+                let kind = if source == Source::Screenshot { Kind::Technical } else { classify(&question) };
+                let id = self.next_id;
+                self.next_id += 1;
+                self.entries.push(Entry {
+                    id,
+                    question,
+                    kind,
+                    source,
+                    raw: String::new(),
+                    done: false,
+                    error: None,
+                    fell_back: None,
+                    first_ms: None,
+                    started: Instant::now(),
+                });
+                self.shown = self.entries.len() - 1;
+                self.details_open = self.settings.show_full_answer;
+                self.caption.clear();
+            }
+            E::Chunk(text) => {
+                if let Some(entry) = self.entries.last_mut().filter(|entry| !entry.done) {
+                    if entry.raw.is_empty() {
+                        entry.first_ms = Some(entry.started.elapsed().as_millis());
+                    }
+                    entry.raw.push_str(&text);
+                }
+            }
+            E::Done(text) => {
+                if let Some(entry) = self.entries.last_mut().filter(|entry| !entry.done) {
+                    entry.done = true;
+                    entry.raw = text;
+                }
+                if self.settings.save_transcripts {
+                    let _ = self.session.with_log(|log| log.save());
+                }
+            }
+            E::Discard => {
+                if self.entries.last().is_some_and(|entry| !entry.done || entry.source == Source::Heard) {
+                    self.entries.pop();
+                    self.shown = self.shown.min(self.entries.len().saturating_sub(1));
+                }
+            }
+            E::Status(text) => {
+                const FELL_BACK: &str = "The first model is rate limited or down: answered by ";
+                if let Some(model) = text.strip_prefix(FELL_BACK) {
+                    if let Some(entry) = self.entries.last_mut() {
+                        entry.fell_back = Some(model.to_owned());
+                    }
+                } else {
+                    self.status = text;
+                }
+            }
+            E::State(state) => {
+                self.state = state;
+                if state != State::Thinking {
+                    self.caption.clear();
+                }
+            }
+            E::Level { speaker: _, level } => self.level.push(level, self.clock),
+            E::Language(code) => self.heard_language = Some(code),
+            E::Source(name) => self.status = self.tf("listening_to", &[("name", &name)]),
+            E::Partial(text) => self.caption = text,
+            E::Error(text) => match self.entries.last_mut().filter(|entry| !entry.done) {
+                Some(entry) => {
+                    entry.done = true;
+                    entry.error = Some(text);
+                }
+                None => self.say(&text, true),
+            },
+        }
+    }
+
+    // ---- the project -----------------------------------------------------------------------------------------
+
+    /// Read the folder of the open interview's project and have the AI write its dossier.
+    pub fn analyze_project(&mut self) {
+        let folder = self.library.current().project.trim().to_owned();
+        if folder.is_empty() || self.analyzing.is_some() {
+            return;
+        }
+        self.analyzing = Some("read".to_owned());
+        let (coach, tx, repaint, handle) = (self.coach.clone(), self.tx.clone(), self.repaint.clone(), self.handle.clone());
+        let (dir, gateway) = (self.paths.interview_dir(), self.settings.gateway());
+        std::thread::spawn(move || {
+            let stages = (tx.clone(), repaint.clone());
+            let complete = |system: &str, prompt: &str, tokens: u32| {
+                let mut request = Request::text(system, prompt);
+                request.max_tokens = tokens;
+                handle.block_on(coach.complete(&request)).map_err(|error| error.message)
+            };
+            let result = project::analyze(&dir, std::path::Path::new(&folder), &gateway, &complete, |stage, files| {
+                let _ = stages.0.send(Event::ProjectStage(if files > 0 { format!("{stage} {files}") } else { stage.to_owned() }));
+                (stages.1)();
+            })
+            .map(Box::new)
+            .map_err(|error| error.to_string());
+            let _ = tx.send(Event::Project(result));
+            repaint();
+        });
+    }
+
+    fn project_ready(&mut self, result: Result<Box<ProjectContext>, String>) {
+        self.analyzing = None;
+        match result {
+            Err(error) => self.say(&error, true),
+            Ok(project) => {
+                self.project = Some(Arc::new(*project));
+                self.brief.project = self
+                    .project
+                    .as_ref()
+                    .map(|project| ProjectDossier { name: project.name.clone(), dossier: project.dossier.clone() });
+                self.sync_context();
+                let name = self.project.as_ref().map(|project| project.name.clone()).unwrap_or_default();
+                let message = self.tf("project_ready", &[("name", &name)]);
+                self.say(&message, false);
             }
         }
     }
@@ -322,16 +581,10 @@ impl App {
     fn drain(&mut self) {
         while let Ok(event) = self.rx.try_recv() {
             match event {
-                Event::Chunk { id, text } => {
-                    if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
-                        if entry.raw.is_empty() {
-                            entry.first_ms = Some(entry.started.elapsed().as_millis());
-                        }
-                        entry.raw.push_str(&text);
-                    }
-                }
-                Event::Finished { id, result } => self.finished(id, result),
+                Event::Heard(event) => self.heard(event),
                 Event::Shot(result) => self.shot_taken(result),
+                Event::Project(result) => self.project_ready(result),
+                Event::ProjectStage(stage) => self.analyzing = Some(stage),
                 Event::Remote(command) => match command.as_str() {
                     "screenshot" => self.start_screenshot(),
                     "ask" => {
@@ -353,31 +606,6 @@ impl App {
                 }
                 Event::Exported(result) => self.settings_ui.exported = Some(result),
             }
-        }
-    }
-
-    fn finished(&mut self, id: u64, result: Result<Reply, String>) {
-        if self.running.as_ref().is_some_and(|(running, _)| *running == id) {
-            self.running = None;
-        }
-        let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) else { return };
-        entry.done = true;
-        match result {
-            Ok(reply) => {
-                entry.fell_back = reply.fell_back;
-                if entry.raw.trim().is_empty() {
-                    entry.raw = reply.text;
-                }
-            }
-            Err(error) if error == "cancelled" => {}
-            Err(error) => entry.error = Some(error),
-        }
-        if entry.error.is_none() && !entry.raw.trim().is_empty() {
-            let answer = prompts::parse_suggestion(&entry.raw).sections.answer;
-            self.log.suggestions.push((entry.question.clone(), answer));
-        }
-        if self.settings.save_transcripts {
-            let _ = self.log.save();
         }
     }
 
@@ -505,9 +733,9 @@ impl App {
 
     /// What the dots show: an error, the model at work, the call being heard, or nothing.
     pub fn mood(&self) -> equalizer::Mood {
-        if self.running.is_some() || self.capturing.is_some() {
+        if self.thinking() || self.capturing.is_some() {
             equalizer::Mood::Thinking
-        } else if self.entries.last().is_some_and(|entry| entry.error.is_some()) {
+        } else if self.state == State::Error || self.entries.last().is_some_and(|entry| entry.error.is_some()) {
             equalizer::Mood::Error
         } else if self.level.value() > 0.02 {
             equalizer::Mood::Listening
@@ -525,7 +753,7 @@ impl App {
     }
 
     fn header(&mut self, ui: &mut Ui) {
-        let busy = self.running.is_some();
+        let busy = self.thinking();
         let bar = ui.horizontal(|ui| {
             let status = if self.capturing.is_some() {
                 self.t("looking")
@@ -566,6 +794,20 @@ impl App {
         }
     }
 
+    /// One line about what the window hears: the words being said, or what it is doing about the sound.
+    fn caption_line(&self, ui: &mut Ui) {
+        let (text, heard) = if self.caption.is_empty() { (self.status.clone(), false) } else { (self.caption.clone(), true) };
+        if text.is_empty() || !(self.settings.listen || self.settings.use_mic) {
+            return;
+        }
+        ui.horizontal(|ui| {
+            if heard {
+                ui.label(RichText::new(self.t("heard")).color(accent()).small());
+            }
+            ui.add(egui::Label::new(RichText::new(text).color(muted()).small()).truncate());
+        });
+    }
+
     fn question_row(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             let ask_width = 92.0;
@@ -577,7 +819,7 @@ impl App {
                 .margin(egui::vec2(10.0, 8.0));
             let response = ui.add_enabled(idle, edit);
             let enter = response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
-            if self.running.is_some() {
+            if self.thinking() {
                 if ui.add(egui::Button::new(self.t("stop")).min_size(egui::vec2(ask_width, 34.0))).clicked() {
                     self.stop();
                 }
@@ -611,7 +853,7 @@ impl App {
         let index = self.shown.min(self.entries.len() - 1);
         let translate = |key: &str| text::t(&self.settings.ui_code(), key, &[]);
         let mut details_open = self.details_open;
-        ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(self.running.is_some()).show(ui, |ui| {
+        ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(self.thinking()).show(ui, |ui| {
             let entry = &self.entries[index];
             let title =
                 if entry.source == Source::Screenshot { translate("screenshot") } else { entry.question.clone() };
@@ -713,6 +955,7 @@ impl App {
                     );
                 }
                 self.header(ui);
+                self.caption_line(ui);
                 ui.add_space(4.0);
                 self.question_row(ui);
                 ui.add_space(6.0);
@@ -734,11 +977,12 @@ impl App {
             self.check_for_update(false);
         }
         let now = ctx.input(|input| input.time);
+        self.clock = now;
         self.level.tick(now);
         let moving = self.app.animate && self.app.equalizer != "off";
         if moving {
             ctx.request_repaint_after(Duration::from_millis(33));
-        } else if self.running.is_some() {
+        } else if self.thinking() {
             ctx.request_repaint_after(Duration::from_millis(60));
         }
     }

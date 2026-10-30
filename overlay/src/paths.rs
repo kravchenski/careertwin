@@ -62,6 +62,11 @@ impl Paths {
         self.data.join("interviews")
     }
 
+    /// Speech models downloaded for Whisper.
+    pub fn models_dir(&self) -> PathBuf {
+        self.data.join("models")
+    }
+
     pub fn exports_dir(&self) -> PathBuf {
         self.data.join("exports")
     }
