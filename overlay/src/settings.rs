@@ -371,7 +371,17 @@ pub struct AppSettings {
     pub hide_from_sharing: bool,
     /// Windows: the key that takes a screenshot from any program, as `Ctrl+Shift+Enter`.
     pub screenshot_key: String,
+    /// How the accounts of one address are asked: `off` (one at a time), `hedged` (the next one when the first is
+    /// slow) or `all` (together). The first to answer wins.
+    pub parallel_accounts: String,
+    /// Seconds an account may be silent before the next one is tried; 0 never gives up early.
+    pub first_word_seconds: i64,
+    /// Windows: an icon in the notification area, like the one for location in use.
+    pub tray_icon: bool,
 }
+
+pub const PARALLEL_MODES: [&str; 3] = ["off", "hedged", "all"];
+pub const FIRST_WORD_RANGE: std::ops::RangeInclusive<i64> = 0..=60;
 
 pub const EQUALIZER_STYLES: [&str; 4] = ["both", "dots", "background", "off"];
 
@@ -390,6 +400,9 @@ impl Default for AppSettings {
             animate: true,
             hide_from_sharing: true,
             screenshot_key: crate::hotkey::DEFAULT.to_owned(),
+            parallel_accounts: "hedged".to_owned(),
+            first_word_seconds: 15,
+            tray_icon: true,
         }
     }
 }
@@ -436,6 +449,17 @@ impl AppSettings {
         if let Some(key) = text("screenshot_key").filter(|key| crate::hotkey::parse(key).is_some()) {
             settings.screenshot_key = key;
         }
+        if let Some(mode) = text("parallel_accounts").filter(|mode| PARALLEL_MODES.contains(&mode.as_str())) {
+            settings.parallel_accounts = mode;
+        }
+        if let Some(seconds) =
+            data.get("first_word_seconds").and_then(Value::as_i64).filter(|n| FIRST_WORD_RANGE.contains(n))
+        {
+            settings.first_word_seconds = seconds;
+        }
+        if let Some(Value::Bool(flag)) = data.get("tray_icon") {
+            settings.tray_icon = *flag;
+        }
         settings
     }
 
@@ -453,6 +477,9 @@ impl AppSettings {
             "animate": self.animate,
             "hide_from_sharing": self.hide_from_sharing,
             "screenshot_key": self.screenshot_key,
+            "parallel_accounts": self.parallel_accounts,
+            "first_word_seconds": self.first_word_seconds,
+            "tray_icon": self.tray_icon,
         });
         write_private(path, &serde_json::to_string_pretty(&value).unwrap_or_default())
     }
@@ -613,6 +640,9 @@ mod tests {
             animate: false,
             hide_from_sharing: false,
             screenshot_key: "ctrl + alt + k".into(),
+            parallel_accounts: "all".into(),
+            first_word_seconds: 8,
+            tray_icon: false,
         };
         let settings = AppSettings { screenshot_key: "Ctrl+Alt+K".into(), ..settings };
         settings.save(&path).unwrap();
@@ -623,7 +653,7 @@ mod tests {
     fn a_look_that_cannot_be_read_is_the_default_one() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
-        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter"}"##)
+        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes"}"##)
             .unwrap();
         assert_eq!(AppSettings::load(&path), AppSettings::default());
     }

@@ -20,7 +20,9 @@ Building with Whisper (the default) needs cmake, a C++ compiler and libclang (wh
 | Part | Notes |
 | --- | --- |
 | Question kinds, languages, prompts, reply parser | generated from the Python tables, tested against them |
-| Answers: streaming, several API keys per address (next key on a limit), cooldowns, the fallback chain, images | tested with a fake server |
+| Answers: streaming, several API keys per address, cooldowns, the fallback chain, images | tested with a fake server |
+| Several accounts: a limited, rejected, busy (5xx) or **silent** account is followed by the next one at once, so a stalled account does not cost the time of its timeout; accounts can also be asked together (the next one when the first is slow, or all at once) and the first to answer wins | tested with a fake server, including the timing |
+| Markdown in answers: headings, bold, italic, strikethrough, lists (nested, numbered, ticked), quotes, tables, links (only http and https open), rules, code; a half-written answer never breaks | tested; drawn headless |
 | Hearing the call: system audio (PulseAudio/PipeWire on Linux, WASAPI loopback on Windows), the microphone, silence-based utterance detection | tested with fake sources; **never run on a real Windows or Mac sound card** |
 | Speech recognition: Whisper on the computer (ggml models downloaded once, SHA256 checked) or Deepgram | the real Whisper build compiles; accuracy not measured here |
 | Live captions, early answers while the interviewer is still speaking, SKIP for words that are not a question | tested with a scripted recogniser |
@@ -30,6 +32,7 @@ Building with Whisper (the default) needs cmake, a C++ compiler and libclang (wh
 | Export of the questions of saved interviews (CSV, Markdown, JSON) | done |
 | New version window, with a SHA256 checked installer download (never started by the program) | done |
 | Themes (seven and your own), the dot equalizer, app icon: colour variants or your own image | done |
+| Windows: an icon in the notification area drawn like the location arrow (an outline while waiting, solid while listening or writing; click brings the window forward; menu: screenshot, listening, quit) | compiled for Windows in CI; **not run on a real Windows machine** |
 | Windows: a screenshot key that works in any program (`RegisterHotKey` on its own thread, fallbacks and a log), screen capture (GDI), the window kept out of screen sharing (`WDA_EXCLUDEFROMCAPTURE`) | compiled for Windows in CI; **not run on a real Windows machine** |
 | Linux and macOS screenshots (grim, spectacle, gnome-screenshot, maim, scrot; screencapture) and the control socket (`careertwin-overlay ctl screenshot`) | Linux tried |
 | Window languages: English, Russian, Polish, Ukrainian, German, French, Spanish | every key is in every language (a test); drawn headless in each |

@@ -106,6 +106,33 @@ fn an_answer_shows_the_lines_to_say_and_opens_its_details() {
     shot(&mut harness, "overlay-answer");
 }
 
+const MARKDOWN_REPLY: &str = "POINTS:\n- A **left join** keeps every row of the *left* table\n- See [the docs](https://example.com/join) for `NULL` rules\nANSWER:\n## Joins in short\n\nA left join returns all rows of the left table.\n\n1. Pick the **driving** table\n2. Join the other one\n   - on a key\n   - never on a float\n\n> NULL is not equal to NULL.\n\n| join | keeps |\n|------|-------|\n| inner | matches |\n| left | all left rows |\n\n- [x] indexed\n- [ ] explained\n\n---\n\n```sql\nselect u.id from users u left join orders o on o.user_id = u.id;\n```\nKEY:\n- **INNER JOIN**: only matches\nCONTEXT:\nUsed in reports.\nNEXT:\n- Full join? - keeps both sides.";
+
+#[test]
+fn an_answer_in_markdown_is_drawn_as_headings_lists_quotes_tables_links_and_code() {
+    let mut fixture = fixture("en");
+    fixture.app.details_open = true;
+    fixture.app.entries.push(answered("Explain a left join", MARKDOWN_REPLY));
+    let (mut harness, _dir, _runtime) = harness(fixture, 900.0, 900.0);
+    harness.run();
+    for text in [
+        "Joins in short",
+        "Pick the",
+        "never on a float",
+        "NULL is not equal to NULL.",
+        "all left rows",
+        "indexed",
+        "the docs",
+    ] {
+        assert!(harness.query_all_by_label_contains(text).next().is_some(), "{text} is not drawn");
+    }
+    // none of the marks is left in the text
+    for mark in ["## ", "**", "```", "|---", "> NULL"] {
+        assert!(harness.query_all_by_label_contains(mark).next().is_none(), "{mark} shows as text");
+    }
+    shot(&mut harness, "overlay-markdown");
+}
+
 #[test]
 fn the_main_answer_layout_shows_only_the_paragraph() {
     let mut fixture = fixture("en");

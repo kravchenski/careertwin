@@ -16,6 +16,13 @@ What it does
     Listening. The first start downloads the speech model once.
   - Answers questions it hears, questions you type, and what is on the screen. Pick the model for each
     in Settings -> AI.
+  - A blue arrow in the notification area, like the one Windows shows while a program uses your location:
+    an outline while the window waits, solid while it listens or writes an answer. Click it to bring the
+    window forward; right-click for the screenshot, listening on or off, and quit. Settings -> General
+    turns it off. The arrow follows the window's drawing, so it waits while the window is minimized.
+  - Several accounts (Settings -> AI): when one is slow, limited or down the next answers; the next one is
+    also started when the first is slow (or all at once, if you choose that), and the first to answer wins.
+  - Answers are shown with their Markdown: headings, lists, tables, quotes, code, links.
   - The screenshot key, Ctrl+Shift+Enter, works in any program (the window says which key it got when
     another program already owns that one).
   - Reads a project folder so the answers can defend it (Settings -> Interview).

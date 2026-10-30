@@ -3,6 +3,7 @@
 pub mod answer;
 pub mod equalizer;
 pub mod icon;
+pub mod markdown;
 pub mod settings_ui;
 pub mod text;
 pub mod text_more;
@@ -18,7 +19,7 @@ use egui::{Align, Layout, RichText, ScrollArea, Ui};
 
 use crate::brief::{InterviewBrief, ProjectDossier};
 use crate::capture_exclude;
-use crate::coach::{Coach, CoachConfig, Request};
+use crate::coach::{Coach, CoachConfig, Parallel, Request};
 use crate::export;
 use crate::hearing;
 use crate::library::Library;
@@ -126,6 +127,10 @@ pub struct App {
     pub analyzing: Option<String>,
     /// Listening was started once; later changes switch the sources and the recogniser in place.
     hearing_on: bool,
+    /// Listening is switched off for now (the tray menu, or the pause key).
+    pub paused: bool,
+    /// The tray menu asked to quit; the window closes at its next frame.
+    quit_requested: bool,
     /// The listening settings the session runs with, to tell when they changed.
     hearing_applied: String,
     pub notice: Option<(String, bool)>,
@@ -216,6 +221,8 @@ impl App {
             project: None,
             analyzing: None,
             hearing_on: false,
+            paused: false,
+            quit_requested: false,
             hearing_applied: String::new(),
             notice: None,
             capturing: None,
@@ -259,6 +266,9 @@ impl App {
             model: non_empty(&self.settings.model),
             vision_model: non_empty(&self.settings.vision_model),
             fallback_models: self.settings.fallbacks(),
+            parallel: Parallel::parse(&self.app.parallel_accounts),
+            first_word: u64::try_from(self.app.first_word_seconds).ok().filter(|n| *n > 0).map(Duration::from_secs),
+            hedge: None,
         });
     }
 
@@ -300,6 +310,7 @@ impl App {
         if let Err(error) = self.app.save(&self.paths.app_file()) {
             self.say(&format!("Could not save the settings: {error}"), true);
         }
+        self.apply_coach();
     }
 
     pub fn library_changed(&mut self) {
@@ -463,7 +474,29 @@ impl App {
     }
 
     pub fn pause_hearing(&mut self, paused: bool) {
+        self.paused = paused;
         self.session.pause(paused);
+    }
+
+    /// What the icon in the notification area shows: the look, the words for its tooltip, and whether listening is on.
+    pub fn tray_state(&self) -> (crate::tray::Look, String, bool) {
+        let (look, key) = match self.state {
+            State::Thinking => (crate::tray::Look::Active, "thinking"),
+            State::Listening if !self.paused => (crate::tray::Look::Active, "tray_listening"),
+            State::Paused => (crate::tray::Look::Idle, "tray_paused"),
+            _ => (crate::tray::Look::Idle, "ready"),
+        };
+        let words = if self.paused && key == "ready" { self.t("tray_paused") } else { self.t(key) };
+        (look, format!("CareerTwin Interview: {words}"), !self.paused)
+    }
+
+    /// The words of the tray menu.
+    pub fn tray_labels(&self) -> crate::tray::Labels {
+        crate::tray::Labels {
+            screenshot: self.t("screenshot"),
+            listening: self.t("tray_listening"),
+            quit: self.t("tray_quit"),
+        }
     }
 
     /// What a session event changes in the window.
@@ -622,6 +655,8 @@ impl App {
                         let question = std::mem::take(&mut self.input);
                         self.ask(&question);
                     }
+                    "listening" => self.pause_hearing(!self.paused),
+                    "quit" => self.quit_requested = true,
                     _ => {}
                 },
                 Event::Models(result) => self.settings_ui.models_loaded(result),
@@ -979,6 +1014,9 @@ impl App {
     pub fn show(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
         self.drain();
+        if self.quit_requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         self.capture_step();
         self.apply_window(&ctx);
         self.keep_out_of_captures();

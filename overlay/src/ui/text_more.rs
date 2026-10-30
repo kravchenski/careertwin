@@ -2,6 +2,23 @@
 //! shows in English, and the test in `text.rs` keeps every table complete.
 
 pub const PL: &[(&str, &str)] = &[
+    ("parallel", "Kilka kont naraz"),
+    ("parallel_off", "Po jednym"),
+    ("parallel_hedged", "Następne, gdy pierwsze zwleka"),
+    ("parallel_all", "Wszystkie naraz (najszybciej)"),
+    ("first_word", "Porzuć milczące konto po"),
+    (
+        "parallel_note",
+        "Gdy konto zwleka, jest ograniczone lub nie działa, odpowiada następne, a wygrywa to, które odpowie pierwsze. Wszystkie naraz jest najszybsze i zużywa zapytanie na każdym koncie. 0 sekund: nie rezygnuj wcześniej.",
+    ),
+    ("tray_icon", "Pokaż ikonę w obszarze powiadomień"),
+    (
+        "tray_note",
+        "Niebieska strzałka jak ta dla używanej lokalizacji: kontur, gdy okno czeka, wypełniona, gdy słucha lub pisze odpowiedź. Pojawi się przy następnym uruchomieniu okna.",
+    ),
+    ("tray_listening", "Słucham"),
+    ("tray_paused", "Wstrzymano"),
+    ("tray_quit", "Zakończ"),
     ("ready", "Gotowe"),
     ("you_said", "Ty:"),
     ("screenshot_key", "Klawisz zrzutu ekranu"),
@@ -226,6 +243,23 @@ pub const PL: &[(&str, &str)] = &[
 ];
 
 pub const UK: &[(&str, &str)] = &[
+    ("parallel", "Кілька акаунтів одразу"),
+    ("parallel_off", "По одному"),
+    ("parallel_hedged", "Наступний, якщо перший гальмує"),
+    ("parallel_all", "Усі одразу (найшвидше)"),
+    ("first_word", "Кидати мовчазний акаунт через"),
+    (
+        "parallel_note",
+        "Якщо акаунт гальмує, вичерпав ліміт або недоступний, відповідає наступний, а перемагає той, хто відповів першим. «Усі одразу» найшвидше й витрачає запит на кожному акаунті. 0 секунд: не кидати раніше часу.",
+    ),
+    ("tray_icon", "Показувати значок в області сповіщень"),
+    (
+        "tray_note",
+        "Синя стрілка, як у «геолокація використовується»: контур, поки вікно чекає, і заливка, поки воно слухає чи пише відповідь. З'явиться під час наступного запуску вікна.",
+    ),
+    ("tray_listening", "Слухаю"),
+    ("tray_paused", "Пауза"),
+    ("tray_quit", "Вийти"),
     ("ready", "Готово"),
     ("you_said", "Ви:"),
     ("screenshot_key", "Клавіша знімка екрана"),
@@ -450,6 +484,23 @@ pub const UK: &[(&str, &str)] = &[
 ];
 
 pub const DE: &[(&str, &str)] = &[
+    ("parallel", "Mehrere Konten gleichzeitig"),
+    ("parallel_off", "Eines nach dem anderen"),
+    ("parallel_hedged", "Das nächste, wenn das erste trödelt"),
+    ("parallel_all", "Alle gleichzeitig (am schnellsten)"),
+    ("first_word", "Stilles Konto aufgeben nach"),
+    (
+        "parallel_note",
+        "Ist ein Konto langsam, begrenzt oder ausgefallen, antwortet das nächste, und das schnellste gewinnt. Alle gleichzeitig ist am schnellsten und verbraucht auf jedem Konto eine Anfrage. 0 Sekunden: nie vorzeitig aufgeben.",
+    ),
+    ("tray_icon", "Symbol im Infobereich anzeigen"),
+    (
+        "tray_note",
+        "Ein blauer Pfeil wie der für die genutzte Standortfreigabe: eine Kontur, solange das Fenster wartet, ausgefüllt, solange es zuhört oder eine Antwort schreibt. Er erscheint beim nächsten Start des Fensters.",
+    ),
+    ("tray_listening", "Hört zu"),
+    ("tray_paused", "Pausiert"),
+    ("tray_quit", "Beenden"),
     ("ready", "Bereit"),
     ("you_said", "Sie:"),
     ("screenshot_key", "Taste für den Screenshot"),
@@ -689,6 +740,23 @@ pub const DE: &[(&str, &str)] = &[
 ];
 
 pub const FR: &[(&str, &str)] = &[
+    ("parallel", "Plusieurs comptes à la fois"),
+    ("parallel_off", "Un par un"),
+    ("parallel_hedged", "Le suivant si le premier tarde"),
+    ("parallel_all", "Tous à la fois (le plus rapide)"),
+    ("first_word", "Abandonner un compte muet après"),
+    (
+        "parallel_note",
+        "Quand un compte est lent, limité ou en panne, le suivant répond à sa place, et le premier à répondre gagne. Tous à la fois est le plus rapide et dépense une requête sur chaque compte. 0 seconde : ne jamais abandonner plus tôt.",
+    ),
+    ("tray_icon", "Afficher une icône dans la zone de notification"),
+    (
+        "tray_note",
+        "Une flèche bleue comme celle de la localisation utilisée : un contour tant que la fenêtre attend, pleine tant qu'elle écoute ou écrit une réponse. Elle apparaît au prochain démarrage de la fenêtre.",
+    ),
+    ("tray_listening", "À l'écoute"),
+    ("tray_paused", "En pause"),
+    ("tray_quit", "Quitter"),
     ("ready", "Prêt"),
     ("you_said", "Vous :"),
     ("screenshot_key", "Touche de capture d'écran"),
@@ -931,6 +999,23 @@ pub const FR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("parallel", "Varias cuentas a la vez"),
+    ("parallel_off", "De una en una"),
+    ("parallel_hedged", "La siguiente si la primera tarda"),
+    ("parallel_all", "Todas a la vez (la más rápida)"),
+    ("first_word", "Abandonar una cuenta muda tras"),
+    (
+        "parallel_note",
+        "Cuando una cuenta es lenta, está limitada o caída, responde la siguiente, y gana la primera en responder. Todas a la vez es lo más rápido y gasta una solicitud en cada cuenta. 0 segundos: nunca abandonar antes.",
+    ),
+    ("tray_icon", "Mostrar un icono en el área de notificaciones"),
+    (
+        "tray_note",
+        "Una flecha azul como la de la ubicación en uso: un contorno mientras la ventana espera, rellena mientras escucha o escribe una respuesta. Aparece la próxima vez que se abra la ventana.",
+    ),
+    ("tray_listening", "Escuchando"),
+    ("tray_paused", "En pausa"),
+    ("tray_quit", "Salir"),
     ("ready", "Listo"),
     ("you_said", "Tú:"),
     ("screenshot_key", "Tecla de captura de pantalla"),

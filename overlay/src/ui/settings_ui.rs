@@ -860,6 +860,40 @@ impl App {
             note(ui, &t("keys_note"));
         }
 
+        let mut app_changed = false;
+        row(ui, &t("parallel"), |ui| {
+            let label = t(&format!("parallel_{}", self.app.parallel_accounts));
+            ComboBox::from_id_salt("parallel")
+                .selected_text(label)
+                .width(320.0)
+                .show_ui(ui, |ui| {
+                    for mode in crate::settings::PARALLEL_MODES {
+                        if ui
+                            .selectable_label(self.app.parallel_accounts == mode, t(&format!("parallel_{mode}")))
+                            .clicked()
+                        {
+                            self.app.parallel_accounts = mode.to_owned();
+                            app_changed = true;
+                        }
+                    }
+                })
+                .named();
+        });
+        row(ui, &t("first_word"), |ui| {
+            app_changed |= ui
+                .add(
+                    egui::DragValue::new(&mut self.app.first_word_seconds)
+                        .range(crate::settings::FIRST_WORD_RANGE)
+                        .suffix(" s"),
+                )
+                .named()
+                .changed();
+        });
+        note(ui, &t("parallel_note"));
+        if app_changed {
+            self.app_changed();
+        }
+
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
         ui.label(RichText::new(t("model_ask")).font(semibold(15.0)).color(strong()));
@@ -1088,6 +1122,14 @@ impl App {
                     ui.label(RichText::new(t("screenshot_key_bad")).color(danger()).small());
                 }
             });
+        }
+        if cfg!(windows) {
+            let mut tray = self.app.tray_icon;
+            if ui.checkbox(&mut tray, t("tray_icon")).changed() {
+                self.app.tray_icon = tray;
+                self.app_changed();
+            }
+            note(ui, &t("tray_note"));
         }
         if crate::capture_exclude::supported() {
             let mut hide = self.app.hide_from_sharing;

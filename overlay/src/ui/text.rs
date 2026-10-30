@@ -4,6 +4,25 @@ use super::text_more as more;
 
 /// (key, English, Russian). A missing translation falls back to English.
 const TABLE: &[(&str, &str, &str)] = &[
+    ("parallel", "Several accounts at once", "Несколько аккаунтов сразу"),
+    ("parallel_off", "One at a time", "По одному"),
+    ("parallel_hedged", "The next one when the first is slow", "Следующий, если первый медлит"),
+    ("parallel_all", "All at once (quickest)", "Все сразу (быстрее всего)"),
+    ("first_word", "Give up on a silent account after", "Бросать молчащий аккаунт через"),
+    (
+        "parallel_note",
+        "When an account is slow, limited or down, the next one answers instead, and the first to answer wins. All at once is the quickest and spends a request on every account. 0 seconds never gives up early.",
+        "Если аккаунт медлит, упёрся в лимит или недоступен, отвечает следующий, а побеждает тот, кто ответил первым. «Все сразу» быстрее всего и тратит запрос на каждом аккаунте. 0 секунд: не бросать раньше времени.",
+    ),
+    ("tray_icon", "Show an icon in the notification area", "Показывать значок в области уведомлений"),
+    (
+        "tray_note",
+        "A blue arrow like the one for location in use: an outline while the window waits, solid while it listens or writes an answer. It appears the next time the window starts.",
+        "Синяя стрелка, как у «геолокация используется»: контур, пока окно ждёт, и заливка, пока оно слушает или пишет ответ. Появится при следующем запуске окна.",
+    ),
+    ("tray_listening", "Listening", "Слушаю"),
+    ("tray_paused", "Paused", "Пауза"),
+    ("tray_quit", "Quit", "Выйти"),
     ("ready", "Ready", "Готово"),
     ("you_said", "You:", "Вы:"),
     ("screenshot_key", "Screenshot key", "Клавиша скриншота"),

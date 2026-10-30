@@ -68,7 +68,13 @@ about the project you defend sends a lean request: the part of the dossier that 
 the education, experience, projects and skills of ABOUT.md, so it fits Groq's free limit of 8000 tokens. On Windows
 the screenshot key (Ctrl+Shift+Enter, or the next free one) works in any program, the screen is captured through GDI,
 and the window keeps itself out of screen sharing (`WDA_EXCLUDEFROMCAPTURE`; *Settings → General* turns it off).
-Whisper on the computer downloads its model on the first start. The Python window described below still works and
+Whisper on the computer downloads its model on the first start. Answers are drawn as Markdown (headings, lists,
+tables, quotes, code, links; only web addresses open). With several accounts for one provider the next account answers
+when one is slow, limited, busy or silent, and *Settings → AI → Several accounts at once* can ask the next one when the
+first is slow (the default) or all of them together; the first to answer wins and the others are dropped, so a stalled
+account no longer costs the time of its timeout. On Windows a blue arrow like the location indicator sits in the
+notification area: an outline while the window waits, solid while it listens or writes (a click brings the window
+forward; the menu has the screenshot, listening on or off, and quit). The Python window described below still works and
 reads the same data folder.
 
 **Everything is set up in the window.** Open ☰ → *Settings…* (or click the dim *Context* line
