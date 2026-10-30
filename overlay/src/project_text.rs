@@ -27,20 +27,90 @@ Rules
 
 pub const KEY_FILE: &str = r#"(?:^|/)(?:readme[^/]*|pyproject\.toml|package\.json|pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|cargo\.toml|go\.mod|requirements[^/]*\.txt|dockerfile|docker-compose[^/]*\.ya?ml|makefile|application\.(?:ya?ml|properties))$"#;
 
-pub const ENTRY_NAMES: &[&str] = &["app", "application", "cli", "index", "main", "manage", "program", "server", "startup"];
+pub const ENTRY_NAMES: &[&str] =
+    &["app", "application", "cli", "index", "main", "manage", "program", "server", "startup"];
 
-pub const ROLE_WORDS: &[&str] = &["api", "route", "controller", "service", "model", "schema", "entity", "repository", "handler", "config", "middleware", "core", "domain", "auth", "store", "db", "view", "component"];
+pub const ROLE_WORDS: &[&str] = &[
+    "api",
+    "route",
+    "controller",
+    "service",
+    "model",
+    "schema",
+    "entity",
+    "repository",
+    "handler",
+    "config",
+    "middleware",
+    "core",
+    "domain",
+    "auth",
+    "store",
+    "db",
+    "view",
+    "component",
+];
 
-pub const SKIP_DIRS: &[&str] = &[".cache", ".git", ".gradle", ".hg", ".idea", ".mypy_cache", ".next", ".nuxt", ".pytest_cache", ".ruff_cache", ".svn", ".terraform", ".tox", ".venv", ".vscode", "__pycache__", "build", "coverage", "dist", "env", "node_modules", "obj", "out", "site-packages", "target", "vendor", "venv"];
+pub const SKIP_DIRS: &[&str] = &[
+    ".cache",
+    ".git",
+    ".gradle",
+    ".hg",
+    ".idea",
+    ".mypy_cache",
+    ".next",
+    ".nuxt",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".terraform",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "env",
+    "node_modules",
+    "obj",
+    "out",
+    "site-packages",
+    "target",
+    "vendor",
+    "venv",
+];
 
-pub const SKIP_SUFFIXES: &[&str] = &[".7z", ".a", ".avi", ".bin", ".bmp", ".class", ".dat", ".db", ".dll", ".dylib", ".eot", ".exe", ".gif", ".gz", ".h5", ".ico", ".jar", ".jpeg", ".jpg", ".lock", ".map", ".mov", ".mp3", ".mp4", ".npy", ".npz", ".o", ".ogg", ".onnx", ".otf", ".parquet", ".pdf", ".pkl", ".png", ".pt", ".pyc", ".pyo", ".rar", ".so", ".sqlite", ".sqlite3", ".svg", ".tar", ".tgz", ".tiff", ".ttf", ".war", ".wav", ".webm", ".webp", ".whl", ".woff", ".woff2", ".zip"];
+pub const SKIP_SUFFIXES: &[&str] = &[
+    ".7z", ".a", ".avi", ".bin", ".bmp", ".class", ".dat", ".db", ".dll", ".dylib", ".eot", ".exe", ".gif", ".gz",
+    ".h5", ".ico", ".jar", ".jpeg", ".jpg", ".lock", ".map", ".mov", ".mp3", ".mp4", ".npy", ".npz", ".o", ".ogg",
+    ".onnx", ".otf", ".parquet", ".pdf", ".pkl", ".png", ".pt", ".pyc", ".pyo", ".rar", ".so", ".sqlite", ".sqlite3",
+    ".svg", ".tar", ".tgz", ".tiff", ".ttf", ".war", ".wav", ".webm", ".webp", ".whl", ".woff", ".woff2", ".zip",
+];
 
-pub const SKIP_NAMES: &[&str] = &[".ds_store", "cargo.lock", "composer.lock", "gemfile.lock", "package-lock.json", "pnpm-lock.yaml", "poetry.lock", "thumbs.db", "uv.lock", "yarn.lock"];
+pub const SKIP_NAMES: &[&str] = &[
+    ".ds_store",
+    "cargo.lock",
+    "composer.lock",
+    "gemfile.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "thumbs.db",
+    "uv.lock",
+    "yarn.lock",
+];
 
 pub const SECRET_SUFFIXES: &[&str] = &[".jks", ".key", ".keystore", ".p12", ".pem", ".pfx"];
 
-pub const SECRET_NAMES: &[&str] = &["credentials.json", "id_ed25519", "id_rsa", "secrets.json", "secrets.yaml", "secrets.yml"];
+pub const SECRET_NAMES: &[&str] =
+    &["credentials.json", "id_ed25519", "id_rsa", "secrets.json", "secrets.yaml", "secrets.yml"];
 
 pub const ENV_EXAMPLES: &[&str] = &[".env.example", ".env.sample", ".env.template", ".env.dist"];
 
-pub const STOP_WORDS: &[&str] = &["a", "about", "an", "and", "are", "as", "at", "be", "been", "by", "can", "could", "did", "do", "does", "for", "from", "had", "has", "have", "here", "how", "in", "into", "is", "it", "its", "no", "not", "of", "on", "or", "should", "than", "that", "the", "then", "there", "these", "this", "those", "to", "was", "were", "what", "when", "where", "which", "who", "why", "with", "would", "yes", "you", "your"];
+pub const STOP_WORDS: &[&str] = &[
+    "a", "about", "an", "and", "are", "as", "at", "be", "been", "by", "can", "could", "did", "do", "does", "for",
+    "from", "had", "has", "have", "here", "how", "in", "into", "is", "it", "its", "no", "not", "of", "on", "or",
+    "should", "than", "that", "the", "then", "there", "these", "this", "those", "to", "was", "were", "what", "when",
+    "where", "which", "who", "why", "with", "would", "yes", "you", "your",
+];

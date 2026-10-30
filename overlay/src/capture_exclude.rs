@@ -47,7 +47,9 @@ mod native {
 
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::System::Threading::GetCurrentProcessId;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, SetWindowDisplayAffinity};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, SetWindowDisplayAffinity,
+    };
 
     unsafe extern "system" fn collect(window: HWND, found: LPARAM) -> i32 {
         let mut process = 0u32;

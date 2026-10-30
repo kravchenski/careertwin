@@ -11,16 +11,18 @@ use careertwin_overlay::paths::Paths;
 use careertwin_overlay::settings::load_all;
 use careertwin_overlay::ui::{self, App, Event, theme};
 
-const HELP: &str = "CareerTwin Interview (Rust): the window that writes what to say
+const HELP: &str = "CareerTwin Interview: the window that writes what to say
 
 Usage: careertwin-overlay [--version] [--data-dir <folder>]
+       careertwin-overlay ctl <screenshot|ask|ping>
 
   --version         print the version
   --data-dir        where data/interview/settings.json lives (default: CAREERTWIN_DATA_DIR, a `data` folder
                     here or above, or the platform's data folder)
 
-The window answers typed questions and the screen. To answer the screen from another program, bind a key in
-your compositor to `careertwin-interview-ctl screenshot`.";
+The window hears the call, answers typed questions and answers the screen. On Windows the screenshot key works in
+any program. On Linux bind a key in your compositor to `careertwin-interview-ctl screenshot` (that is
+`careertwin-overlay ctl screenshot`); the window must be running.";
 
 struct Shell {
     app: App,
@@ -49,7 +51,9 @@ impl eframe::App for Shell {
 #[cfg(windows)]
 fn attach_console() {
     // SAFETY: attaches this process to the console of its parent, if it has one.
-    unsafe { windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS) };
+    unsafe {
+        windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS)
+    };
 }
 
 fn main() -> ExitCode {
@@ -63,6 +67,22 @@ fn main() -> ExitCode {
     if args.iter().any(|arg| arg == "--version") {
         println!("careertwin-overlay {}", env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
+    }
+    if args.first().map(String::as_str) == Some("ctl") {
+        return match args.get(1).map(|command| control::send(command)) {
+            Some(Ok(reply)) => {
+                println!("{reply}");
+                ExitCode::SUCCESS
+            }
+            Some(Err(error)) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+            None => {
+                eprintln!("Usage: careertwin-overlay ctl <{}>", control::COMMANDS.join("|"));
+                ExitCode::FAILURE
+            }
+        };
     }
     let paths = match args.iter().position(|arg| arg == "--data-dir").and_then(|index| args.get(index + 1)) {
         Some(folder) => Paths::under(folder),

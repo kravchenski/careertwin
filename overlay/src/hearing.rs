@@ -1,10 +1,10 @@
 //! What the window listens to and with what: the call and the microphone as sources, Whisper or Deepgram as the
 //! recogniser. The session does the listening; this decides what it is given.
 
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 #[cfg(feature = "local-stt")]
 use std::sync::Mutex;
+use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use tokio::runtime::Handle;
@@ -52,7 +52,10 @@ pub fn call_source(setting: &str, notify: impl Fn(&str) + Send + Sync + 'static)
 }
 
 /// The sources the settings ask for: (speaker, source). `notify` is told which output is being listened to.
-pub fn sources(settings: &Settings, notify: impl Fn(&str) + Send + Sync + 'static) -> Vec<(String, Arc<dyn FrameSource>)> {
+pub fn sources(
+    settings: &Settings,
+    notify: impl Fn(&str) + Send + Sync + 'static,
+) -> Vec<(String, Arc<dyn FrameSource>)> {
     let mut sources: Vec<(String, Arc<dyn FrameSource>)> = Vec::new();
     if settings.listen {
         sources.push((INTERVIEWER.to_owned(), call_source(&settings.call_source, notify)));
@@ -162,10 +165,13 @@ impl Transcriber for Downloading {
         let path = self
             .handle
             .block_on(crate::models::ensure(self.model, &self.dir, None, |done, total| {
-                let percent = if total == 0 { 0 } else { done * 100 / total };
+                let percent = (done * 100).checked_div(total).unwrap_or(0);
                 if percent != shown {
                     shown = percent;
-                    self.say(format!("Downloading the speech model ({name}, {} MB): {percent}%", self.model.megabytes()));
+                    self.say(format!(
+                        "Downloading the speech model ({name}, {} MB): {percent}%",
+                        self.model.megabytes()
+                    ));
                 }
             }))
             .map_err(|error| format!("The speech model could not be downloaded: {error}"))?;

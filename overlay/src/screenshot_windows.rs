@@ -9,8 +9,7 @@ use windows_sys::Win32::Graphics::Gdi::{
     MONITORINFO, MonitorFromWindow, ReleaseDC, SRCCOPY, SelectObject,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-    SM_YVIRTUALSCREEN,
+    GetForegroundWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
 use super::{ScreenshotError, Shot, bgra_to_rgb, encode_jpeg};

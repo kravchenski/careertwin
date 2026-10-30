@@ -5,6 +5,7 @@ pub mod equalizer;
 pub mod icon;
 pub mod settings_ui;
 pub mod text;
+pub mod text_more;
 pub mod theme;
 pub mod update_ui;
 
@@ -43,12 +44,21 @@ pub enum Event {
     ProjectStage(String),
     Remote(String),
     Models(Result<Vec<String>, String>),
-    KeyChecked { key: String, result: Result<bool, String> },
+    KeyChecked {
+        key: String,
+        result: Result<bool, String>,
+    },
     Connected(Result<usize, String>),
     Bank(Result<Vec<BankQuestion>, String>),
     Review(Result<Analysis, String>),
-    Latest { manual: bool, result: Result<Release, String> },
-    Progress { done: u64, total: u64 },
+    Latest {
+        manual: bool,
+        result: Result<Release, String>,
+    },
+    Progress {
+        done: u64,
+        total: u64,
+    },
     Downloaded(Result<PathBuf, String>),
     Exported(Result<Vec<PathBuf>, String>),
 }
@@ -275,7 +285,14 @@ impl App {
         let s = &self.settings;
         format!(
             "{}|{}|{}|{}|{}|{}|{}|{}",
-            s.listen, s.call_source, s.use_mic, s.mic_source, s.stt_engine, s.whisper_model, s.deepgram_key, s.deepgram_model
+            s.listen,
+            s.call_source,
+            s.use_mic,
+            s.mic_source,
+            s.stt_engine,
+            s.whisper_model,
+            s.deepgram_key,
+            s.deepgram_model
         )
     }
 
@@ -313,7 +330,8 @@ impl App {
 
     /// What a request is made from: the interview, the style and the project, copied for the session's threads.
     pub fn sync_context(&mut self) {
-        let retrieve: Option<Retrieve> = self.project.clone().map(|project| -> Retrieve { Arc::new(move |question: &str| project.find(question)) });
+        let retrieve: Option<Retrieve> =
+            self.project.clone().map(|project| -> Retrieve { Arc::new(move |question: &str| project.find(question)) });
         if let Ok(mut context) = self.context.lock() {
             context.brief = self.brief.clone();
             context.style = self.settings.answer_style.clone();
@@ -546,7 +564,8 @@ impl App {
             return;
         }
         self.analyzing = Some("read".to_owned());
-        let (coach, tx, repaint, handle) = (self.coach.clone(), self.tx.clone(), self.repaint.clone(), self.handle.clone());
+        let (coach, tx, repaint, handle) =
+            (self.coach.clone(), self.tx.clone(), self.repaint.clone(), self.handle.clone());
         let (dir, gateway) = (self.paths.interview_dir(), self.settings.gateway());
         std::thread::spawn(move || {
             let stages = (tx.clone(), repaint.clone());
@@ -556,7 +575,11 @@ impl App {
                 handle.block_on(coach.complete(&request)).map_err(|error| error.message)
             };
             let result = project::analyze(&dir, std::path::Path::new(&folder), &gateway, &complete, |stage, files| {
-                let _ = stages.0.send(Event::ProjectStage(if files > 0 { format!("{stage} {files}") } else { stage.to_owned() }));
+                let _ = stages.0.send(Event::ProjectStage(if files > 0 {
+                    format!("{stage} {files}")
+                } else {
+                    stage.to_owned()
+                }));
                 (stages.1)();
             })
             .map(Box::new)
@@ -819,7 +842,8 @@ impl App {
 
     /// One line about what the window hears: the words being said, or what it is doing about the sound.
     fn caption_line(&self, ui: &mut Ui) {
-        let (text, heard) = if self.caption.is_empty() { (self.status.clone(), false) } else { (self.caption.clone(), true) };
+        let (text, heard) =
+            if self.caption.is_empty() { (self.status.clone(), false) } else { (self.caption.clone(), true) };
         if text.is_empty() || !(self.settings.listen || self.settings.use_mic) {
             return;
         }
@@ -840,7 +864,7 @@ impl App {
                 .hint_text(hint)
                 .desired_width(ui.available_width() - ask_width - 12.0)
                 .margin(egui::vec2(10.0, 8.0));
-            let response = ui.add_enabled(idle, edit);
+            let response = ui.add_enabled(idle, edit).accessible_name(self.t("question_hint"));
             let enter = response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
             if self.thinking() {
                 if ui.add(egui::Button::new(self.t("stop")).min_size(egui::vec2(ask_width, 34.0))).clicked() {

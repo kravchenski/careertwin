@@ -802,7 +802,17 @@ impl Inner {
         let (style, layout) = (&context.style, &context.layout);
         // a question the project answers gets the lean background: the dossier part and the code, not the whole CV
         let prompt = if found.code.is_empty() {
-            prompts::user_prompt(&context.brief, question, kind, history, language.as_deref(), style, layout, "", listening)
+            prompts::user_prompt(
+                &context.brief,
+                question,
+                kind,
+                history,
+                language.as_deref(),
+                style,
+                layout,
+                "",
+                listening,
+            )
         } else {
             prompts::project_prompt(
                 &context.brief,
@@ -1146,12 +1156,18 @@ mod tests {
             let mut context = f.session.inner.context.lock().unwrap();
             context.brief.documents.push(crate::brief::Document::new("cv.pdf", "A LONG CV TEXT", "cv"));
             context.brief.project = Some(crate::brief::ProjectDossier { name: "bot".into(), dossier: "whole".into() });
-            context.retrieve = Some(Arc::new(|_| Found { code: "--- throttle.py ---\nlimit()".into(), dossier: "## Overview\nA bot.".into() }));
+            context.retrieve = Some(Arc::new(|_| Found {
+                code: "--- throttle.py ---\nlimit()".into(),
+                dossier: "## Overview\nA bot.".into(),
+            }));
         }
         f.session.ask("How does the bot stop flooding?");
         collect(&f.events, |seen| seen.iter().any(|event| matches!(event, Event::Done(_))));
         let prompt = &f.model.asked()[0];
-        assert!(prompt.contains("RELEVANT CODE FROM THE PROJECT (excerpts)\n--- throttle.py ---") && prompt.contains("## Overview\nA bot."));
+        assert!(
+            prompt.contains("RELEVANT CODE FROM THE PROJECT (excerpts)\n--- throttle.py ---")
+                && prompt.contains("## Overview\nA bot.")
+        );
         assert!(!prompt.contains("A LONG CV TEXT") && !prompt.contains("whole"));
         f.session.stop();
     }

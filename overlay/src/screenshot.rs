@@ -173,7 +173,7 @@ pub const MAX_SIDE: u32 = 2560;
 /// Pixels as a GDI bitmap gives them (blue, green, red, unused) to the red, green, blue of a picture.
 pub fn bgra_to_rgb(pixels: &[u8]) -> Vec<u8> {
     let mut rgb = Vec::with_capacity(pixels.len() / 4 * 3);
-    for pixel in pixels.chunks_exact(4) {
+    for pixel in pixels.as_chunks::<4>().0 {
         rgb.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
     }
     rgb

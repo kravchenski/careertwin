@@ -1,13 +1,27 @@
-//! The words of the window, in English and Russian (the other languages of the Python window are next).
+//! The words of the window: English and Russian here, Polish, Ukrainian, German, French and Spanish in `text_more`.
+
+use super::text_more as more;
 
 /// (key, English, Russian). A missing translation falls back to English.
 const TABLE: &[(&str, &str, &str)] = &[
     ("ready", "Ready", "Готово"),
     ("you_said", "You:", "Вы:"),
     ("screenshot_key", "Screenshot key", "Клавиша скриншота"),
-    ("screenshot_key_now", "The screenshot key works in any program: {key}", "Клавиша скриншота работает в любой программе: {key}"),
-    ("screenshot_key_restart", "{key} will be the screenshot key the next time the window starts", "{key} станет клавишей скриншота при следующем запуске окна"),
-    ("screenshot_key_bad", "Use a modifier and a key, like Ctrl+Shift+Enter", "Нужны модификатор и клавиша, например Ctrl+Shift+Enter"),
+    (
+        "screenshot_key_now",
+        "The screenshot key works in any program: {key}",
+        "Клавиша скриншота работает в любой программе: {key}",
+    ),
+    (
+        "screenshot_key_restart",
+        "{key} will be the screenshot key the next time the window starts",
+        "{key} станет клавишей скриншота при следующем запуске окна",
+    ),
+    (
+        "screenshot_key_bad",
+        "Use a modifier and a key, like Ctrl+Shift+Enter",
+        "Нужны модификатор и клавиша, например Ctrl+Shift+Enter",
+    ),
     ("hide_from_sharing", "Hide this window from screen sharing", "Скрывать окно при показе экрана"),
     (
         "hide_note",
@@ -29,13 +43,25 @@ const TABLE: &[(&str, &str, &str)] = &[
         "Automatic follows the output that plays the call, so a headset plugged in later is heard too.",
         "Автоматически идёт за выходом, который играет звонок, поэтому наушники, подключённые позже, тоже слышны.",
     ),
-    ("project_note", "Choose the folder above, then read it: the answers will know the project.", "Укажите папку выше и прочитайте её: ответы будут знать проект."),
+    (
+        "project_note",
+        "Choose the folder above, then read it: the answers will know the project.",
+        "Укажите папку выше и прочитайте её: ответы будут знать проект.",
+    ),
     ("project_read", "Read the project", "Прочитать проект"),
     ("project_reread", "Read it again", "Прочитать заново"),
     ("project_reading", "Reading the files…", "Читаю файлы…"),
     ("project_asking", "Writing the dossier from {n} files…", "Пишу досье по {n} файлам…"),
-    ("project_not_read", "Not read yet. It takes about a minute and one request.", "Ещё не прочитан. Это около минуты и один запрос."),
-    ("project_summary", "{name}: {files} files, {size}k characters, read {when}", "{name}: {files} файлов, {size}k символов, прочитан {when}"),
+    (
+        "project_not_read",
+        "Not read yet. It takes about a minute and one request.",
+        "Ещё не прочитан. Это около минуты и один запрос.",
+    ),
+    (
+        "project_summary",
+        "{name}: {files} files, {size}k characters, read {when}",
+        "{name}: {files} файлов, {size}k символов, прочитан {when}",
+    ),
     ("project_ready", "{name} is read: the answers know it now", "{name} прочитан: ответы теперь его знают"),
     ("dossier", "Dossier (you can correct it)", "Досье (можно поправить)"),
     ("dossier_save", "Save changes", "Сохранить правки"),
@@ -211,8 +237,8 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("deepgram_key", "Deepgram API key", "API-ключ Deepgram"),
     (
         "audio_note",
-        "Hearing the call arrives in the next step of the Rust window. These settings are kept for it and used by the Python window now.",
-        "Прослушивание звонка появится на следующем шаге Rust-окна. Эти настройки сохраняются для него и сейчас используются Python-окном.",
+        "The call is heard through this engine. Whisper downloads its model once, the first time; the progress shows under the header.",
+        "Звонок слушается через этот движок. Whisper скачивает модель один раз, при первом запуске; ход загрузки виден под заголовком.",
     ),
     (
         "cloud_note",
@@ -299,11 +325,26 @@ const TABLE: &[(&str, &str, &str)] = &[
 
 /// The text for `key` in `language` (`ru`, else English), with `{name}` holes filled from `values`.
 pub fn t(language: &str, key: &str, values: &[(&str, &str)]) -> String {
-    let text = TABLE
-        .iter()
-        .find(|(name, _, _)| *name == key)
-        .map_or(key, |(_, en, ru)| if language == "ru" { ru } else { en });
+    let text = match TABLE.iter().find(|(name, _, _)| *name == key) {
+        None => key,
+        Some((_, en, ru)) => match language {
+            "ru" => ru,
+            other => other_language(other, key).unwrap_or(en),
+        },
+    };
     values.iter().fold(text.to_owned(), |text, (name, value)| text.replace(&format!("{{{name}}}"), value))
+}
+
+fn other_language(language: &str, key: &str) -> Option<&'static str> {
+    let table = match language {
+        "pl" => more::PL,
+        "uk" => more::UK,
+        "de" => more::DE,
+        "fr" => more::FR,
+        "es" => more::ES,
+        _ => return None,
+    };
+    table.iter().find(|(name, _)| *name == key).map(|(_, text)| *text)
 }
 
 #[cfg(test)]
@@ -330,10 +371,36 @@ mod tests {
     }
 
     #[test]
+    fn every_other_language_has_every_key_with_the_same_holes() {
+        let holes = |text: &str| {
+            let mut found: Vec<String> =
+                text.split('{').skip(1).filter_map(|rest| rest.split('}').next()).map(str::to_owned).collect();
+            found.sort();
+            found
+        };
+        for (language, table) in
+            [("pl", more::PL), ("uk", more::UK), ("de", more::DE), ("fr", more::FR), ("es", more::ES)]
+        {
+            assert_eq!(table.len(), TABLE.len(), "{language} has a different number of keys");
+            for (key, en, _) in TABLE {
+                let text =
+                    table.iter().find(|(name, _)| name == key).unwrap_or_else(|| panic!("{language} lacks {key}")).1;
+                assert!(!text.is_empty(), "{language} {key}");
+                assert_eq!(holes(en), holes(text), "{language} {key}: the holes differ");
+            }
+            for code in crate::languages::UI_LANGUAGES.iter().map(|(code, _)| *code) {
+                assert!(code == "en" || code == "ru" || matches!(code, "pl" | "uk" | "de" | "fr" | "es"));
+            }
+        }
+    }
+
+    #[test]
     fn the_language_picks_the_text_and_the_holes_are_filled() {
         assert_eq!(t("en", "ask", &[]), "Ask");
         assert_eq!(t("ru", "ask", &[]), "Спросить");
-        assert_eq!(t("de", "ask", &[]), "Ask"); // no German yet: English
+        assert_eq!(t("de", "ask", &[]), "Fragen");
+        assert_eq!(t("pl", "ask", &[]), "Zapytaj");
+        assert_eq!(t("xx", "ask", &[]), "Ask"); // a language the window does not know: English
         assert_eq!(t("en", "update_title", &[("version", "0.6.0")]), "Version 0.6.0 is available");
         assert_eq!(t("en", "no such key", &[]), "no such key");
     }

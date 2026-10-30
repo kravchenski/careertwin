@@ -162,7 +162,11 @@ pub fn install(ctx: &egui::Context, scale: f32) {
     fonts.font_data.insert("manrope".into(), Arc::new(FontData::from_static(MANROPE)));
     fonts.font_data.insert("manrope_semibold".into(), Arc::new(FontData::from_static(MANROPE_SEMIBOLD)));
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "manrope".into());
-    fonts.families.insert(FontFamily::Name("semibold".into()), vec!["manrope_semibold".into(), "manrope".into()]);
+    // Manrope has no Polish or Ukrainian letters in this build: the semibold family falls back on the same fonts the
+    // regular text does, or a heading in those languages would be drawn with empty boxes
+    let mut semibold = vec!["manrope_semibold".to_owned()];
+    semibold.extend(fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default());
+    fonts.families.insert(FontFamily::Name("semibold".into()), semibold);
     ctx.set_fonts(fonts);
     apply(ctx, scale);
 }

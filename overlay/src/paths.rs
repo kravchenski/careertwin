@@ -25,10 +25,13 @@ impl Paths {
     }
 
     pub fn discover() -> Self {
-        let data = std::env::var_os("CAREERTWIN_DATA_DIR")
-            .map(PathBuf::from)
-            .or_else(find_checkout_data)
-            .unwrap_or_else(platform_data);
+        let exe_folder = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf));
+        let data = choose_data(
+            std::env::var_os("CAREERTWIN_DATA_DIR").map(PathBuf::from),
+            exe_folder.as_deref(),
+            find_checkout_data,
+            platform_data,
+        );
         let mut paths = Self::under(data);
         if let Some(about) = std::env::var_os("CAREERTWIN_ABOUT_PATH") {
             paths.about = PathBuf::from(about);
@@ -72,6 +75,21 @@ impl Paths {
     }
 }
 
+/// Where the data lives: the folder named by the environment; a `data` folder next to the program (the portable
+/// zip, and an installation that came from the Python window, whose settings are kept there); a checkout's `data`
+/// folder that already holds the window's files; else the platform's own data folder.
+pub fn choose_data(
+    environment: Option<PathBuf>,
+    program_folder: Option<&Path>,
+    checkout: impl FnOnce() -> Option<PathBuf>,
+    platform: impl FnOnce() -> PathBuf,
+) -> PathBuf {
+    environment
+        .or_else(|| program_folder.map(|folder| folder.join("data")).filter(|data| data.is_dir()))
+        .or_else(checkout)
+        .unwrap_or_else(platform)
+}
+
 fn find_checkout_data() -> Option<PathBuf> {
     let start = std::env::current_dir().ok()?;
     start.ancestors().take(4).map(|folder| folder.join("data")).find(|data: &PathBuf| has_overlay_files(data))
@@ -107,5 +125,20 @@ mod tests {
         assert_eq!(Paths::under(dir.path().join("data")).about, dir.path().join("ABOUT.md"));
         let alone = tempfile::tempdir().unwrap();
         assert_eq!(Paths::under(alone.path().join("data")).about, alone.path().join("data").join("ABOUT.md"));
+    }
+
+    #[test]
+    fn data_is_taken_from_the_environment_then_next_to_the_program_then_the_checkout_then_the_platform() {
+        let program = tempfile::tempdir().unwrap();
+        let platform = || PathBuf::from("/platform");
+        let checkout = || Some(PathBuf::from("/checkout/data"));
+        let named = Some(PathBuf::from("/named"));
+        assert_eq!(choose_data(named, Some(program.path()), checkout, platform), Path::new("/named"));
+        // no `data` folder next to the program: the checkout, then the platform
+        assert_eq!(choose_data(None, Some(program.path()), checkout, platform), Path::new("/checkout/data"));
+        assert_eq!(choose_data(None, Some(program.path()), || None, platform), Path::new("/platform"));
+        std::fs::create_dir(program.path().join("data")).unwrap();
+        assert_eq!(choose_data(None, Some(program.path()), checkout, platform), program.path().join("data"));
+        assert_eq!(choose_data(None, None, || None, platform), Path::new("/platform"));
     }
 }

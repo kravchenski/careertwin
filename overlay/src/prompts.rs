@@ -381,19 +381,36 @@ mod tests {
 
     #[test]
     fn a_project_prompt_is_much_smaller_and_carries_the_dossier_part_and_the_code() {
-        let mut brief = InterviewBrief::new("## Contact\nmax@example.com\n\n## Skills\nPython\n\n## Interview stories\n"
-            .to_owned()
-            .as_str());
+        let mut brief = InterviewBrief::new(
+            "## Contact\nmax@example.com\n\n## Skills\nPython\n\n## Interview stories\n".to_owned().as_str(),
+        );
         brief.candidate.push_str(&"filler line\n".repeat(2000));
         brief.documents.push(crate::brief::Document::new("cv.pdf", &"cv ".repeat(3000), "cv"));
         brief.project = Some(crate::brief::ProjectDossier { name: "bot".into(), dossier: "d".repeat(9000) });
         let args = |code| ("How does the bot stop flooding?", Kind::Technical, ["Interviewer: hi".to_owned()], code);
         let (question, kind, history, code) = args("--- a.py ---\nlimit()");
         let full = user_prompt(&brief, question, kind, &history, Some("en"), "standard", "lines", code, None);
-        let lean = project_prompt(&brief, question, kind, &history, Some("en"), "standard", "lines", code, "## Overview\nA bot.", None);
+        let lean = project_prompt(
+            &brief,
+            question,
+            kind,
+            &history,
+            Some("en"),
+            "standard",
+            "lines",
+            code,
+            "## Overview\nA bot.",
+            None,
+        );
         assert!(lean.len() * 3 < full.len(), "{} vs {}", lean.len(), full.len());
-        assert!(lean.contains("PROJECT THE CANDIDATE WILL DEFEND: bot\n## Overview\nA bot.") && lean.contains("--- a.py ---\nlimit()"));
-        assert!(lean.contains("INTERVIEWER'S QUESTION: How does the bot stop flooding?") && lean.contains("Interviewer: hi"));
+        assert!(
+            lean.contains("PROJECT THE CANDIDATE WILL DEFEND: bot\n## Overview\nA bot.")
+                && lean.contains("--- a.py ---\nlimit()")
+        );
+        assert!(
+            lean.contains("INTERVIEWER'S QUESTION: How does the bot stop flooding?")
+                && lean.contains("Interviewer: hi")
+        );
         assert!(!lean.contains("cv cv") && !lean.contains("filler line"));
     }
 }

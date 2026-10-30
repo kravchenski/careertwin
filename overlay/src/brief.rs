@@ -154,8 +154,15 @@ impl InterviewBrief {
             parts.push(format!("CANDIDATE CONTEXT (ABOUT.md, verified facts)\n{profile}"));
         }
         if !self.job_description.is_empty() || !self.job_title.is_empty() {
-            let head = [self.job_title.as_str(), self.company.as_str()].iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join(" at ");
-            parts.push(format!("VACANCY: {head}\n{}", chars(&self.job_description, VACANCY_FOR_PROJECT)).trim().to_owned());
+            let head = [self.job_title.as_str(), self.company.as_str()]
+                .iter()
+                .filter(|part| !part.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join(" at ");
+            parts.push(
+                format!("VACANCY: {head}\n{}", chars(&self.job_description, VACANCY_FOR_PROJECT)).trim().to_owned(),
+            );
         }
         if !self.notes.is_empty() {
             parts.push(format!("CANDIDATE NOTES FOR THIS INTERVIEW\n{}", chars(&self.notes, 600)));
@@ -518,7 +525,13 @@ mod tests {
         brief.documents.push(Document::new("cv.pdf", "CV TEXT", "cv"));
         brief.project = Some(ProjectDossier { name: "bot".into(), dossier: "whole dossier".into() });
         let text = brief.render_for_project("## Overview\nA bot.");
-        for kept in ["## Education", "## Experience", "## Skills", "VACANCY: Backend at Acme", "PROJECT THE CANDIDATE WILL DEFEND: bot\n## Overview\nA bot."] {
+        for kept in [
+            "## Education",
+            "## Experience",
+            "## Skills",
+            "VACANCY: Backend at Acme",
+            "PROJECT THE CANDIDATE WILL DEFEND: bot\n## Overview\nA bot.",
+        ] {
             assert!(text.contains(kept), "{kept} missing: {text}");
         }
         for dropped in ["max@example.com", "big list", "long story", "CV TEXT", "whole dossier", "SALARY POLICY"] {

@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use careertwin_overlay::paths::Paths;
 use careertwin_overlay::questions::Kind;
-use careertwin_overlay::ui::settings_ui::Tab;
 use careertwin_overlay::session::{Event as Heard, State};
+use careertwin_overlay::ui::settings_ui::Tab;
 use careertwin_overlay::ui::{App, Entry, Event, Source, theme};
 use careertwin_overlay::update::{Asset, Available, Release};
 use egui_kittest::Harness;
@@ -46,11 +46,14 @@ fn harness(
     let scale = app.settings.font_scale as f32 / 100.0;
     let harness = Harness::builder()
         .with_size(egui::vec2(width, height))
-        // the inputs of the settings are named by the label next to them, which the check cannot see yet
-        .with_accessibility_check(false)
         .with_context_setup(move |ctx| theme::install(ctx, scale))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
     (harness, _dir, _runtime)
+}
+
+/// A label that is on the screen at least once: an input and the text next to it carry the same name.
+fn see(harness: &Harness<'_, App>, label: &str) {
+    assert!(harness.query_all_by_label(label).next().is_some(), "{label} is not on the screen");
 }
 
 fn shot(harness: &mut Harness<'_, App>, name: &str) {
@@ -131,7 +134,7 @@ fn the_settings_have_four_tabs_and_each_draws() {
         fixture.app.settings_ui.tab = tab;
         let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 760.0);
         harness.run();
-        harness.get_by_label(key);
+        see(&harness, key);
         shot(&mut harness, shot_name);
     }
 }
@@ -154,7 +157,7 @@ fn the_ai_tab_has_the_three_models_and_the_keys_of_the_address() {
         "Save key",
         "Base URL",
     ] {
-        harness.get_by_label(label);
+        see(&harness, label);
     }
     shot(&mut harness, "tab-ai-full");
 }
@@ -241,7 +244,7 @@ fn the_general_tab_has_the_appearance_section_with_themes_the_equalizer_and_icon
         "Animate",
         "Theme colour",
     ] {
-        harness.get_by_label(label);
+        see(&harness, label);
     }
     shot(&mut harness, "tab-general-appearance");
 }
@@ -274,7 +277,7 @@ fn a_custom_theme_uses_the_three_colours() {
     fixture.app.settings_ui.tab = Tab::General;
     let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 1000.0);
     harness.run();
-    harness.get_by_label("Accent");
+    see(&harness, "Accent");
     harness.get_by_label("#ff7a59");
     assert_eq!(theme::palette().accent, egui::Color32::from_rgb(255, 122, 89));
     shot(&mut harness, "tab-general-custom");
@@ -361,11 +364,29 @@ fn the_general_tab_says_what_is_listened_to() {
     fixture.app.settings_ui.sources = Some(vec!["alsa_output.pci.monitor".into()]);
     let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
     harness.run();
-    harness.get_by_label("Listen to the call");
-    harness.get_by_label("Also listen to my microphone");
-    harness.get_by_label("Call sound");
-    harness.get_by_label("Microphone");
+    see(&harness, "Listen to the call");
+    see(&harness, "Also listen to my microphone");
+    see(&harness, "Call sound");
+    see(&harness, "Microphone");
     shot(&mut harness, "tab-general-hearing");
+}
+
+#[test]
+fn the_window_and_every_settings_tab_draw_in_each_language_without_missing_letters() {
+    for (language, ask) in
+        [("pl", "Zapytaj"), ("uk", "Запитати"), ("de", "Fragen"), ("fr", "Demander"), ("es", "Preguntar")]
+    {
+        for tab in [Tab::Interview, Tab::Practice, Tab::Ai, Tab::General] {
+            let mut fixture = fixture(language);
+            fixture.app.settings_open = true;
+            fixture.app.settings_ui.tab = tab;
+            fixture.app.settings.listen = true;
+            fixture.app.settings.use_mic = true;
+            let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 1100.0);
+            harness.run();
+            see(&harness, ask);
+        }
+    }
 }
 
 #[test]

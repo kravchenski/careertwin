@@ -14,7 +14,10 @@ use serde_json::{Value, json};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
-use crate::project_text::{DOSSIER_SYSTEM, ENTRY_NAMES, ENV_EXAMPLES, KEY_FILE, ROLE_WORDS, SECRET_NAMES, SECRET_SUFFIXES, SKIP_DIRS, SKIP_NAMES, SKIP_SUFFIXES, STOP_WORDS};
+use crate::project_text::{
+    DOSSIER_SYSTEM, ENTRY_NAMES, ENV_EXAMPLES, KEY_FILE, ROLE_WORDS, SECRET_NAMES, SECRET_SUFFIXES, SKIP_DIRS,
+    SKIP_NAMES, SKIP_SUFFIXES, STOP_WORDS,
+};
 
 pub const MAX_FILES: usize = 4000;
 pub const MAX_FILE_BYTES: u64 = 200_000;
@@ -41,7 +44,11 @@ fn fail<T>(text: impl Into<String>) -> Result<T, ProjectError> {
 /// How big the dossier request is on this provider: a provider with a small limit per request gets a smaller digest,
 /// because a request over the limit is refused whole, with no dossier at all.
 pub fn digest_budget(gateway: &str) -> usize {
-    if crate::providers::provider_for(gateway).is_some_and(|provider| provider.id == "groq") { SMALL_LIMIT_DIGEST_CHARS } else { DIGEST_CHARS }
+    if crate::providers::provider_for(gateway).is_some_and(|provider| provider.id == "groq") {
+        SMALL_LIMIT_DIGEST_CHARS
+    } else {
+        DIGEST_CHARS
+    }
 }
 
 /// The room for the dossier itself: smaller where the request is, so request and reply fit the limit together.
@@ -70,7 +77,9 @@ static TOKENS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 // No run in front of the keyword and a bounded one after it: an unbounded form is quadratic on a long line of dotted
 // names (minified code, a lock file) and could hold the analysis for minutes.
 static ASSIGNED: LazyLock<Regex> = LazyLock::new(|| {
-    compile(r#"(?i)((?:api[_-]?key|secret|token|passw(?:or)?d|authorization|credential)[A-Za-z0-9_.-]{0,40}\s{0,5}[:=]\s{0,5}(?:(?:bearer|basic|token)\s+)?)(["']?)[^\s"',;)]{8,}\2"#)
+    compile(
+        r#"(?i)((?:api[_-]?key|secret|token|passw(?:or)?d|authorization|credential)[A-Za-z0-9_.-]{0,40}\s{0,5}[:=]\s{0,5}(?:(?:bearer|basic|token)\s+)?)(["']?)[^\s"',;)]{8,}\2"#,
+    )
 });
 
 /// Blank anything that looks like a key, token or password before it can leave the machine.
@@ -110,11 +119,18 @@ impl Scan {
 fn wanted(relative: &str) -> bool {
     let path = Path::new(relative);
     let name = path.file_name().map(|name| name.to_string_lossy().to_lowercase()).unwrap_or_default();
-    let folders: Vec<String> = path.parent().map(|parent| parent.components().map(|part| part.as_os_str().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+    let folders: Vec<String> = path
+        .parent()
+        .map(|parent| parent.components().map(|part| part.as_os_str().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
     if folders.iter().any(|part| SKIP_DIRS.contains(&part.as_str())) {
         return false;
     }
-    if SKIP_NAMES.contains(&name.as_str()) || SECRET_NAMES.contains(&name.as_str()) || name.ends_with(".min.js") || name.ends_with(".min.css") {
+    if SKIP_NAMES.contains(&name.as_str())
+        || SECRET_NAMES.contains(&name.as_str())
+        || name.ends_with(".min.js")
+        || name.ends_with(".min.css")
+    {
         return false;
     }
     if name.starts_with(".env") && !ENV_EXAMPLES.contains(&name.as_str()) {
@@ -130,7 +146,15 @@ fn wanted(relative: &str) -> bool {
 /// What git would show (tracked and untracked, minus ignored), or `None` outside a repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
     let output = Command::new("git")
-        .args(["-c", "core.fsmonitor=false", "-c", &format!("core.hooksPath={}", if cfg!(windows) { "NUL" } else { "/dev/null" }), "-c", "core.pager=cat", "-C"])
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            &format!("core.hooksPath={}", if cfg!(windows) { "NUL" } else { "/dev/null" }),
+            "-c",
+            "core.pager=cat",
+            "-C",
+        ])
         .arg(root)
         .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -142,7 +166,11 @@ fn git_files(root: &Path) -> Option<Vec<String>> {
     if !output.status.success() || output.stdout.is_empty() {
         return None;
     }
-    let mut files: Vec<String> = String::from_utf8_lossy(&output.stdout).split('\0').filter(|item| !item.is_empty()).map(str::to_owned).collect();
+    let mut files: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .split('\0')
+        .filter(|item| !item.is_empty())
+        .map(str::to_owned)
+        .collect();
     files.sort();
     files.dedup();
     Some(files)
@@ -173,7 +201,8 @@ fn walk(root: &Path) -> Vec<String> {
 
 /// Read the text files of a project folder; the result is redacted and size-limited.
 pub fn scan(folder: &Path) -> Result<Scan, ProjectError> {
-    let root = folder.canonicalize().map_err(|_| ProjectError::Message(format!("{} is not a folder", folder.display())))?;
+    let root =
+        folder.canonicalize().map_err(|_| ProjectError::Message(format!("{} is not a folder", folder.display())))?;
     if !root.is_dir() {
         return fail(format!("{} is not a folder", root.display()));
     }
@@ -226,7 +255,10 @@ pub fn tokenize(text: &str) -> Vec<String> {
         let mut previous: Option<char> = None;
         for c in word.chars() {
             // a capital after a small letter or a digit starts a new part
-            if c.is_ascii_uppercase() && previous.is_some_and(|p| p.is_ascii_lowercase() || p.is_ascii_digit()) && !current.is_empty() {
+            if c.is_ascii_uppercase()
+                && previous.is_some_and(|p| p.is_ascii_lowercase() || p.is_ascii_digit())
+                && !current.is_empty()
+            {
                 parts.push(std::mem::take(&mut current).to_lowercase());
             }
             current.push(c);
@@ -304,7 +336,10 @@ impl Index {
             }
         }
         let total = chunks.len() as f32;
-        let idf = frequency.into_iter().map(|(term, seen)| (term.to_owned(), (1.0 + (total - seen as f32 + 0.5) / (seen as f32 + 0.5)).ln())).collect();
+        let idf = frequency
+            .into_iter()
+            .map(|(term, seen)| (term.to_owned(), (1.0 + (total - seen as f32 + 0.5) / (seen as f32 + 0.5)).ln()))
+            .collect();
         Self { counts, lengths, average, idf }
     }
 
@@ -319,7 +354,12 @@ impl Index {
             .enumerate()
             .filter_map(|(index, count)| {
                 let norm = K1 * (1.0 - B + B * self.lengths[index] as f32 / self.average);
-                let score: f32 = terms.iter().filter_map(|term| count.get(term).map(|seen| self.idf[term] * *seen as f32 * (K1 + 1.0) / (*seen as f32 + norm))).sum();
+                let score: f32 = terms
+                    .iter()
+                    .filter_map(|term| {
+                        count.get(term).map(|seen| self.idf[term] * *seen as f32 * (K1 + 1.0) / (*seen as f32 + norm))
+                    })
+                    .sum();
                 (score > 0.0).then_some((score, index))
             })
             .collect();
@@ -343,8 +383,25 @@ pub struct ProjectContext {
 }
 
 impl ProjectContext {
-    pub fn new(path: &str, name: &str, dossier: &str, files: usize, characters: usize, analyzed_at: &str, chunks: Vec<Chunk>) -> Self {
-        Self { path: path.to_owned(), name: name.to_owned(), dossier: dossier.to_owned(), files, characters, analyzed_at: analyzed_at.to_owned(), chunks, index: OnceLock::new() }
+    pub fn new(
+        path: &str,
+        name: &str,
+        dossier: &str,
+        files: usize,
+        characters: usize,
+        analyzed_at: &str,
+        chunks: Vec<Chunk>,
+    ) -> Self {
+        Self {
+            path: path.to_owned(),
+            name: name.to_owned(),
+            dossier: dossier.to_owned(),
+            files,
+            characters,
+            analyzed_at: analyzed_at.to_owned(),
+            chunks,
+            index: OnceLock::new(),
+        }
     }
 
     fn index(&self) -> &Index {
@@ -415,7 +472,8 @@ impl ProjectContext {
             used += length;
         }
         chosen.sort_unstable();
-        let text: String = chosen.into_iter().map(|index| sections[index].1).collect::<Vec<_>>().join("\n").trim().to_owned();
+        let text: String =
+            chosen.into_iter().map(|index| sections[index].1).collect::<Vec<_>>().join("\n").trim().to_owned();
         if text.chars().count() > limit { text.chars().take(limit).collect() } else { text }
     }
 
@@ -441,11 +499,16 @@ fn dossier_sections(dossier: &str) -> Vec<(&str, &str)> {
         starts.insert(0, 0);
     }
     starts.push(dossier.len());
-    starts.windows(2).map(|pair| (dossier[pair[0]..pair[1]].lines().next().unwrap_or(""), &dossier[pair[0]..pair[1]])).filter(|(_, body)| !body.trim().is_empty()).collect()
+    starts
+        .windows(2)
+        .map(|pair| (dossier[pair[0]..pair[1]].lines().next().unwrap_or(""), &dossier[pair[0]..pair[1]]))
+        .filter(|(_, body)| !body.trim().is_empty())
+        .collect()
 }
 
 fn importance(file: &SourceFile) -> f32 {
-    static TESTS: LazyLock<Regex> = LazyLock::new(|| compile(r"(^|/)(tests?|__tests__|spec)(/|$)|test_|_test\.|\.test\.|\.spec\."));
+    static TESTS: LazyLock<Regex> =
+        LazyLock::new(|| compile(r"(^|/)(tests?|__tests__|spec)(/|$)|test_|_test\.|\.test\.|\.spec\."));
     let lowered = file.path.to_lowercase();
     let stem = Path::new(&lowered).file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
     let mut score = -2.0 * lowered.matches('/').count() as f32;
@@ -476,8 +539,20 @@ fn tree(scan: &Scan, limit: usize) -> String {
         }
     }
     folders.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
-    let top: Vec<String> = folders.iter().map(|(name, count)| if name == "." { format!("(top level: {count} files)") } else { format!("{name}/ ({count} files)") }).collect();
-    format!("{}\n... {} more files; by folder:\n{}", rows[..limit / 2].join("\n"), rows.len() - limit / 2, top.join("\n"))
+    let top: Vec<String> = folders
+        .iter()
+        .map(
+            |(name, count)| {
+                if name == "." { format!("(top level: {count} files)") } else { format!("{name}/ ({count} files)") }
+            },
+        )
+        .collect();
+    format!(
+        "{}\n... {} more files; by folder:\n{}",
+        rows[..limit / 2].join("\n"),
+        rows.len() - limit / 2,
+        top.join("\n")
+    )
 }
 
 /// The prompt for the dossier: the tree, the manifests and READMEs, then the most important code.
@@ -486,7 +561,8 @@ pub fn digest_prompt(name: &str, scan: &Scan, budget: usize) -> String {
     let first = format!("PROJECT: {name}\nFILES: {}\n\nFILE TREE\n{}", scan.files.len(), tree(scan, 320));
     let mut used = first.chars().count();
     let mut parts = vec![first];
-    let mut key: Vec<&SourceFile> = scan.files.iter().filter(|item| KEY.is_match(&item.path).unwrap_or(false)).collect();
+    let mut key: Vec<&SourceFile> =
+        scan.files.iter().filter(|item| KEY.is_match(&item.path).unwrap_or(false)).collect();
     key.sort_by_key(|item| (item.path.matches('/').count(), item.path.clone()));
     for item in &key {
         let body: String = item.text.chars().take(4000).collect();
@@ -496,7 +572,8 @@ pub fn digest_prompt(name: &str, scan: &Scan, budget: usize) -> String {
         used += body.chars().count();
         parts.push(format!("--- {} ---\n{body}", item.path));
     }
-    let mut others: Vec<&SourceFile> = scan.files.iter().filter(|item| !key.iter().any(|known| known.path == item.path)).collect();
+    let mut others: Vec<&SourceFile> =
+        scan.files.iter().filter(|item| !key.iter().any(|known| known.path == item.path)).collect();
     others.sort_by(|a, b| importance(b).total_cmp(&importance(a)));
     for item in others {
         let body: String = item.text.chars().take(3500).collect();
@@ -550,14 +627,22 @@ pub fn load(interview_dir: &Path, path: &Path) -> Option<ProjectContext> {
         .iter()
         .filter_map(|row| {
             let row = row.as_array()?;
-            Some(Chunk { path: row.first()?.as_str()?.to_owned(), start: usize::try_from(row.get(1)?.as_u64()?).ok()?, text: row.get(2)?.as_str()?.to_owned() })
+            Some(Chunk {
+                path: row.first()?.as_str()?.to_owned(),
+                start: usize::try_from(row.get(1)?.as_u64()?).ok()?,
+                text: row.get(2)?.as_str()?.to_owned(),
+            })
         })
         .collect();
     let text = |key: &str| meta.get(key).and_then(Value::as_str).unwrap_or("").to_owned();
     let number = |key: &str| meta.get(key).and_then(Value::as_u64).unwrap_or(0) as usize;
     let project = ProjectContext::new(
         &if text("path").is_empty() { path.to_string_lossy().into_owned() } else { text("path") },
-        &if text("name").is_empty() { path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default() } else { text("name") },
+        &if text("name").is_empty() {
+            path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+        } else {
+            text("name")
+        },
         &dossier,
         number("files"),
         number("characters"),
@@ -594,14 +679,25 @@ pub fn analyze(
     let root = folder.canonicalize().map_err(|error| ProjectError::Message(error.to_string()))?;
     let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
     progress("ask", result.files.len());
-    let dossier = complete(DOSSIER_SYSTEM, &digest_prompt(&name, &result, digest_budget(gateway)), dossier_tokens(gateway)).map_err(ProjectError::Message)?;
+    let dossier =
+        complete(DOSSIER_SYSTEM, &digest_prompt(&name, &result, digest_budget(gateway)), dossier_tokens(gateway))
+            .map_err(ProjectError::Message)?;
     let dossier = dossier.trim().to_owned();
     if dossier.is_empty() {
         return fail("The AI returned no dossier. Try again or pick another model.");
     }
     let chunks = result.files.iter().flat_map(|file| chunks_of(file, CHUNK_CHARS)).collect();
-    let project = ProjectContext::new(&root.to_string_lossy(), &name, &dossier, result.files.len(), result.size(), &chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(), chunks);
-    save(interview_dir, &project).map_err(|error| ProjectError::Message(format!("Could not save the project: {error}")))?;
+    let project = ProjectContext::new(
+        &root.to_string_lossy(),
+        &name,
+        &dossier,
+        result.files.len(),
+        result.size(),
+        &chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+        chunks,
+    );
+    save(interview_dir, &project)
+        .map_err(|error| ProjectError::Message(format!("Could not save the project: {error}")))?;
     project.prepare();
     Ok(project)
 }
@@ -621,8 +717,16 @@ mod tests {
         let root = dir.path();
         write(root, "README.md", "# Shop\nAn online shop API.\n");
         write(root, "pyproject.toml", "[project]\nname = \"shop\"\n");
-        write(root, "app/main.py", "from app.service import OrderService\n\ndef main():\n    return OrderService().total([1, 2])\n");
-        write(root, "app/service.py", "class OrderService:\n    def total(self, items):\n        \"\"\"The order total with the loyalty discount of 10 percent.\"\"\"\n        return sum(items) * 0.9\n");
+        write(
+            root,
+            "app/main.py",
+            "from app.service import OrderService\n\ndef main():\n    return OrderService().total([1, 2])\n",
+        );
+        write(
+            root,
+            "app/service.py",
+            "class OrderService:\n    def total(self, items):\n        \"\"\"The order total with the loyalty discount of 10 percent.\"\"\"\n        return sum(items) * 0.9\n",
+        );
         write(root, "tests/test_service.py", "def test_total():\n    assert True\n");
         write(root, ".env", "SECRET_KEY=hunter2hunter2\n");
         write(root, ".env.example", "SECRET_KEY=changeme\n");
@@ -640,7 +744,10 @@ mod tests {
         let read = scan(dir.path()).unwrap();
         let mut paths: Vec<&str> = read.files.iter().map(|file| file.path.as_str()).collect();
         paths.sort_unstable();
-        assert_eq!(paths, [".env.example", "README.md", "app/main.py", "app/service.py", "pyproject.toml", "tests/test_service.py"]);
+        assert_eq!(
+            paths,
+            [".env.example", "README.md", "app/main.py", "app/service.py", "pyproject.toml", "tests/test_service.py"]
+        );
         assert!(read.skipped >= 3 && !read.truncated);
         assert!(scan(Path::new("/no/such/folder")).is_err());
     }
@@ -666,7 +773,10 @@ mod tests {
 
     #[test]
     fn files_are_cut_at_line_ends_and_each_piece_knows_its_line() {
-        let file = SourceFile { path: "a.py".into(), text: (1..=10).map(|n| format!("line number {n}")).collect::<Vec<_>>().join("\n") };
+        let file = SourceFile {
+            path: "a.py".into(),
+            text: (1..=10).map(|n| format!("line number {n}")).collect::<Vec<_>>().join("\n"),
+        };
         let pieces = chunks_of(&file, 50);
         assert!(pieces.len() > 1 && pieces[0].start == 1 && pieces[1].start > 1);
         assert_eq!(pieces.iter().map(|piece| piece.text.lines().count()).sum::<usize>(), 10);
@@ -676,7 +786,15 @@ mod tests {
     fn project(dir: &Path) -> ProjectContext {
         let scan = scan(dir).unwrap();
         let chunks = scan.files.iter().flat_map(|file| chunks_of(file, CHUNK_CHARS)).collect();
-        ProjectContext::new(&dir.to_string_lossy(), "shop", "## Overview\nAn online shop.\n", scan.files.len(), scan.size(), "2026-10-30 12:00", chunks)
+        ProjectContext::new(
+            &dir.to_string_lossy(),
+            "shop",
+            "## Overview\nAn online shop.\n",
+            scan.files.len(),
+            scan.size(),
+            "2026-10-30 12:00",
+            chunks,
+        )
     }
 
     #[test]
@@ -684,8 +802,14 @@ mod tests {
         let dir = sample();
         let project = project(dir.path());
         let found = project.retrieve("How do you calculate the order total with the discount?", 4, 3600);
-        assert!(found.starts_with("--- app/service.py (from line 1) ---") && found.contains("loyalty discount"), "{found}");
-        assert!(project.retrieve("zzz qqq", 4, 3600).is_empty() && ProjectContext::default().retrieve("order", 4, 3600).is_empty());
+        assert!(
+            found.starts_with("--- app/service.py (from line 1) ---") && found.contains("loyalty discount"),
+            "{found}"
+        );
+        assert!(
+            project.retrieve("zzz qqq", 4, 3600).is_empty()
+                && ProjectContext::default().retrieve("order", 4, 3600).is_empty()
+        );
         let budgeted = project.retrieve("order total service main", 4, 100);
         assert!(budgeted.chars().count() < 3600);
     }
@@ -696,8 +820,15 @@ mod tests {
         let scan = scan(dir.path()).unwrap();
         let digest = digest_prompt("shop", &scan, DIGEST_CHARS);
         assert!(digest.starts_with("PROJECT: shop\nFILES: 6") && digest.contains("app/service.py (5 lines)"));
-        assert!(digest.contains("--- README.md ---") && digest.contains("--- pyproject.toml ---") && digest.contains("--- app/main.py ---"));
-        assert!(digest.find("--- app/main.py ---").unwrap() < digest.find("--- tests/test_service.py ---").unwrap(), "tests come last");
+        assert!(
+            digest.contains("--- README.md ---")
+                && digest.contains("--- pyproject.toml ---")
+                && digest.contains("--- app/main.py ---")
+        );
+        assert!(
+            digest.find("--- app/main.py ---").unwrap() < digest.find("--- tests/test_service.py ---").unwrap(),
+            "tests come last"
+        );
         let small = digest_prompt("shop", &scan, 200);
         assert!(small.len() < digest.len());
     }
@@ -707,7 +838,10 @@ mod tests {
         assert_eq!(digest_budget("https://api.groq.com/openai"), SMALL_LIMIT_DIGEST_CHARS);
         assert_eq!(digest_budget("http://127.0.0.1:3260"), DIGEST_CHARS);
         assert_eq!(digest_budget("https://api.openai.com"), DIGEST_CHARS);
-        assert_eq!((dossier_tokens("https://api.groq.com/openai"), dossier_tokens("http://127.0.0.1:3260")), (3000, 3500));
+        assert_eq!(
+            (dossier_tokens("https://api.groq.com/openai"), dossier_tokens("http://127.0.0.1:3260")),
+            (3000, 3500)
+        );
     }
 
     #[test]
@@ -717,10 +851,17 @@ mod tests {
         let original = project(dir.path());
         save(store.path(), &original).unwrap();
         let folder = store_dir(store.path(), dir.path());
-        assert!(folder.join("dossier.md").is_file() && folder.join("index.json").is_file() && folder.join("meta.json").is_file());
+        assert!(
+            folder.join("dossier.md").is_file()
+                && folder.join("index.json").is_file()
+                && folder.join("meta.json").is_file()
+        );
         assert_eq!(folder.file_name().unwrap().to_string_lossy().len(), 12);
         let loaded = load(store.path(), dir.path()).unwrap();
-        assert_eq!((loaded.name.as_str(), loaded.files, loaded.chunks.len()), ("shop", original.files, original.chunks.len()));
+        assert_eq!(
+            (loaded.name.as_str(), loaded.files, loaded.chunks.len()),
+            ("shop", original.files, original.chunks.len())
+        );
         assert!(loaded.retrieve("order total", 4, 3600).contains("OrderService"));
         let mut loaded = loaded;
         save_dossier(store.path(), &mut loaded, "  ## Overview\nMine.  ").unwrap();
@@ -739,25 +880,47 @@ mod tests {
             asked.borrow_mut().push((system.to_owned(), prompt.to_owned(), tokens));
             Ok("  ## Overview\nA shop.  ".to_owned())
         };
-        let project = analyze(store.path(), dir.path(), "https://api.groq.com/openai", &complete, |stage, files| stages.borrow_mut().push((stage.to_owned(), files))).unwrap();
+        let project = analyze(store.path(), dir.path(), "https://api.groq.com/openai", &complete, |stage, files| {
+            stages.borrow_mut().push((stage.to_owned(), files))
+        })
+        .unwrap();
         assert_eq!(project.dossier, "## Overview\nA shop.");
         let asked = asked.borrow();
         assert_eq!((asked.len(), asked[0].0.as_str(), asked[0].2), (1, DOSSIER_SYSTEM, 3000));
         assert!(asked[0].1.contains("PROJECT:") && asked[0].1.len() <= SMALL_LIMIT_DIGEST_CHARS + 2_000);
         assert_eq!(*stages.borrow(), [("read".to_owned(), 0), ("ask".to_owned(), 6)]);
         assert!(load(store.path(), dir.path()).is_some());
-        assert!(analyze(store.path(), dir.path(), "", &|_, _, _| Ok("   ".into()), |_, _| {}).unwrap_err().to_string().contains("no dossier"));
+        assert!(
+            analyze(store.path(), dir.path(), "", &|_, _, _| Ok("   ".into()), |_, _| {})
+                .unwrap_err()
+                .to_string()
+                .contains("no dossier")
+        );
         let empty = tempfile::tempdir().unwrap();
-        assert!(analyze(store.path(), empty.path(), "", &|_, _, _| Ok("x".into()), |_, _| {}).unwrap_err().to_string().contains("No readable text files"));
-        assert!(analyze(store.path(), dir.path(), "", &|_, _, _| Err("refused".into()), |_, _| {}).unwrap_err().to_string().contains("refused"));
+        assert!(
+            analyze(store.path(), empty.path(), "", &|_, _, _| Ok("x".into()), |_, _| {})
+                .unwrap_err()
+                .to_string()
+                .contains("No readable text files")
+        );
+        assert!(
+            analyze(store.path(), dir.path(), "", &|_, _, _| Err("refused".into()), |_, _| {})
+                .unwrap_err()
+                .to_string()
+                .contains("refused")
+        );
     }
 
     #[test]
     fn the_dossier_for_a_question_keeps_the_overview_the_key_modules_and_the_sections_that_match() {
-        let mut project = ProjectContext::default();
-        project.dossier = "## Overview\nA shop bot.\n\n## Tech stack\nPython, aiogram.\n\n## Key modules\n- throttling.py limits flooding.\n\n## Decisions and trade-offs\nWe use Redis for the rate limiter.\n\n## How to run and test\nmake run\n".into();
+        let project = ProjectContext { dossier: "## Overview\nA shop bot.\n\n## Tech stack\nPython, aiogram.\n\n## Key modules\n- throttling.py limits flooding.\n\n## Decisions and trade-offs\nWe use Redis for the rate limiter.\n\n## How to run and test\nmake run\n".into(), ..ProjectContext::default() };
         let text = project.dossier_for("How do you stop flooding with the rate limiter?", 4500);
-        assert!(text.starts_with("## Overview") && text.contains("## Key modules") && text.contains("## Decisions and trade-offs"), "{text}");
+        assert!(
+            text.starts_with("## Overview")
+                && text.contains("## Key modules")
+                && text.contains("## Decisions and trade-offs"),
+            "{text}"
+        );
         assert!(!text.contains("make run") && !text.contains("aiogram"), "unrelated sections are left out: {text}");
         let small = project.dossier_for("How do you stop flooding with the rate limiter?", 60);
         assert!(small.chars().count() <= 60 && small.starts_with("## Overview"), "{small}");

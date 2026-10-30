@@ -624,7 +624,7 @@ mod tests {
             assert!(transcriber.load().unwrap_err().contains("needs an API key"));
         }
         let keyed = DeepgramTranscriber::with_url("k", "nova-3", None, Handle::current(), "http://127.0.0.1:1");
-        let heard = off_runtime(move || keyed.transcribe(&vec![5i16; 100], "")).await.unwrap(); // under a tenth of a second
+        let heard = off_runtime(move || keyed.transcribe(&[5i16; 100], "")).await.unwrap(); // under a tenth of a second
         assert_eq!(heard, Transcript::default());
     }
 

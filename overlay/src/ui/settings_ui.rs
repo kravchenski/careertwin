@@ -109,23 +109,58 @@ fn note(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).color(muted()).small());
 }
 
+thread_local! {
+    /// The label of the row being drawn: what a screen reader calls the input in it.
+    static NAME: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// Gives an input the name a screen reader reads: the label of its row, or one given.
+trait Named: Sized {
+    fn named(self) -> Self;
+    fn named_as(self, name: &str) -> Self;
+}
+
+impl Named for egui::Response {
+    fn named(self) -> Self {
+        let name = NAME.with(|name| name.borrow().clone());
+        self.named_as(&name)
+    }
+
+    fn named_as(self, name: &str) -> Self {
+        self.accessible_name(name)
+    }
+}
+
+impl<R> Named for egui::InnerResponse<R> {
+    fn named(self) -> Self {
+        Self { inner: self.inner, response: self.response.named() }
+    }
+
+    fn named_as(self, name: &str) -> Self {
+        Self { inner: self.inner, response: self.response.named_as(name) }
+    }
+}
+
 fn row<R>(ui: &mut Ui, label: &str, content: impl FnOnce(&mut Ui) -> R) -> R {
     ui.horizontal(|ui| {
         ui.allocate_ui_with_layout(egui::vec2(150.0, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.label(RichText::new(label).color(muted()));
         });
-        content(ui)
+        NAME.with(|name| label.clone_into(&mut name.borrow_mut()));
+        let result = content(ui);
+        NAME.with(|name| name.borrow_mut().clear());
+        result
     })
     .inner
 }
 
 /// A line of text with a menu of ready choices next to it.
-fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str) -> bool {
+fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str, name: &str) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
         let edit = TextEdit::singleline(value).hint_text(hint).desired_width((ui.available_width() - 72.0).max(120.0));
-        changed |= ui.add(edit).changed();
-        ComboBox::from_id_salt(("models", hint)).selected_text("").width(24.0).show_ui(ui, |ui| {
+        changed |= ui.add(edit).named_as(name).changed();
+        let list = ComboBox::from_id_salt(("models", hint)).selected_text("").width(24.0).show_ui(ui, |ui| {
             if models.is_empty() {
                 ui.label(RichText::new("—").color(muted()));
             }
@@ -138,6 +173,7 @@ fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str) 
                 }
             });
         });
+        list.named_as(&format!("{name}: {}", models.len()));
     });
     changed
 }
@@ -210,13 +246,17 @@ impl App {
         let (mut switch_to, mut new, mut delete, mut rename_done) = (None, false, false, false);
         ui.horizontal(|ui| {
             let current = self.library.current().name.clone();
-            ComboBox::from_id_salt("interview").selected_text(current).width(300.0).show_ui(ui, |ui| {
-                for item in &self.library.interviews {
-                    if ui.selectable_label(item.id == self.library.active, &item.name).clicked() {
-                        switch_to = Some(item.id.clone());
+            ComboBox::from_id_salt("interview")
+                .selected_text(current)
+                .width(300.0)
+                .show_ui(ui, |ui| {
+                    for item in &self.library.interviews {
+                        if ui.selectable_label(item.id == self.library.active, &item.name).clicked() {
+                            switch_to = Some(item.id.clone());
+                        }
                     }
-                }
-            });
+                })
+                .named_as(&t("interview"));
             new = ui.button(t("new")).clicked();
             if ui.button(t("rename")).clicked() {
                 self.settings_ui.rename = Some(self.library.current().name.clone());
@@ -225,7 +265,7 @@ impl App {
         });
         if let Some(name) = self.settings_ui.rename.as_mut() {
             ui.horizontal(|ui| {
-                ui.add(TextEdit::singleline(name).desired_width(300.0));
+                ui.add(TextEdit::singleline(name).desired_width(300.0)).named_as(&t("rename"));
                 rename_done = ui.button("OK").clicked();
             });
         }
@@ -254,18 +294,21 @@ impl App {
             let (title_label, company_label, text_hint) = (t("vacancy_title"), t("vacancy_company"), t("vacancy_text"));
             let vacancy = &mut self.library.current_mut().vacancy;
             row(ui, &title_label, |ui| {
-                changed |= ui.add(TextEdit::singleline(&mut vacancy.title).desired_width(f32::INFINITY)).changed()
+                changed |=
+                    ui.add(TextEdit::singleline(&mut vacancy.title).desired_width(f32::INFINITY)).named().changed()
             });
             row(ui, &company_label, |ui| {
-                changed |= ui.add(TextEdit::singleline(&mut vacancy.company).desired_width(f32::INFINITY)).changed()
+                changed |=
+                    ui.add(TextEdit::singleline(&mut vacancy.company).desired_width(f32::INFINITY)).named().changed()
             });
             changed |= ui
                 .add(
                     TextEdit::multiline(&mut vacancy.text)
-                        .hint_text(text_hint)
+                        .hint_text(&text_hint)
                         .desired_rows(5)
                         .desired_width(f32::INFINITY),
                 )
+                .named_as(&text_hint)
                 .changed();
         }
         section(ui, &t("notes"));
@@ -273,10 +316,11 @@ impl App {
         changed |= ui
             .add(
                 TextEdit::multiline(&mut self.library.current_mut().notes)
-                    .hint_text(hint)
+                    .hint_text(&hint)
                     .desired_rows(3)
                     .desired_width(f32::INFINITY),
             )
+            .named_as(&hint)
             .changed();
         if changed {
             self.interview_text_changed();
@@ -287,17 +331,21 @@ impl App {
         let mut remove = None;
         for (index, doc) in self.library.current_mut().documents.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                documents_changed |= ui.checkbox(&mut doc.enabled, "").changed();
                 let name = std::path::Path::new(&doc.path)
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_else(|| doc.path.clone());
-                ui.label(name).on_hover_text(&doc.path);
-                ComboBox::from_id_salt(("kind", index)).selected_text(doc.kind.clone()).width(80.0).show_ui(ui, |ui| {
-                    for kind in ["cv", "about"] {
-                        documents_changed |= ui.selectable_value(&mut doc.kind, kind.to_owned(), kind).changed();
-                    }
-                });
+                documents_changed |= ui.checkbox(&mut doc.enabled, "").named_as(&name).changed();
+                ui.label(&name).on_hover_text(&doc.path);
+                ComboBox::from_id_salt(("kind", index))
+                    .selected_text(doc.kind.clone())
+                    .width(80.0)
+                    .show_ui(ui, |ui| {
+                        for kind in ["cv", "about"] {
+                            documents_changed |= ui.selectable_value(&mut doc.kind, kind.to_owned(), kind).changed();
+                        }
+                    })
+                    .named_as(&name);
                 if ui.add(egui::Button::new(RichText::new(t("remove")).color(danger()).small()).frame(false)).clicked()
                 {
                     remove = Some(index);
@@ -310,7 +358,8 @@ impl App {
         }
         ui.horizontal(|ui| {
             let width = (ui.available_width() - 90.0).max(120.0);
-            ui.add(TextEdit::singleline(&mut self.settings_ui.new_doc).hint_text(t("file_path")).desired_width(width));
+            ui.add(TextEdit::singleline(&mut self.settings_ui.new_doc).hint_text(t("file_path")).desired_width(width))
+                .named_as(&t("file_path"));
             if ui.add_enabled(!self.settings_ui.new_doc.trim().is_empty(), egui::Button::new(t("add_file"))).clicked() {
                 let path = PathBuf::from(self.settings_ui.new_doc.trim().trim_matches('"'));
                 match read_document(&path) {
@@ -354,6 +403,7 @@ impl App {
         let mut project_changed = false;
         project_changed |= ui
             .add(TextEdit::singleline(&mut self.library.current_mut().project).desired_width(f32::INFINITY))
+            .named_as(&t("project_folder"))
             .changed();
         if project_changed {
             self.interview_text_changed();
@@ -412,7 +462,8 @@ impl App {
                 .desired_rows(8)
                 .desired_width(f32::INFINITY)
                 .font(egui::TextStyle::Monospace),
-        );
+        )
+        .named_as(&t("dossier"));
         ui.horizontal(|ui| {
             let edited = self.settings_ui.dossier.trim() != project.dossier.trim();
             if ui.add_enabled(edited, egui::Button::new(t("dossier_save"))).clicked() {
@@ -425,7 +476,11 @@ impl App {
                     &project.analyzed_at,
                     project.chunks.clone(),
                 );
-                match crate::project::save_dossier(&self.paths.interview_dir(), &mut edited_project, &self.settings_ui.dossier) {
+                match crate::project::save_dossier(
+                    &self.paths.interview_dir(),
+                    &mut edited_project,
+                    &self.settings_ui.dossier,
+                ) {
                     Ok(()) => {
                         self.project = Some(std::sync::Arc::new(edited_project));
                         self.library_changed();
@@ -513,7 +568,8 @@ impl App {
                 TextEdit::singleline(&mut self.settings_ui.focus)
                     .hint_text(t("focus_hint"))
                     .desired_width(f32::INFINITY),
-            );
+            )
+            .named_as(&t("focus"));
         });
         ui.horizontal(|ui| {
             let busy = self.settings_ui.bank_busy;
@@ -705,7 +761,7 @@ impl App {
         let known = provider_for(&address);
         row(ui, &t("provider"), |ui| {
             let label = known.map_or("Other (own address)".to_owned(), |provider| provider.label.to_owned());
-            ComboBox::from_id_salt("provider").selected_text(label).width(260.0).show_ui(ui, |ui| {
+            let combo = ComboBox::from_id_salt("provider").selected_text(label).width(260.0).show_ui(ui, |ui| {
                 for provider in PROVIDERS {
                     if ui.selectable_label(known == Some(provider), provider.label).clicked() && known != Some(provider)
                     {
@@ -719,11 +775,12 @@ impl App {
                 }
                 let _ = OTHER;
             });
+            combo.named();
         });
         let mut url =
             if self.settings.gateway_url.is_empty() { address.clone() } else { self.settings.gateway_url.clone() };
         let url_changed = row(ui, &t("base_url"), |ui| {
-            ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).lost_focus()
+            ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).named().lost_focus()
         });
         if url_changed && url.trim() != self.settings.gateway_url.trim() && url.trim() != address {
             match self.settings.set_gateway(url.trim()) {
@@ -774,12 +831,14 @@ impl App {
             }
             ui.horizontal(|ui| {
                 let width = (ui.available_width() - 120.0).max(120.0);
-                let edit = ui.add(
-                    TextEdit::singleline(&mut self.settings_ui.new_key)
-                        .password(true)
-                        .hint_text(t("paste_key"))
-                        .desired_width(width),
-                );
+                let edit = ui
+                    .add(
+                        TextEdit::singleline(&mut self.settings_ui.new_key)
+                            .password(true)
+                            .hint_text(t("paste_key"))
+                            .desired_width(width),
+                    )
+                    .named_as(&t("paste_key"));
                 let enter = edit.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
                 let can = !self.settings_ui.new_key.trim().is_empty() && !self.settings_ui.checking_key;
                 if (ui.add_enabled(can, egui::Button::new(t("save_key"))).clicked() || (enter && can)) && can {
@@ -804,7 +863,7 @@ impl App {
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
         ui.label(RichText::new(t("model_ask")).font(semibold(15.0)).color(strong()));
-        changed |= model_picker(ui, &mut self.settings.model, &models, "auto");
+        changed |= model_picker(ui, &mut self.settings.model, &models, "auto", &t("model_ask"));
         note(ui, &t("model_ask_note"));
         row(ui, &t("fallbacks"), |ui| {
             changed |= ui
@@ -813,25 +872,30 @@ impl App {
                         .hint_text(t("fallbacks_hint"))
                         .desired_width(f32::INFINITY),
                 )
+                .named()
                 .changed();
         });
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_screenshot")).font(semibold(15.0)).color(strong()));
-        changed |= model_picker(ui, &mut self.settings.vision_model, &models, "");
+        changed |= model_picker(ui, &mut self.settings.vision_model, &models, "", &t("model_screenshot"));
         note(ui, &t("model_shot_note"));
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_audio")).font(semibold(15.0)).color(strong()));
         row(ui, &t("engine"), |ui| {
             let label = if self.settings.stt_engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
-            ComboBox::from_id_salt("engine").selected_text(label).width(260.0).show_ui(ui, |ui| {
-                for engine in STT_ENGINES {
-                    let text = if engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
-                    if ui.selectable_label(self.settings.stt_engine == engine, text).clicked() {
-                        self.settings.stt_engine = engine.to_owned();
-                        changed = true;
+            ComboBox::from_id_salt("engine")
+                .selected_text(label)
+                .width(260.0)
+                .show_ui(ui, |ui| {
+                    for engine in STT_ENGINES {
+                        let text = if engine == "deepgram" { t("engine_deepgram") } else { t("engine_whisper") };
+                        if ui.selectable_label(self.settings.stt_engine == engine, text).clicked() {
+                            self.settings.stt_engine = engine.to_owned();
+                            changed = true;
+                        }
                     }
-                }
-            });
+                })
+                .named();
         });
         if self.settings.stt_engine == "deepgram" {
             row(ui, &t("deepgram_key"), |ui| {
@@ -841,11 +905,13 @@ impl App {
                             .password(true)
                             .desired_width(f32::INFINITY),
                     )
+                    .named()
                     .changed();
             });
             row(ui, &t("speech_model"), |ui| {
                 changed |= ui
                     .add(TextEdit::singleline(&mut self.settings.deepgram_model).desired_width(f32::INFINITY))
+                    .named()
                     .changed();
             });
         } else {
@@ -860,7 +926,8 @@ impl App {
                                 changed = true;
                             }
                         }
-                    });
+                    })
+                    .named();
             });
         }
         note(ui, &t("audio_note"));
@@ -928,7 +995,8 @@ impl App {
                             changed = true;
                         }
                     }
-                });
+                })
+                .named();
         });
         row(ui, &t("window_language"), |ui| {
             let current = self.settings.ui_language.clone();
@@ -936,18 +1004,22 @@ impl App {
                 .iter()
                 .find(|(code, _)| *code == current)
                 .map_or(t("auto"), |(_, name)| (*name).to_owned());
-            ComboBox::from_id_salt("ui_language").selected_text(label).width(220.0).show_ui(ui, |ui| {
-                if ui.selectable_label(current == "auto", t("auto")).clicked() {
-                    self.settings.ui_language = "auto".into();
-                    changed = true;
-                }
-                for (code, name) in crate::languages::UI_LANGUAGES {
-                    if ui.selectable_label(current == *code, *name).clicked() {
-                        self.settings.ui_language = (*code).to_owned();
+            ComboBox::from_id_salt("ui_language")
+                .selected_text(label)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    if ui.selectable_label(current == "auto", t("auto")).clicked() {
+                        self.settings.ui_language = "auto".into();
                         changed = true;
                     }
-                }
-            });
+                    for (code, name) in crate::languages::UI_LANGUAGES {
+                        if ui.selectable_label(current == *code, *name).clicked() {
+                            self.settings.ui_language = (*code).to_owned();
+                            changed = true;
+                        }
+                    }
+                })
+                .named();
         });
 
         changed |= self.hearing_section(ui);
@@ -991,7 +1063,8 @@ impl App {
                             changed = true;
                         }
                     }
-                });
+                })
+                .named();
         });
         note(ui, &t("screenshot_note"));
         if cfg!(windows) {
@@ -1004,7 +1077,7 @@ impl App {
                 self.settings_ui.key_text.clone_from(&self.app.screenshot_key);
             }
             row(ui, &t("screenshot_key"), |ui| {
-                let edit = ui.add(TextEdit::singleline(&mut self.settings_ui.key_text).desired_width(200.0));
+                let edit = ui.add(TextEdit::singleline(&mut self.settings_ui.key_text).desired_width(200.0)).named();
                 let valid = crate::hotkey::parse(&self.settings_ui.key_text).is_some();
                 if edit.lost_focus() && valid && self.settings_ui.key_text != self.app.screenshot_key {
                     self.app.screenshot_key = self.settings_ui.key_text.clone();
@@ -1090,23 +1163,32 @@ impl App {
         let mut changed = false;
         section(ui, &t("hearing"));
         changed |= ui.checkbox(&mut self.settings.listen, t("listen_call")).changed();
-        let sources = self.settings_ui.sources.get_or_insert_with(|| crate::audio::list_sources().unwrap_or_default()).clone();
+        let sources =
+            self.settings_ui.sources.get_or_insert_with(|| crate::audio::list_sources().unwrap_or_default()).clone();
         let pick = |ui: &mut Ui, id: &str, value: &mut String, automatic: bool| -> bool {
             let mut changed = false;
-            let shown = if value.trim().is_empty() || value == "auto" { t(if automatic { "auto" } else { "default_mic" }) } else { value.clone() };
-            ComboBox::from_id_salt(id).selected_text(shown).width(320.0).show_ui(ui, |ui| {
-                let none = if automatic { "auto" } else { "" };
-                if ui.selectable_label(value == none, t(if automatic { "auto" } else { "default_mic" })).clicked() {
-                    *value = none.to_owned();
-                    changed = true;
-                }
-                for source in &sources {
-                    if ui.selectable_label(value == source, source).clicked() {
-                        value.clone_from(source);
+            let shown = if value.trim().is_empty() || value == "auto" {
+                t(if automatic { "auto" } else { "default_mic" })
+            } else {
+                value.clone()
+            };
+            ComboBox::from_id_salt(id)
+                .selected_text(shown)
+                .width(320.0)
+                .show_ui(ui, |ui| {
+                    let none = if automatic { "auto" } else { "" };
+                    if ui.selectable_label(value == none, t(if automatic { "auto" } else { "default_mic" })).clicked() {
+                        *value = none.to_owned();
                         changed = true;
                     }
-                }
-            });
+                    for source in &sources {
+                        if ui.selectable_label(value == source, source).clicked() {
+                            value.clone_from(source);
+                            changed = true;
+                        }
+                    }
+                })
+                .named();
             changed
         };
         if self.settings.listen {
@@ -1161,7 +1243,7 @@ impl App {
                         _ => &mut self.app.custom_accent,
                     };
                     let mut rgb = crate::look::parse_hex(field).unwrap_or([128, 128, 128]);
-                    if ui.color_edit_button_srgb(&mut rgb).changed() {
+                    if ui.color_edit_button_srgb(&mut rgb).named().changed() {
                         *field = crate::look::hex(rgb);
                         edited = true;
                     }
@@ -1199,10 +1281,10 @@ impl App {
         changed |= ui.checkbox(&mut self.settings.pinned, t("keep_on_top")).changed();
         changed |= ui.checkbox(&mut self.settings.frameless, t("frameless")).changed();
         row(ui, &t("opacity"), |ui| {
-            changed |= ui.add(egui::Slider::new(&mut self.settings.opacity, 35..=100).suffix("%")).changed()
+            changed |= ui.add(egui::Slider::new(&mut self.settings.opacity, 35..=100).suffix("%")).named().changed()
         });
         row(ui, &t("text_size"), |ui| {
-            changed |= ui.add(egui::Slider::new(&mut self.settings.font_scale, 70..=180).suffix("%")).changed()
+            changed |= ui.add(egui::Slider::new(&mut self.settings.font_scale, 70..=180).suffix("%")).named().changed()
         });
         changed
     }
@@ -1222,10 +1304,12 @@ impl App {
                     egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
                 let texture = ui.ctx().load_texture(format!("icon-{setting}"), image, egui::TextureOptions::LINEAR);
                 ui.vertical(|ui| {
-                    let response = ui.add(
-                        egui::Button::image(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(52.0, 52.0)))
-                            .selected(selected),
-                    );
+                    let response = ui
+                        .add(
+                            egui::Button::image(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(52.0, 52.0)))
+                                .selected(selected),
+                        )
+                        .named_as(label);
                     ui.label(RichText::new(label).small().color(if selected { accent() } else { muted() }));
                     if response.clicked() {
                         chosen = Some(setting.to_owned());
@@ -1244,7 +1328,8 @@ impl App {
             let width = (ui.available_width() - 170.0).max(120.0);
             ui.add(
                 TextEdit::singleline(&mut self.settings_ui.icon_path).hint_text(t("icon_path")).desired_width(width),
-            );
+            )
+            .named_as(&t("icon_path"));
             if ui
                 .add_enabled(!self.settings_ui.icon_path.trim().is_empty(), egui::Button::new(t("icon_apply")))
                 .clicked()
