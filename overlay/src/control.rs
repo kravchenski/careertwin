@@ -124,6 +124,17 @@ pub fn send(_command: &str) -> Result<String, String> {
     Err("not needed on Windows: Ctrl+Shift+Enter works in every program".to_owned())
 }
 
+/// The window's side of the socket, which Windows does not have: `start` says so and nothing listens.
+#[cfg(not(unix))]
+pub struct Server;
+
+#[cfg(not(unix))]
+impl Server {
+    pub fn start(_callback: impl Fn(&str) + Send + 'static) -> Result<Self, String> {
+        Err("not needed on Windows: the screenshot key is registered with the system".to_owned())
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

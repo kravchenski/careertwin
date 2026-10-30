@@ -113,7 +113,11 @@ fn main() -> ExitCode {
                 let _ = sender.send(Event::Remote(command.to_owned()));
                 wake();
             })
-            .map_err(|error| eprintln!("the screenshot key works only while this window has the focus: {error}"))
+            .map_err(|error| {
+                if cfg!(unix) {
+                    eprintln!("the screenshot key works only while this window has the focus: {error}");
+                }
+            })
             .ok();
             #[cfg(windows)]
             let hotkey = {

@@ -297,12 +297,12 @@ pub fn to_mono(samples: &[f32], channels: usize) -> Vec<f32> {
 
 // ---- Linux: PulseAudio and PipeWire ---------------------------------------------------------------------------------
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 pub use pulse::{
     ParecSource, audio_state, default_sources, list_sources, open_source, parse_audio_state, parse_short_sources,
 };
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 mod pulse {
     use std::io::Read;
     use std::process::{Child, Command, Stdio};
@@ -457,11 +457,6 @@ mod pulse {
     /// A source for a device name: a Pulse source. (`microphone` makes no difference here: a microphone is a source
     /// too.)
     pub fn open_source(name: &str, _microphone: bool) -> Result<Box<dyn FrameSource>, AudioError> {
-        if cfg!(target_os = "macos") {
-            return Err(AudioError::new(
-                "Call audio is not available on macOS yet. Type a question, or use the Screenshot button.",
-            ));
-        }
         Ok(Box::new(ParecSource::new(name)))
     }
 }
@@ -864,7 +859,7 @@ mod tests {
         assert_eq!(started.load(Ordering::SeqCst), 1);
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn pulse_lists_are_read() {
         assert_eq!(
@@ -890,7 +885,7 @@ mod tests {
         assert_eq!(listen_briefly(&ChannelSource::new(rx, true), 0.15).unwrap(), 900);
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn a_source_that_runs_a_missing_program_says_so() {
         let source = ParecSource::new("nothing");
