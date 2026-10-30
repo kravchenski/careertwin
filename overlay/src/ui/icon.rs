@@ -59,7 +59,14 @@ fn decode(bytes: &[u8]) -> Result<IconData, String> {
 /// The bytes of a regular file of at most [`MAX_FILE_BYTES`]: a folder, a device such as /dev/zero or a pipe is refused
 /// before anything is read from it, and a file that grows while it is read is cut off at the ceiling.
 fn read_file(path: &Path) -> Result<Vec<u8>, String> {
-    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let file = std::fs::File::open(path).map_err(|error| {
+        // Windows will not open a folder at all and says "Access is denied": say what it is instead
+        if std::fs::metadata(path).is_ok_and(|meta| !meta.is_file()) {
+            "this is not a file".to_owned()
+        } else {
+            error.to_string()
+        }
+    })?;
     let meta = file.metadata().map_err(|error| error.to_string())?;
     if !meta.is_file() {
         return Err("this is not a file".into());
