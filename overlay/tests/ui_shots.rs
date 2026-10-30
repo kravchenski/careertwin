@@ -719,6 +719,12 @@ fn the_ask_pill_answers_the_last_thing_heard_and_says_so_when_nothing_was() {
     harness.get_by_label_contains("from the model");
 }
 
+/// What the window says when the capture tool it was told to use is not there: the tool's name when the computer has
+/// some other capture tool, and the general "no screenshot tool" when it has none (a bare CI machine).
+fn capture_refused(text: &str) -> bool {
+    text.contains("no-such-tool") || text.starts_with("No screenshot tool")
+}
+
 #[test]
 fn the_screenshot_pill_starts_a_capture_and_a_missing_tool_is_said_out_loud() {
     let (mut harness, _dir, _runtime) = window_with(Answers::new(false));
@@ -726,7 +732,7 @@ fn the_screenshot_pill_starts_a_capture_and_a_missing_tool_is_said_out_loud() {
     harness.get_by_label("Screenshot").click();
     settle(&mut harness, |app| app.notice.is_some());
     let notice = harness.state().notice.clone().unwrap();
-    assert!(notice.1 && notice.0.contains("no-such-tool"), "{notice:?}");
+    assert!(notice.1 && capture_refused(&notice.0), "{notice:?}");
     assert!(!harness.state().busy(), "the window is free again after a failed capture");
 }
 
@@ -833,7 +839,7 @@ fn the_keys_on_the_pills_do_what_the_pills_do() {
     assert_eq!(model.count(), 1);
     let with_shift = egui::Modifiers { shift: true, ..both };
     harness.key_press_modifiers(with_shift, egui::Key::Enter); // the screenshot, not Ask
-    settle(&mut harness, |app| app.notice.as_ref().is_some_and(|(text, _)| text.contains("no-such-tool")));
+    settle(&mut harness, |app| app.notice.as_ref().is_some_and(|(text, _)| capture_refused(text)));
     assert_eq!(model.count(), 1, "Ctrl+Shift+Enter must not also ask");
 }
 
