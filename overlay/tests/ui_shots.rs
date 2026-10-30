@@ -318,7 +318,8 @@ fn a_question_heard_on_the_call_is_answered_in_the_window() {
 
 #[test]
 fn words_still_being_said_show_as_a_line_and_a_cancelled_early_answer_goes_away() {
-    let fixture = fixture("en");
+    let mut fixture = fixture("en");
+    fixture.app.settings.listen = true; // listening is off by default on a Mac, and the line shows only while it is on
     tell(
         &fixture.app,
         vec![
