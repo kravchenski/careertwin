@@ -13,6 +13,7 @@ use careertwin_overlay::ui::{App, Entry, Event, Source, theme};
 use careertwin_overlay::update::{Asset, Available, Release};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
+use image::ImageEncoder;
 use tokio_util::sync::CancellationToken;
 
 const DEMO: &str = include_str!("../../prep/tests/fixtures/ABOUT.demo.md");
@@ -357,6 +358,147 @@ fn a_custom_theme_uses_the_three_colours() {
     assert_eq!(theme::palette().accent, egui::Color32::from_rgb(255, 122, 89));
     shot(&mut harness, "tab-general-custom");
     theme::set_palette(theme::preset("midnight"));
+}
+
+fn appearance_window() -> (Harness<'static, App>, tempfile::TempDir, tokio::runtime::Runtime) {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::General;
+    let (mut harness, dir, runtime) = harness(fixture, 1000.0, 1000.0);
+    harness.run();
+    (harness, dir, runtime)
+}
+
+#[test]
+fn the_language_of_the_window_is_chosen_in_appearance_and_kept() {
+    let (mut harness, _dir, _runtime) = appearance_window();
+    for (name, code, heading) in [
+        ("Русский", "ru", "Оформление"),
+        ("Українська", "uk", "Вигляд"),
+        ("Polski", "pl", "Wygląd"),
+        ("English", "en", "Appearance"),
+    ] {
+        harness.get_by_label(name).click();
+        harness.run_steps(3);
+        assert_eq!(harness.state().settings.ui_language, code);
+        see(&harness, heading);
+        let saved = std::fs::read_to_string(harness.state().paths.settings_file()).unwrap();
+        assert!(saved.contains(&format!(r#""ui_language": "{code}""#)), "{code} is saved: {saved}");
+    }
+    harness.get_by_label("Automatic").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().settings.ui_language, "auto");
+}
+
+#[test]
+fn the_accent_is_chosen_apart_from_the_theme_and_can_go_back_to_the_themes_own() {
+    use careertwin_overlay::look;
+    let (mut harness, _dir, _runtime) = appearance_window();
+    let amber = look::PRESETS[3].3;
+    harness.get_by_label(&look::hex(amber)).click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().app.accent, look::hex(amber));
+    assert_eq!(theme::palette().accent, egui::Color32::from_rgb(amber[0], amber[1], amber[2]));
+    assert_eq!(harness.state().app.theme, "midnight", "the theme itself stays");
+    shot(&mut harness, "tab-general-accent");
+
+    harness.get_by_label("The theme's own").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().app.accent, "");
+    let own = look::PRESETS[0].3;
+    assert_eq!(theme::palette().accent, egui::Color32::from_rgb(own[0], own[1], own[2]));
+    theme::set_palette(theme::preset("midnight"));
+}
+
+#[test]
+fn the_system_theme_is_a_choice_that_follows_the_system() {
+    use careertwin_overlay::look;
+    let (mut harness, _dir, _runtime) = appearance_window();
+    harness.get_by_label("System").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().app.theme, look::SYSTEM_THEME);
+    let saved = std::fs::read_to_string(harness.state().paths.app_file()).unwrap();
+    assert!(saved.contains(r#""theme": "system""#), "{saved}");
+    theme::set_palette(theme::preset("midnight"));
+}
+
+/// Scroll the settings down until `label` is inside the window (the icons are below its fold) and let it come to rest:
+/// the position a node reports is that of the frame before, so a click must wait for the scrolling to stop.
+fn reveal(harness: &mut Harness<'_, App>, label: &str) {
+    for _ in 0..20 {
+        if harness.get_by_label(label).rect().max.y < 640.0 {
+            harness.run_steps(4);
+            let rect = harness.get_by_label(label).rect();
+            assert!(rect.min.y > 200.0 && rect.max.y < 800.0, "{label} is not inside the window: {rect:?}");
+            return;
+        }
+        harness.get_by_label("Appearance").scroll_down();
+        harness.run_steps(2);
+    }
+    panic!("{label} did not come into view");
+}
+
+/// An ICO with one picture, as Windows keeps its icons.
+fn ico_file(dir: &std::path::Path, name: &str) -> String {
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(&[200u8; 32 * 32 * 4], 32, 32, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    let frame = image::codecs::ico::IcoFrame::with_encoded(png, 32, 32, image::ExtendedColorType::Rgba8).unwrap();
+    let path = dir.join(name);
+    image::codecs::ico::IcoEncoder::new(std::fs::File::create(&path).unwrap()).encode_images(&[frame]).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+#[test]
+fn an_ico_is_taken_as_the_icon_and_a_file_that_is_not_a_picture_is_refused() {
+    let (mut harness, dir, _runtime) = appearance_window();
+    let ico = ico_file(dir.path(), "app.ico");
+    harness.state_mut().settings_ui.icon_path = ico.clone();
+    harness.run_steps(2);
+    reveal(&mut harness, "Use this image");
+    harness.get_by_label("Use this image").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().app.app_icon, ico);
+    assert!(harness.state().settings_ui.icon_error.is_none());
+    see(&harness, "app.ico");
+    shot(&mut harness, "tab-general-icon-own");
+
+    // a script with a picture's name, and a file that is not there: refused, the icon in use stays
+    let fake = dir.path().join("evil.png");
+    std::fs::write(&fake, b"#!/bin/sh\necho hello\n").unwrap();
+    for bad in [fake.to_string_lossy().into_owned(), dir.path().join("missing.ico").to_string_lossy().into_owned()] {
+        harness.state_mut().settings_ui.icon_path = bad;
+        harness.run_steps(2);
+        reveal(&mut harness, "Use this image");
+        harness.get_by_label("Use this image").click();
+        harness.run_steps(3);
+        assert_eq!(harness.state().app.app_icon, ico, "a refused file does not replace the icon");
+        harness.get_by_label_contains("Could not use that image");
+    }
+}
+
+/// A file the system hands to the window, as the windowing backend does.
+#[derive(Debug)]
+struct Dropped(std::path::PathBuf);
+
+impl egui::DroppedFile for Dropped {
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|error| error.to_string())
+    }
+}
+
+#[test]
+fn a_picture_dropped_on_the_window_becomes_the_icon() {
+    let (mut harness, dir, _runtime) = appearance_window();
+    let ico = ico_file(dir.path(), "dropped.ico");
+    harness.input_mut().dropped_files.push(Arc::new(Dropped(ico.clone().into())));
+    harness.run_steps(3);
+    assert_eq!(harness.state().app.app_icon, ico);
 }
 
 fn tell(app: &App, events: Vec<Heard>) {
@@ -803,4 +945,45 @@ fn the_account_modes_are_shown_for_a_provider_with_accounts_and_not_for_a_local_
     assert!(local.query_all_by_label("Give up on a silent account after").next().is_none());
     assert!(local.query_all_by_label("Accounts").next().is_none());
     see(&local, "Provider");
+}
+
+#[test]
+fn the_edges_and_corners_of_the_settings_window_are_not_resize_handles() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 760.0);
+    harness.run_steps(3);
+    // the window is 720 x 640 in the middle: its corners are at (140, 60) and (860, 700)
+    for (x, y) in [
+        (860.0, 700.0),
+        (858.0, 698.0),
+        (862.0, 702.0),
+        (140.0, 60.0),
+        (860.0, 60.0),
+        (140.0, 700.0),
+        (500.0, 701.0),
+        (861.0, 380.0),
+    ] {
+        harness.hover_at(egui::pos2(x, y));
+        harness.run_steps(2);
+        let cursor = harness.output().platform_output.cursor_icon;
+        assert!(
+            !matches!(
+                cursor,
+                egui::CursorIcon::ResizeNwSe
+                    | egui::CursorIcon::ResizeNeSw
+                    | egui::CursorIcon::ResizeHorizontal
+                    | egui::CursorIcon::ResizeVertical
+                    | egui::CursorIcon::ResizeNorth
+                    | egui::CursorIcon::ResizeSouth
+                    | egui::CursorIcon::ResizeEast
+                    | egui::CursorIcon::ResizeWest
+                    | egui::CursorIcon::ResizeNorthEast
+                    | egui::CursorIcon::ResizeNorthWest
+                    | egui::CursorIcon::ResizeSouthEast
+                    | egui::CursorIcon::ResizeSouthWest
+            ),
+            "({x}, {y}) shows {cursor:?}"
+        );
+    }
 }

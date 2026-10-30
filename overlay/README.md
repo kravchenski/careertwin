@@ -31,7 +31,7 @@ Building with Whisper (the default) needs cmake, a C++ compiler and libclang (wh
 | Practice: a checklist for the technical interview, a bank of likely questions, a CV review | done |
 | Export of the questions of saved interviews (CSV, Markdown, JSON) | done |
 | New version window, with a SHA256 checked installer download (never started by the program) | done |
-| Themes (seven and your own), the dot equalizer, app icon: colour variants or your own image | done |
+| Appearance: window language (seven), themes (seven, the system's dark or light, your own) with previews, an accent colour of your choice, the wave equalizer, app icon: colour variants or your own PNG, JPEG or ICO (also dropped on Settings; read with size and memory limits, see `docs/SECURITY.md`) | done |
 | Windows: an icon in the notification area drawn like the location arrow (an outline while waiting, solid while listening or writing; click brings the window forward; menu: screenshot, listening, quit) | compiled for Windows in CI; **not run on a real Windows machine** |
 | Windows: a screenshot key that works in any program (`RegisterHotKey` on its own thread, fallbacks and a log), screen capture (GDI), the window kept out of screen sharing (`WDA_EXCLUDEFROMCAPTURE`) | compiled for Windows in CI; **not run on a real Windows machine** |
 | Linux and macOS screenshots (grim, spectacle, gnome-screenshot, maim, scrot; screencapture) and the control socket (`careertwin-overlay ctl screenshot`) | Linux tried |

@@ -152,6 +152,8 @@ pub struct App {
     pub level: equalizer::Level,
     /// How the dots move from one mood to the next.
     motion: equalizer::Motion,
+    /// Where the line under the question field was in the last frame: the waves rise up to it.
+    wave_top: Option<f32>,
     /// The time of the frame being drawn, in seconds: what the audio level is stamped with.
     clock: f64,
     /// What the window was last told, so a change is applied once.
@@ -254,6 +256,7 @@ impl App {
             update_ui: update_ui::State::default(),
             level: equalizer::Level::default(),
             motion: equalizer::Motion::default(),
+            wave_top: None,
             clock: 0.0,
             applied: Applied::default(),
             excluded_at: None,
@@ -871,7 +874,9 @@ impl App {
     }
 
     fn apply_window(&mut self, ctx: &egui::Context) {
-        let palette = theme::from_settings(&self.app);
+        // the system theme follows the system's dark or light mode (dark when the system does not say)
+        let system_dark = !matches!(ctx.system_theme(), Some(egui::Theme::Light));
+        let palette = theme::from_settings_for(&self.app, system_dark);
         let palette_changed = self.applied.palette != Some(palette);
         if palette_changed {
             self.applied.palette = Some(palette);
@@ -1213,9 +1218,13 @@ impl App {
             egui::CentralPanel::default().frame(theme::panel_frame(opacity)).show(ui, |ui| {
                 // not behind the settings: a wave of dots next to a form is noise, and it returns when they close
                 if self.equalizer_background() && !self.settings_open {
-                    // above the line with the history, so no dot sits under it
-                    let mut rect = ui.max_rect().expand(8.0);
-                    rect.set_bottom(rect.bottom() - 40.0);
+                    // from the line under the question field down to the keys that step through the answers
+                    let panel = ui.max_rect();
+                    let top = self.wave_top.unwrap_or(panel.top() + 130.0).max(panel.top());
+                    let rect = egui::Rect::from_min_max(
+                        egui::pos2(panel.left() - 8.0, top + 4.0),
+                        egui::pos2(panel.right() + 8.0, panel.bottom() - 40.0),
+                    );
                     let (columns, _) = equalizer::grid(rect.width(), rect.height());
                     let (mood, time) = (self.mood(), ctx.input(|input| input.time));
                     let (bars, color) = if self.app.animate {
@@ -1232,11 +1241,11 @@ impl App {
                 self.question_row(ui);
                 ui.add_space(6.0);
                 ui.separator();
+                self.wave_top = Some(ui.cursor().top());
                 let footer_height = 28.0;
                 let height = (ui.available_height() - footer_height).max(40.0);
                 ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| self.answer_area(ui));
                 self.footer(ui);
-                self.resize_grip(ui);
             });
         }
         self.settings_window(&ctx);
@@ -1283,23 +1292,6 @@ impl App {
         }
         if self.thinking() && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape)) {
             self.stop();
-        }
-    }
-
-    /// A corner to pull when the window has no frame. It is a small area of the panel itself, drawn last so it is on top
-    /// of what is under it: a layer of its own (an `Area`) was found to take the clicks of a large part of the window.
-    fn resize_grip(&self, ui: &mut Ui) {
-        if !self.settings.frameless {
-            return;
-        }
-        let rect = ui.max_rect().expand2(egui::vec2(18.0, 14.0)); // the panel's margins are inside the window
-        let grip = egui::Rect::from_min_size(rect.right_bottom() - egui::vec2(18.0, 18.0), egui::vec2(18.0, 18.0));
-        let response = ui
-            .interact(grip, ui.scope_id().with("grip"), egui::Sense::drag())
-            .on_hover_cursor(egui::CursorIcon::ResizeNwSe);
-        theme::grip(ui.painter(), grip.right_bottom());
-        if response.drag_started() {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::BeginResize(egui::viewport::ResizeDirection::SouthEast));
         }
     }
 }

@@ -147,12 +147,10 @@ impl Motion {
 
 /// How far apart the dots of the background are.
 const STEP: f32 = 15.0;
-/// The tallest a bar of the background goes, as a part of the window's height.
-const REACH: f32 = 0.62;
 
-/// How many columns of dots a background of this size has, and how many rows.
+/// How many columns of dots a background of this size has, and how many rows. The tallest bar can reach the top of it.
 pub fn grid(width: f32, height: f32) -> (usize, usize) {
-    ((width / STEP).floor() as usize, ((height * REACH) / STEP).floor() as usize)
+    ((width / STEP).floor() as usize, (height / STEP).floor() as usize)
 }
 
 /// What the matrix draws: (column, row, brightness) of each lit dot, counting rows from the bottom. The dot a bar is
@@ -310,7 +308,7 @@ mod tests {
     #[test]
     fn the_matrix_fits_the_window_gets_taller_with_the_level_and_lights_the_top_dot_by_degrees() {
         let (columns, rows) = grid(900.0, 400.0);
-        assert_eq!((columns, rows), (60, 16));
+        assert_eq!((columns, rows), (60, 26));
         let bars = |level: f32| heights(columns, 3.0, level, Mood::Listening);
         let (quiet, loud) = (lit_dots(&bars(0.0), rows), lit_dots(&bars(1.0), rows));
         assert!(loud.len() > quiet.len() * 2, "{} vs {}", loud.len(), quiet.len());

@@ -79,7 +79,12 @@ pub fn derive(panel: [u8; 3], text: [u8; 3], accent: [u8; 3]) -> Palette {
 
 /// The palette the settings choose: a preset, or the three colours of the custom theme.
 pub fn from_settings(app: &crate::settings::AppSettings) -> Palette {
-    let (panel, text, accent) = crate::look::colors(app);
+    from_settings_for(app, true)
+}
+
+/// As [`from_settings`], with whether the system is in dark mode, which the `system` theme follows.
+pub fn from_settings_for(app: &crate::settings::AppSettings, system_dark: bool) -> Palette {
+    let (panel, text, accent) = crate::look::colors_for(app, system_dark);
     derive(panel, text, accent)
 }
 
@@ -265,13 +270,6 @@ pub fn step_mark(ui: &mut egui::Ui, done: bool) {
     } else {
         painter.circle_stroke(centre, 7.5, Stroke::new(1.5, muted()));
     }
-}
-
-/// Two short diagonal lines in a corner, to show where a frameless window can be pulled.
-pub fn grip(painter: &egui::Painter, corner: egui::Pos2) {
-    let stroke = Stroke::new(1.5, line());
-    painter.line_segment([corner + egui::vec2(-4.0, -12.0), corner + egui::vec2(-12.0, -4.0)], stroke);
-    painter.line_segment([corner + egui::vec2(-4.0, -7.0), corner + egui::vec2(-7.0, -4.0)], stroke);
 }
 
 #[cfg(test)]

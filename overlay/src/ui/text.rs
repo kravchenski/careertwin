@@ -4,6 +4,11 @@ use super::text_more as more;
 
 /// (key, English, Russian). A missing translation falls back to English.
 const TABLE: &[(&str, &str, &str)] = &[
+    ("theme_system", "System", "Как в системе"),
+    ("accent_colour", "Accent colour", "Цвет акцента"),
+    ("accent_own", "The theme's own", "Как в теме"),
+    ("icon_drop", "Drop the image here", "Перетащите картинку сюда"),
+    ("icon_yours", "Yours", "Своя"),
     ("get_answer", "Get answer", "Получить ответ"),
     ("manual_hint", "Type a question by hand…", "Введите вопрос вручную…"),
     ("pause_listening", "Pause listening", "Поставить слушание на паузу"),
@@ -304,7 +309,7 @@ const TABLE: &[(&str, &str, &str)] = &[
     ),
     ("app_icon", "App icon", "Иконка приложения"),
     ("icon_default", "Default", "Стандартная"),
-    ("icon_custom", "Your own image (PNG or JPEG)", "Своя картинка (PNG или JPEG)"),
+    ("icon_custom", "Your own image (PNG, JPEG or ICO)", "Своя картинка (PNG, JPEG или ICO)"),
     ("icon_path", "Path to the image", "Путь к картинке"),
     ("icon_apply", "Use this image", "Использовать картинку"),
     ("icon_bad", "Could not use that image: {why}", "Не удалось использовать картинку: {why}"),

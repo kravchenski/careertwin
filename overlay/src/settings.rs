@@ -357,8 +357,10 @@ pub struct AppSettings {
     pub skipped_version: String,
     /// Seconds since the epoch of the last look for a new version.
     pub last_update_check: i64,
-    /// A theme that comes with the window, or `custom`.
+    /// A theme that comes with the window, `custom`, or `system` (dark or light as the system is).
     pub theme: String,
+    /// `#rrggbb` of an accent chosen apart from the theme, or empty for the theme's own.
+    pub accent: String,
     /// The three colours of the custom theme, as `#rrggbb`.
     pub custom_panel: String,
     pub custom_text: String,
@@ -395,6 +397,7 @@ impl Default for AppSettings {
             skipped_version: String::new(),
             last_update_check: 0,
             theme: "midnight".to_owned(),
+            accent: String::new(),
             custom_panel: "#13141e".to_owned(),
             custom_text: "#d7dae8".to_owned(),
             custom_accent: "#bcb4ff".to_owned(),
@@ -428,8 +431,11 @@ impl AppSettings {
             settings.last_update_check = seconds;
         }
         let text = |key: &str| data.get(key).and_then(Value::as_str).map(|value| value.trim().to_owned());
-        if let Some(theme) = text("theme").filter(|theme| theme == "custom" || crate::look::is_preset(theme)) {
+        if let Some(theme) = text("theme").filter(|theme| crate::look::is_theme(theme)) {
             settings.theme = theme;
+        }
+        if let Some(accent) = text("accent").filter(|accent| crate::look::parse_hex(accent).is_some()) {
+            settings.accent = accent;
         }
         for (key, slot) in [
             ("custom_panel", &mut settings.custom_panel),
@@ -479,6 +485,7 @@ impl AppSettings {
             "skipped_version": self.skipped_version,
             "last_update_check": self.last_update_check,
             "theme": self.theme,
+            "accent": self.accent,
             "custom_panel": self.custom_panel,
             "custom_text": self.custom_text,
             "custom_accent": self.custom_accent,
@@ -643,6 +650,7 @@ mod tests {
             skipped_version: "0.5.1".into(),
             last_update_check: 1_700_000_000,
             theme: "custom".into(),
+            accent: "#ff7a59".into(),
             custom_panel: "#101820".into(),
             custom_text: "#e0e8f0".into(),
             custom_accent: "#ff7a59".into(),
@@ -664,7 +672,7 @@ mod tests {
     fn a_look_that_cannot_be_read_is_the_default_one() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
-        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes", "hide_from_taskbar": 1}"##)
+        std::fs::write(&path, r##"{"theme": "neon", "custom_accent": "pink", "equalizer": "loud", "animate": "yes", "accent": "pink", "hide_from_sharing": "no", "screenshot_key": "Enter", "parallel_accounts": "everyone", "first_word_seconds": 600, "tray_icon": "yes", "hide_from_taskbar": 1}"##)
             .unwrap();
         assert_eq!(AppSettings::load(&path), AppSettings::default());
     }

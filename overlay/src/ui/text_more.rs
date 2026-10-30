@@ -2,6 +2,11 @@
 //! shows in English, and the test in `text.rs` keeps every table complete.
 
 pub const PL: &[(&str, &str)] = &[
+    ("theme_system", "Jak w systemie"),
+    ("accent_colour", "Kolor akcentu"),
+    ("accent_own", "Z motywu"),
+    ("icon_drop", "Upuść obraz tutaj"),
+    ("icon_yours", "Twoja"),
     ("get_answer", "Pobierz odpowiedź"),
     ("manual_hint", "Wpisz pytanie ręcznie…"),
     ("pause_listening", "Wstrzymaj słuchanie"),
@@ -221,7 +226,7 @@ pub const PL: &[(&str, &str)] = &[
     ("screenshot_note", "Okno staje się przezroczyste na czas zrzutu. Obraz trafia do modelu zrzutów przez bramę."),
     ("app_icon", "Ikona aplikacji"),
     ("icon_default", "Domyślna"),
-    ("icon_custom", "Własny obraz (PNG lub JPEG)"),
+    ("icon_custom", "Własny obraz (PNG, JPEG lub ICO)"),
     ("icon_path", "Ścieżka do obrazu"),
     ("icon_apply", "Użyj tego obrazu"),
     ("icon_bad", "Nie można użyć tego obrazu: {why}"),
@@ -255,6 +260,11 @@ pub const PL: &[(&str, &str)] = &[
 ];
 
 pub const UK: &[(&str, &str)] = &[
+    ("theme_system", "Як у системі"),
+    ("accent_colour", "Колір акценту"),
+    ("accent_own", "Як у темі"),
+    ("icon_drop", "Перетягніть зображення сюди"),
+    ("icon_yours", "Своя"),
     ("get_answer", "Отримати відповідь"),
     ("manual_hint", "Введіть запитання вручну…"),
     ("pause_listening", "Поставити слухання на паузу"),
@@ -474,7 +484,7 @@ pub const UK: &[(&str, &str)] = &[
     ("screenshot_note", "Вікно стає прозорим на час знімка. Зображення йде до моделі знімків через шлюз."),
     ("app_icon", "Іконка застосунку"),
     ("icon_default", "Типова"),
-    ("icon_custom", "Власне зображення (PNG або JPEG)"),
+    ("icon_custom", "Власне зображення (PNG, JPEG або ICO)"),
     ("icon_path", "Шлях до зображення"),
     ("icon_apply", "Використати це зображення"),
     ("icon_bad", "Не вдалося використати зображення: {why}"),
@@ -508,6 +518,11 @@ pub const UK: &[(&str, &str)] = &[
 ];
 
 pub const DE: &[(&str, &str)] = &[
+    ("theme_system", "Wie das System"),
+    ("accent_colour", "Akzentfarbe"),
+    ("accent_own", "Die des Designs"),
+    ("icon_drop", "Bild hier ablegen"),
+    ("icon_yours", "Eigenes"),
     ("get_answer", "Antwort holen"),
     ("manual_hint", "Frage von Hand eingeben…"),
     ("pause_listening", "Zuhören pausieren"),
@@ -742,7 +757,7 @@ pub const DE: &[(&str, &str)] = &[
     ),
     ("app_icon", "App-Symbol"),
     ("icon_default", "Standard"),
-    ("icon_custom", "Eigenes Bild (PNG oder JPEG)"),
+    ("icon_custom", "Eigenes Bild (PNG, JPEG oder ICO)"),
     ("icon_path", "Pfad zum Bild"),
     ("icon_apply", "Dieses Bild verwenden"),
     ("icon_bad", "Das Bild konnte nicht verwendet werden: {why}"),
@@ -776,6 +791,11 @@ pub const DE: &[(&str, &str)] = &[
 ];
 
 pub const FR: &[(&str, &str)] = &[
+    ("theme_system", "Comme le système"),
+    ("accent_colour", "Couleur d'accent"),
+    ("accent_own", "Celle du thème"),
+    ("icon_drop", "Déposez l'image ici"),
+    ("icon_yours", "La vôtre"),
     ("get_answer", "Obtenir la réponse"),
     ("manual_hint", "Saisissez une question à la main…"),
     ("pause_listening", "Mettre l'écoute en pause"),
@@ -1010,7 +1030,7 @@ pub const FR: &[(&str, &str)] = &[
     ),
     ("app_icon", "Icône de l'application"),
     ("icon_default", "Par défaut"),
-    ("icon_custom", "Votre image (PNG ou JPEG)"),
+    ("icon_custom", "Votre image (PNG, JPEG ou ICO)"),
     ("icon_path", "Chemin de l'image"),
     ("icon_apply", "Utiliser cette image"),
     ("icon_bad", "Impossible d'utiliser cette image : {why}"),
@@ -1047,6 +1067,11 @@ pub const FR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("theme_system", "Como el sistema"),
+    ("accent_colour", "Color de acento"),
+    ("accent_own", "El del tema"),
+    ("icon_drop", "Suelta la imagen aquí"),
+    ("icon_yours", "Tuya"),
     ("get_answer", "Obtener respuesta"),
     ("manual_hint", "Escribe una pregunta a mano…"),
     ("pause_listening", "Pausar la escucha"),
@@ -1278,7 +1303,7 @@ pub const ES: &[(&str, &str)] = &[
     ),
     ("app_icon", "Icono de la aplicación"),
     ("icon_default", "Predeterminado"),
-    ("icon_custom", "Tu propia imagen (PNG o JPEG)"),
+    ("icon_custom", "Tu propia imagen (PNG, JPEG o ICO)"),
     ("icon_path", "Ruta de la imagen"),
     ("icon_apply", "Usar esta imagen"),
     ("icon_bad", "No se pudo usar esa imagen: {why}"),
