@@ -14,7 +14,11 @@
     in
     {
       packages = forAll (pkgs: rec {
-        careertwin-overlay = pkgs.callPackage ./nix/package.nix { };
+        # the release build, made to run on NixOS: nothing is compiled (x86_64 only: that is what a release holds)
+        prebuilt = pkgs.callPackage ./nix/prebuilt.nix { };
+        # the window compiled from this checkout (several minutes: whisper.cpp and every Rust crate)
+        from-source = pkgs.callPackage ./nix/package.nix { };
+        careertwin-overlay = if pkgs.stdenv.hostPlatform.system == "x86_64-linux" then prebuilt else from-source;
         default = careertwin-overlay;
       });
 
@@ -33,7 +37,11 @@
 
       # for `nixpkgs.overlays = [ careertwin.overlays.default ];`
       overlays.default = final: _prev: {
-        careertwin-overlay = final.callPackage ./nix/package.nix { };
+        careertwin-overlay =
+          if final.stdenv.hostPlatform.system == "x86_64-linux" then
+            final.callPackage ./nix/prebuilt.nix { }
+          else
+            final.callPackage ./nix/package.nix { };
       };
     };
 }
