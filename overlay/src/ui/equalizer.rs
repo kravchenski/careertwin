@@ -1,4 +1,4 @@
-//! The equalizer of dots: seven dots next to the pause button.
+//! The equalizer: a matrix of dots behind the window that rises and falls with the call.
 //!
 //! It follows the level of the call audio when there is one, breathes when nothing is heard, and runs a wave
 //! while an answer is being written.
@@ -145,26 +145,65 @@ impl Motion {
     }
 }
 
-/// Seven dots in a row.
-pub const DOTS: usize = 7;
+/// How far apart the dots of the background are.
+const STEP: f32 = 15.0;
+/// The tallest a bar of the background goes, as a part of the window's height.
+const REACH: f32 = 0.62;
 
-/// Draw the dots for `bars`. A dot does not switch on: it brightens and swells as its bar rises past it, so a level that
-/// moves a little moves the dots a little.
-pub fn paint_dots(painter: &Painter, rect: Rect, bars: &[f32], color: Color32) {
-    let spacing = (rect.width() - 12.0) / (DOTS - 1) as f32;
-    for (index, height) in bars.iter().enumerate() {
-        let threshold = 0.2 + 0.08 * index as f32 / DOTS as f32;
-        let lit = ((height * 1.8 - threshold) / 0.22).clamp(0.0, 1.0);
-        let lit = lit * lit * (3.0 - 2.0 * lit);
-        let centre = Pos2::new(rect.left() + 6.0 + index as f32 * spacing, rect.center().y);
-        let fill = theme::mix(theme::mix(theme::panel(), theme::muted(), 0.45), color, lit);
-        painter.circle_filled(centre, 2.8 + 0.9 * lit, fill);
+/// How many columns of dots a background of this size has, and how many rows.
+pub fn grid(width: f32, height: f32) -> (usize, usize) {
+    ((width / STEP).floor() as usize, ((height * REACH) / STEP).floor() as usize)
+}
+
+/// What the matrix draws: (column, row, brightness) of each lit dot, counting rows from the bottom. The dot a bar is
+/// just reaching is only partly lit, so a bar that grows a little changes the picture a little. Kept apart from the
+/// painting so it can be checked.
+pub fn lit_dots(bars: &[f32], rows: usize) -> Vec<(usize, usize, f32)> {
+    let mut lit = Vec::new();
+    if rows == 0 {
+        return lit;
+    }
+    for (column, bar) in bars.iter().enumerate() {
+        let exact = bar.clamp(0.0, 1.0) * rows as f32;
+        let whole = exact.floor() as usize;
+        let part = exact - whole as f32;
+        let count = (whole + usize::from(part > 0.03)).min(rows);
+        for row in 0..count {
+            // bright at the bottom of a bar, fading upward, the top dot a little brighter
+            let fade = 1.0 - row as f32 / rows as f32;
+            let top = if row + 1 == count { 0.25 } else { 0.0 };
+            let reaching = if row == whole { part } else { 1.0 };
+            lit.push((column, row, ((0.35 + 0.65 * fade + top) * reaching).min(1.0)));
+        }
+    }
+    lit
+}
+
+/// The dot matrix behind the window, low in contrast so that the text on it can be read. `bars` are the heights of its
+/// columns (see [`grid`] and [`Motion::bars`]); `color` is the colour of the mood; `strength` (0 to 1) is how visible the
+/// dots are, so that they step back while an answer is on the screen.
+pub fn background(painter: &Painter, rect: Rect, bars: &[f32], color: Color32, strength: f32) {
+    let (columns, rows) = grid(rect.width(), rect.height());
+    if columns == 0 || rows == 0 || bars.is_empty() {
+        return;
+    }
+    let accent = theme::mix(theme::accent(), color, 0.35);
+    let left = rect.left() + (rect.width() - (columns - 1) as f32 * STEP) / 2.0;
+    let bottom = rect.bottom() - STEP * 0.9;
+    let place = |column: usize, row: usize| Pos2::new(left + column as f32 * STEP, bottom - row as f32 * STEP);
+    for column in 0..columns {
+        for row in 0..rows {
+            painter.circle_filled(place(column, row), 1.4, with_alpha(accent, (14.0 * strength) as u8));
+        }
+    }
+    for (column, row, brightness) in lit_dots(bars, rows) {
+        let alpha = (26.0 + 104.0 * brightness) * strength;
+        painter.circle_filled(place(column, row), 2.5, with_alpha(accent, alpha as u8));
     }
 }
 
-/// The dots at one moment, without a change of mood: for a picture of them.
-pub fn dots(painter: &Painter, rect: Rect, level: f32, mood: Mood, time: f64) {
-    paint_dots(painter, rect, &heights(DOTS, time, level, mood), mood_color(mood));
+fn with_alpha(color: Color32, alpha: u8) -> Color32 {
+    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
 }
 
 #[cfg(test)]
@@ -266,5 +305,24 @@ mod tests {
         let end = motion.color(Mood::Listening, 1.0 + FADE * 2.0);
         assert_eq!(start, mood_color(Mood::Idle));
         assert_eq!(end, mood_color(Mood::Listening));
+    }
+
+    #[test]
+    fn the_matrix_fits_the_window_gets_taller_with_the_level_and_lights_the_top_dot_by_degrees() {
+        let (columns, rows) = grid(900.0, 400.0);
+        assert_eq!((columns, rows), (60, 16));
+        let bars = |level: f32| heights(columns, 3.0, level, Mood::Listening);
+        let (quiet, loud) = (lit_dots(&bars(0.0), rows), lit_dots(&bars(1.0), rows));
+        assert!(loud.len() > quiet.len() * 2, "{} vs {}", loud.len(), quiet.len());
+        assert!(
+            loud.iter()
+                .all(|(column, row, brightness)| *column < columns && *row < rows && (0.0..=1.0).contains(brightness))
+        );
+        assert!(lit_dots(&bars(1.0), 0).is_empty() && lit_dots(&[], 10).is_empty());
+        // a bar that is a little taller lights its top dot a little more, not a whole dot at once
+        let half = lit_dots(&[3.5 / rows as f32], rows); // three and a half dots tall
+        let top = half.last().unwrap();
+        assert_eq!(half.len(), 4);
+        assert!(top.2 > 0.0 && top.2 < half[2].2, "the partly reached dot is dimmer than the whole ones: {half:?}");
     }
 }

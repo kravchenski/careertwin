@@ -363,7 +363,7 @@ pub struct AppSettings {
     pub custom_panel: String,
     pub custom_text: String,
     pub custom_accent: String,
-    /// `dots` (the strip next to the pause button) or `off`.
+    /// `background` (the dot matrix behind the window) or `off`.
     pub equalizer: String,
     /// The equalizer and its background move.
     pub animate: bool,
@@ -385,7 +385,7 @@ pub struct AppSettings {
 pub const PARALLEL_MODES: [&str; 3] = ["off", "hedged", "all"];
 pub const FIRST_WORD_RANGE: std::ops::RangeInclusive<i64> = 0..=60;
 
-pub const EQUALIZER_STYLES: [&str; 2] = ["dots", "off"];
+pub const EQUALIZER_STYLES: [&str; 2] = ["background", "off"];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -398,7 +398,7 @@ impl Default for AppSettings {
             custom_panel: "#13141e".to_owned(),
             custom_text: "#d7dae8".to_owned(),
             custom_accent: "#bcb4ff".to_owned(),
-            equalizer: "dots".to_owned(),
+            equalizer: "background".to_owned(),
             animate: true,
             hide_from_sharing: true,
             screenshot_key: crate::hotkey::DEFAULT.to_owned(),
@@ -440,9 +440,9 @@ impl AppSettings {
                 *slot = color;
             }
         }
-        // the dot matrix behind the window was taken out: what was saved for it is the strip of dots at the top
+        // the strip of dots by the pause button was taken out: what was saved for it, or for both, is the background
         let saved = text("equalizer")
-            .map(|style| if matches!(style.as_str(), "both" | "background") { "dots".to_owned() } else { style });
+            .map(|style| if matches!(style.as_str(), "both" | "dots") { "background".to_owned() } else { style });
         if let Some(style) = saved.filter(|style| EQUALIZER_STYLES.contains(&style.as_str())) {
             settings.equalizer = style;
         }
@@ -670,15 +670,19 @@ mod tests {
     }
 
     #[test]
-    fn the_dot_matrix_that_was_taken_out_is_read_as_the_strip_of_dots() {
+    fn the_strip_of_dots_that_was_taken_out_is_read_as_the_background() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("app.json");
-        for (saved, expected) in
-            [("both", "dots"), ("background", "dots"), ("dots", "dots"), ("off", "off"), ("loud", "dots")]
-        {
+        for (saved, expected) in [
+            ("both", "background"),
+            ("dots", "background"),
+            ("background", "background"),
+            ("off", "off"),
+            ("loud", "background"),
+        ] {
             std::fs::write(&path, format!(r#"{{"equalizer": "{saved}"}}"#)).unwrap();
             assert_eq!(AppSettings::load(&path).equalizer, expected, "{saved}");
         }
-        assert_eq!(AppSettings::default().equalizer, "dots");
+        assert_eq!(AppSettings::default().equalizer, "background");
     }
 }

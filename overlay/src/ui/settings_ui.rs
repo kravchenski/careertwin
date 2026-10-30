@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use egui::{ComboBox, RichText, ScrollArea, Stroke, TextEdit, Ui};
 use serde_json::json;
 
-use super::theme::{accent, danger, good, muted, on_accent, semibold, strong, warn};
+use super::theme::{accent, danger, good, muted, on_accent, semibold, strong, text as text_color, warn};
 use super::{App, Event, text, theme};
 use crate::accounts::Account;
 use crate::coach::Request;
@@ -218,7 +218,9 @@ impl App {
             .min_size([520.0, 420.0])
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
                     for (tab, key) in [
                         (Tab::Interview, "tab_interview"),
                         (Tab::Practice, "tab_practice"),
@@ -226,26 +228,41 @@ impl App {
                         (Tab::General, "tab_general"),
                     ] {
                         let selected = self.settings_ui.tab == tab;
-                        let label =
-                            RichText::new(t(key)).font(semibold(14.0)).color(if selected { strong() } else { muted() });
-                        let button = ui.add(egui::Button::new(label).frame(false).selected(selected));
+                        let name = t(key);
+                        // a tab with room around its word: 16 on each side, 10 above and below
+                        let galley = ui.painter().layout_no_wrap(
+                            name.clone(),
+                            semibold(14.0),
+                            if selected { strong() } else { muted() },
+                        );
+                        let (rect, response) =
+                            ui.allocate_exact_size(galley.size() + egui::vec2(32.0, 20.0), egui::Sense::click());
+                        response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, selected, &name));
+                        let color = if selected {
+                            strong()
+                        } else if response.hovered() {
+                            text_color()
+                        } else {
+                            muted()
+                        };
+                        ui.painter().galley_with_override_text_color(
+                            rect.center() - galley.size() / 2.0,
+                            galley.clone(),
+                            color,
+                        );
                         if selected {
-                            let rect = button.rect;
-                            let inset = (rect.width() / 4.0).min(6.0);
+                            let y = rect.bottom() - 1.0;
                             ui.painter().line_segment(
-                                [
-                                    rect.left_bottom() + egui::vec2(inset, 1.0),
-                                    rect.right_bottom() + egui::vec2(-inset, 1.0),
-                                ],
+                                [egui::pos2(rect.left() + 16.0, y), egui::pos2(rect.right() - 16.0, y)],
                                 Stroke::new(2.0, accent()),
                             );
                         }
-                        if button.clicked() {
+                        if response.clicked() {
                             self.settings_ui.tab = tab;
                         }
-                        ui.add_space(6.0);
                     }
                 });
+                ui.add_space(4.0);
                 ui.separator();
                 COLUMN.with(|column| {
                     column.set(match self.settings_ui.tab {

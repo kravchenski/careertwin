@@ -914,8 +914,8 @@ impl App {
         }
     }
 
-    fn equalizer_dots(&self) -> bool {
-        self.app.equalizer == "dots"
+    fn equalizer_background(&self) -> bool {
+        self.app.equalizer == "background"
     }
 
     /// The top bar: the round pause button and the dots at the left, the two pills in the middle, the menu at the right.
@@ -953,28 +953,15 @@ impl App {
                 chrome::round_button(ui, if listening { chrome::Glyph::Pause } else { chrome::Glyph::Play }, &name)
                     .clicked();
             ui.add_space(12.0);
-            let status = if self.capturing.is_some() {
-                self.t("looking")
-            } else if self.thinking() {
-                self.t("thinking")
-            } else {
-                self.t("ready")
-            };
-            if self.equalizer_dots() {
-                let (rect, response) = ui.allocate_exact_size(egui::vec2(96.0, 34.0), egui::Sense::hover());
-                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &status));
-                let time = ui.input(|input| input.time);
-                ui.painter().rect_filled(rect, 17.0, theme::mix(theme::panel(), theme::text(), 0.09));
-                let mood = self.mood();
-                let bars = self.motion.bars(equalizer::DOTS, time, self.level.smoothed(), mood);
-                let color = self.motion.color(mood, time);
-                equalizer::paint_dots(&ui.painter().with_clip_rect(rect), rect, &bars, color);
-                response.on_hover_text(&status);
-            } else {
-                let dot = if busy || self.capturing.is_some() { accent() } else { theme::good() };
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                ui.painter().circle_filled(rect.center(), 4.0, dot);
-                ui.label(RichText::new(&status).color(muted()));
+            if keys {
+                let status = if self.capturing.is_some() {
+                    self.t("looking")
+                } else if self.thinking() {
+                    self.t("thinking")
+                } else {
+                    self.t("ready")
+                };
+                ui.label(RichText::new(status).color(muted()));
             }
             // the pills sit in the middle of the bar, not of what is left of it
             let gap = ((width - pills) / 2.0 - ui.min_rect().width()).max(10.0);
@@ -1224,6 +1211,21 @@ impl App {
         let opacity = if hidden { 0.0 } else { self.settings.opacity as f32 / 100.0 };
         if !hidden {
             egui::CentralPanel::default().frame(theme::panel_frame(opacity)).show(ui, |ui| {
+                // not behind the settings: a wave of dots next to a form is noise, and it returns when they close
+                if self.equalizer_background() && !self.settings_open {
+                    // above the line with the history, so no dot sits under it
+                    let mut rect = ui.max_rect().expand(8.0);
+                    rect.set_bottom(rect.bottom() - 40.0);
+                    let (columns, _) = equalizer::grid(rect.width(), rect.height());
+                    let (mood, time) = (self.mood(), ctx.input(|input| input.time));
+                    let (bars, color) = if self.app.animate {
+                        (self.motion.bars(columns, time, self.level.smoothed(), mood), self.motion.color(mood, time))
+                    } else {
+                        (equalizer::heights(columns, 0.0, self.level.value(), mood), equalizer::mood_color(mood))
+                    };
+                    let strength = if self.entries.is_empty() { 1.0 } else { 0.5 };
+                    equalizer::background(&ui.painter().with_clip_rect(rect.shrink(6.0)), rect, &bars, color, strength);
+                }
                 self.header(ui);
                 self.caption_line(ui);
                 ui.add_space(4.0);

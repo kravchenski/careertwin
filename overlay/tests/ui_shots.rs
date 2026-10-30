@@ -315,7 +315,7 @@ fn the_general_tab_has_the_appearance_section_with_themes_the_equalizer_and_icon
         "Paper",
         "Custom",
         "Equalizer",
-        "Dots at the top",
+        "Background",
         "Animate",
         "Theme colour",
     ] {
@@ -496,9 +496,10 @@ fn the_equalizer_moves_with_the_level_and_the_mood() {
                 .build_ui(move |ui| {
                     let rect = ui.max_rect();
                     ui.painter().rect_filled(rect, 14.0, theme::panel());
-                    let strip = egui::Rect::from_min_size(rect.min + egui::vec2(20.0, 14.0), egui::vec2(86.0, 26.0));
-                    ui.painter().rect_filled(strip, 13.0, theme::mix(theme::panel(), theme::text(), 0.09));
-                    equalizer::dots(ui.painter(), strip, level, mood, time);
+                    let area = rect.shrink(6.0);
+                    let (columns, _) = equalizer::grid(area.width(), area.height());
+                    let bars = equalizer::heights(columns, time, level, mood);
+                    equalizer::background(ui.painter(), area, &bars, equalizer::mood_color(mood), 1.0);
                 });
             harness.run();
             if let Ok(dir) = std::env::var("UI_SHOTS") {
