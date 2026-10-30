@@ -1,7 +1,8 @@
 name: Nix
 
-# The flake builds the Rust interview window for NixOS and gives a development shell. This builds it from
-# source on a machine with Nix, which is the only way to know the package still works.
+# The flake gives NixOS the Rust interview window two ways: the release build made to run there (nothing is
+# compiled; nix/release.json names the release) and a build from source, plus a development shell. This builds
+# both on a machine with Nix, which is the only way to know the packages still work.
 on:
   push:
     branches: [master]
@@ -48,10 +49,24 @@ jobs:
       - name: Evaluate the flake
         run: nix flake check --no-build
 
-      - name: Build the window
-        run: nix build .#careertwin-overlay --print-build-logs
+      - name: Make the release build run on Nix (nothing is compiled)
+        run: nix build .#prebuilt --print-build-logs --out-link result-prebuilt
 
-      - name: It starts and says its version
+      - name: The release build starts, says the version nix/release.json names, and finds all its libraries
+        run: |
+          out=$(./result-prebuilt/bin/careertwin-overlay --version)
+          echo "$out"
+          version=$(python3 -c 'import json; print(json.load(open("nix/release.json"))["version"])')
+          test "$out" = "careertwin-overlay $version"
+          ! ldd ./result-prebuilt/bin/.careertwin-overlay-wrapped | grep "not found"
+          test -x ./result-prebuilt/bin/careertwin-interview-ctl
+          test -f ./result-prebuilt/share/applications/careertwin-interview.desktop
+          test -f ./result-prebuilt/share/icons/hicolor/256x256/apps/careertwin-interview.png
+
+      - name: Build the window from source
+        run: nix build .#from-source --print-build-logs
+
+      - name: The window built from source starts and says its version
         run: |
           out=$(./result/bin/careertwin-overlay --version)
           echo "$out"
@@ -59,6 +74,9 @@ jobs:
           test -x ./result/bin/careertwin-interview-ctl
           test -f ./result/share/applications/careertwin-interview.desktop
           test -f ./result/share/icons/hicolor/256x256/apps/careertwin-interview.png
+
+      - name: The default package is the release build on this machine
+        run: test "$(nix eval --raw .#default.outPath)" = "$(nix eval --raw .#prebuilt.outPath)"
 
       - name: The development shell works
         run: nix develop --command sh -c 'cargo --version && cmake --version && parec --version'

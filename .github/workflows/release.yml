@@ -281,3 +281,43 @@ jobs:
             case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
             gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes --notes "$notes" $prerelease
           fi
+
+  # After a release is published, point the Nix package at it: nix/release.json names the version and the checksum
+  # of its Linux tarball, so NixOS runs the release build without compiling anything. This never touches the
+  # release itself: if it fails, the release stays as published and release.json is updated by hand.
+  nix-pin:
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    needs: publish
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+
+      - name: Write the release into nix/release.json and commit it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir "$RUNNER_TEMP"
+          sum=$(awk '/-linux-x86_64\.tar\.gz$/ { print $1 }' "$RUNNER_TEMP/SHA256SUMS.txt")
+          test -n "$sum"
+          hash="sha256-$(printf '%s' "$sum" | python3 -c 'import base64, sys; print(base64.b64encode(bytes.fromhex(sys.stdin.read())).decode())')"
+          printf '{\n  "version": "%s",\n  "hash": "%s"\n}\n' "${TAG#v}" "$hash" > nix/release.json
+          if git diff --quiet; then
+            echo "nix/release.json already names $TAG"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: the Nix package follows $TAG [skip release]"
+          for attempt in 1 2 3; do
+            git push origin HEAD:master && exit 0
+            git pull --rebase origin master
+          done
+          exit 1

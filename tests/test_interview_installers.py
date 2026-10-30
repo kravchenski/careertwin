@@ -138,7 +138,7 @@ def test_every_package_is_built_checked_and_published():
     import yaml
 
     jobs = yaml.safe_load(WORKFLOW)["jobs"]
-    assert list(jobs) == ["windows", "macos", "linux", "publish"]
+    assert list(jobs) == ["windows", "macos", "linux", "publish", "nix-pin"]  # nix-pin only follows a published release
     assert jobs["windows"]["runs-on"] == "windows-latest" and jobs["macos"]["runs-on"].startswith("macos-")
     assert jobs["linux"]["runs-on"].startswith("ubuntu-")
     assert jobs["publish"]["needs"] == ["windows", "macos", "linux"]
@@ -197,10 +197,53 @@ def test_the_overlay_workflow_compiles_and_lints_on_every_system():
 def test_the_flake_builds_the_rust_window_and_reads_its_version_and_lock_from_the_crate():
     flake = (ROOT / "flake.nix").read_text()
     package = (ROOT / "nix/package.nix").read_text()
-    assert "careertwin-overlay = pkgs.callPackage ./nix/package.nix" in flake and "devShells" in flake
+    assert "from-source = pkgs.callPackage ./nix/package.nix" in flake and "devShells" in flake
     assert "fromTOML (builtins.readFile ../overlay/Cargo.toml)" in package  # one version, the release's
     assert "cargoLock.lockFile = ../overlay/Cargo.lock" in package
     assert "mainProgram = \"careertwin-overlay\"" in package and "careertwin-interview-ctl" in package
+
+
+def test_on_x86_linux_the_default_package_is_the_release_build_so_nothing_is_compiled():
+    flake = (ROOT / "flake.nix").read_text()
+    assert "prebuilt = pkgs.callPackage ./nix/prebuilt.nix" in flake
+    assert 'if pkgs.stdenv.hostPlatform.system == "x86_64-linux" then prebuilt else from-source' in flake
+    prebuilt = (ROOT / "nix/prebuilt.nix").read_text()
+    assert "autoPatchelfHook" in prebuilt and "stdenv.cc.cc.lib" in prebuilt  # libstdc++ for whisper.cpp
+    assert "--prefix LD_LIBRARY_PATH" in prebuilt and "--suffix PATH" in prebuilt  # the same wrapper as the source build
+    assert 'sourceRoot = "CareerTwin-Interview"' in prebuilt  # the folder package_overlay.sh packs
+    assert "linux-x86_64.tar.gz" in prebuilt and "package_overlay.sh" not in prebuilt
+    # the menu entry is one file for both packages
+    assert "import ./desktop-item.nix" in prebuilt and "import ./desktop-item.nix" in (ROOT / "nix/package.nix").read_text()
+
+
+def test_the_release_json_names_a_release_and_the_checksum_of_its_tarball():
+    import base64
+    import json
+
+    release = json.loads((ROOT / "nix/release.json").read_text())
+    assert set(release) == {"version", "hash"}
+    assert re.fullmatch(r"\d+\.\d+\.\d+", release["version"])
+    algorithm, _, digest = release["hash"].partition("-")
+    assert algorithm == "sha256" and len(base64.b64decode(digest)) == 32  # an SRI hash, as fetchurl wants it
+
+
+def test_the_tarball_the_nix_package_unpacks_is_the_one_the_release_workflow_builds():
+    script = (ROOT / "scripts/package_overlay.sh").read_text()
+    assert 'tar -C "$OUT" -czf "$OUT/CareerTwin-Interview-$LABEL-linux-$ARCH.tar.gz" CareerTwin-Interview' in script
+    assert 'cp "$BIN" "$DIR/careertwin-overlay"' in script and "careertwin-interview.png" in script
+
+
+def test_each_release_points_the_nix_package_at_itself_without_ever_failing_the_release():
+    import yaml
+
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    pin = release["jobs"]["nix-pin"]
+    assert pin["needs"] == "publish" and pin["continue-on-error"] is True
+    assert pin["permissions"] == {"contents": "write"}
+    assert "startsWith(github.ref, 'refs/tags/v')" in pin["if"] and "!contains(github.ref_name, '-')" in pin["if"]
+    script = next(step["run"] for step in pin["steps"] if step.get("name", "").startswith("Write the release"))
+    assert "nix/release.json" in script and "[skip release]" in script and "SHA256SUMS.txt" in script
+    assert "${{" not in script, "values come in as environment variables, not pasted into the script"
 
 
 def test_the_window_is_wrapped_with_the_libraries_it_opens_and_the_tools_it_starts():
@@ -216,5 +259,7 @@ def test_the_nix_workflow_builds_the_package_and_runs_it():
 
     workflow = yaml.safe_load((ROOT / ".github/workflows/nix.yml").read_text())
     steps = [step.get("name", "") for step in workflow["jobs"]["build"]["steps"]]
-    assert "Build the window" in steps and "It starts and says its version" in steps
-    assert "nix build .#careertwin-overlay" in (ROOT / ".github/workflows/nix.yml").read_text()
+    text = (ROOT / ".github/workflows/nix.yml").read_text()
+    assert "Build the window from source" in steps and "Make the release build run on Nix (nothing is compiled)" in steps
+    assert "nix build .#from-source" in text and "nix build .#prebuilt" in text
+    assert "ldd ./result-prebuilt/bin/.careertwin-overlay-wrapped" in text  # every library the release binary needs is found

@@ -44,24 +44,7 @@ rustPlatform.buildRustPackage {
   # the tests draw windows and reach for a display, a sound card and the network: they run in CI and in the checkout
   doCheck = false;
 
-  desktopItems = [
-    (makeDesktopItem {
-      name = "careertwin-interview";
-      desktopName = "CareerTwin Interview";
-      genericName = "Interview assistant";
-      comment = "Live answers for online interviews from your own CV and ABOUT";
-      exec = "careertwin-overlay";
-      icon = "careertwin-interview";
-      categories = [ "Utility" ];
-      startupWMClass = "careertwin-interview";
-      keywords = [
-        "interview"
-        "cv"
-        "resume"
-        "career"
-      ];
-    })
-  ];
+  desktopItems = [ (makeDesktopItem (import ./desktop-item.nix)) ];
 
   postInstall = ''
     install -Dm644 packaging/careertwin-interview.png \
