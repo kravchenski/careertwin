@@ -2,7 +2,7 @@
 """Decide the next release from the commits since the last tag; optionally write the version into the project.
 
     python3 scripts/next_release.py            # say what would happen, change nothing
-    python3 scripts/next_release.py --apply    # also write the version into pyproject.toml and uv.lock
+    python3 scripts/next_release.py --apply    # also write the version into pyproject.toml, uv.lock and overlay/
 
 It prints `key=value` lines (`version=`, `reason=`), so the output can go straight to $GITHUB_OUTPUT. An empty
 `version` means: no release.
@@ -98,7 +98,9 @@ def decide(root: Path) -> tuple[Version | None, str]:
 
 
 def write(root: Path, version: Version) -> None:
-    """Put the version into pyproject.toml and into uv.lock (the line of the project's own package)."""
+    """Put the version into pyproject.toml and uv.lock (the line of the project's own package), and into the Rust
+    window: overlay/Cargo.toml and overlay/Cargo.lock. The window reports this version and compares it with the
+    latest release to tell when an update is there."""
     new = text(version)
     pyproject = root / "pyproject.toml"
     pyproject.write_text(VERSION.sub(f'version = "{new}"', pyproject.read_text(), count=1))
@@ -106,11 +108,20 @@ def write(root: Path, version: Version) -> None:
     if lock.exists():
         updated = re.sub(r'(?m)^(name = "careertwin"\nversion = )"[^"]+"', rf'\1"{new}"', lock.read_text(), count=1)
         lock.write_text(updated)
+    cargo = root / "overlay" / "Cargo.toml"
+    if cargo.exists():
+        cargo.write_text(VERSION.sub(f'version = "{new}"', cargo.read_text(), count=1))
+    cargo_lock = root / "overlay" / "Cargo.lock"
+    if cargo_lock.exists():
+        updated = re.sub(
+            r'(?m)^(name = "careertwin-overlay"\nversion = )"[^"]+"', rf'\1"{new}"', cargo_lock.read_text(), count=1
+        )
+        cargo_lock.write_text(updated)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--apply", action="store_true", help="write the version into pyproject.toml and uv.lock")
+    parser.add_argument("--apply", action="store_true", help="write the version into pyproject.toml, uv.lock and overlay/")
     parser.add_argument("--root", default=".", help="the repository (default: the current directory)")
     args = parser.parse_args(argv)
     root = Path(args.root)

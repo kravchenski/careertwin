@@ -46,9 +46,10 @@ The language model is scripted so the recording is repeatable; the API, tools, s
 ## Quick start
 
 **Download** (interview assistant): the [latest release](https://github.com/kravchenski/careertwin/releases/latest)
-has a Windows setup program, a portable Windows zip and a macOS disk image (Apple silicon). Neither installer is
-signed, so Windows may say the publisher is unknown (More info, Run anyway) and macOS wants a right-click, Open the
-first time.
+has the Rust window as a Windows setup program and portable zip, a macOS disk image (Apple silicon) and a Linux
+tarball. Nothing is signed, so Windows may say the publisher is unknown (More info, Run anyway) and macOS wants a
+right-click, Open the first time. The Windows and macOS builds are checked by GitHub's machines; nobody has tried
+them by hand yet.
 
 **Linux** (CachyOS and other Arch-based systems):
 
@@ -241,6 +242,7 @@ src/careertwin/
 ├── agents/ ats/ collectors/ graph/ rendering/ storage/ templates/ vision/    the document library
 └── settings.py  db.py  llm.py  browser.py  net.py  cli.py
 docs/               AGENTS · AUTOMATION · SECURITY · INTERVIEW · DOCUMENTS · ARCHITECTURE · TRANSLATING
+overlay/            the Rust interview window (egui), shipped in the releases
 packaging/          Linux launcher, Windows setup script, macOS notes
 scripts/            installers, release builds, docs pictures, the demo recorder
 tests/              pytest suite (no network, no real applications)
@@ -291,8 +293,8 @@ Copy `.env.example` to `.env`. The important variables (the interview window als
 uv sync --extra dev --extra rendering --extra interview
 uv run pytest -m "not integration"      # no network, no live applications
 uv run ruff check src tests
-make windows                             # portable Windows zip, built on Linux
-./scripts/build_macos.sh                 # macOS app and dmg, on a Mac
+cd overlay && cargo test                 # the Rust interview window (cmake for Whisper; see overlay/README.md)
+./scripts/package_overlay.sh linux       # tarball (and `macos` for the app and dmg, on a Mac)
 docker compose up --build                # API + SearXNG in containers
 ```
 
@@ -302,7 +304,7 @@ cd prep && cargo test --features local  # also builds the offline engines (needs
 ```
 
 The interview extra pulls Qt and faster-whisper (large); everything else works without it. A tag such as `v0.2.0`
-builds the installers, tests them on Windows and macOS machines and publishes the release
+builds the Windows, macOS and Linux packages of the Rust window, checks them on those systems and publishes the release
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)). The pictures above are rebuilt from the code with
 `uv run --extra interview python scripts/render_docs_media.py`.
 
@@ -312,8 +314,8 @@ Things that are missing today, in the order they hurt:
 
 - **No call audio on macOS.** It needs a virtual audio device; the app starts and works without it.
 - **The installers are not signed** (no Authenticode, no Apple notarization), so both systems warn on first start.
-- **A real Windows call has not been captured** by the author; the Windows build is checked by an install test.
-- **Speech recognition runs on the CPU on Windows and macOS.** The GPU path exists on Linux only.
+- **A real Windows call has not been captured** by the author, and the Rust window's Windows code (loopback capture, the screenshot key, hiding from screen sharing) is compiled and tested by CI but was never run on a real Windows machine.
+- **Speech recognition in the Rust window runs on the CPU everywhere.** The Python window has a GPU path on Linux.
 - **The macOS build is Apple silicon only.**
 - **Error messages are English.** The window is translated; messages from the speech engine and the AI gateway are not.
 

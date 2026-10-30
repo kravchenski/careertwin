@@ -50,19 +50,26 @@ The install is editable (it runs this checkout; re-run the script when dependenc
 `uv run careertwin-interview`; the commands then live in the project's virtualenv, not on your
 `PATH` (`source .venv/bin/activate`, or `activate.fish` in fish).
 
-**Ready-made installers.** Each release on GitHub has a Windows setup program (`…-windows-x64-setup.exe`: it installs for the current user, adds a Start menu entry and keeps your `data` folder when you update or uninstall), the portable zip and a macOS disk image (`…-macos-arm64.dmg`, Apple silicon). Windows may warn that the publisher is unknown (More info, Run anyway) and the Mac refuses the first double click (right-click, Open): neither is signed. On a Mac the window, settings, typed questions, screenshots and project defense are meant to work, but call audio is not there yet, and nobody has tried that build by hand on a Mac. The release workflow installs the Windows setup and starts the Mac app on GitHub's own machines before it publishes.
+**Ready-made packages.** Each release on GitHub has the Rust window (see `overlay/`) as a Windows setup program
+(`…-windows-x64-setup.exe`: it installs for the current user, adds a Start menu entry and keeps your `data` folder
+when you update or uninstall; installed over an older Python-based setup it replaces the program and keeps the data),
+a portable zip, a macOS disk image (`…-macos-arm64.dmg`, Apple silicon) and a Linux tarball with `install.sh`. Windows
+may warn that the publisher is unknown (More info, Run anyway) and the Mac refuses the first double click
+(right-click, Open): nothing is signed. The release workflow installs the Windows setup, starts the Mac app and
+unpacks the Linux tarball on GitHub's own machines before it publishes, but **nobody has tried the Windows and macOS
+builds by hand**, and call audio is not on the Mac.
 
-**Windows.** `make windows` (or `./scripts/build_windows.sh`) builds a portable 64-bit folder and zip,
-`dist/windows/CareerTwin-Interview-windows-x64.zip`, on Linux without Wine: uv fetches the Windows
-wheels and the program runs on the python.org embeddable Python. Unzip it anywhere writable and start
-*Start CareerTwin Interview.bat*; your data lives in its `data` folder. In this version the window,
-settings, documents, typed questions, listening and screenshots work. The call is heard by recording
-what the default output plays (WASAPI loopback through the `soundcard` package; pin another output in
-*Settings → Audio*), and a screenshot copies the primary screen or all screens (GDI, no extra package).
-Speech recognition runs on the CPU there. The build is checked under Wine only: the doctor runs, the
-window renders, devices open and frames arrive at the right pace and the screen is read with the right
-colours, but Wine plays no real sound into the recorder, so capture of an actual call has not been
-tried on a real Windows machine: run *Check setup* there first.
+**The Rust window.** The window in the releases is the Rust one (`overlay/`, [its README](../overlay/README.md)). It
+has four settings tabs (*Interview*, *Practice*, *AI*, *General*), a model for each of three jobs (answers,
+screenshots, speech recognition), several API keys per provider and a base URL, themes of your own, the dot
+equalizer, a window in seven languages, a look for a new version once a day (it downloads the installer, checks its
+SHA-256 and never starts it) and *Export the questions* (CSV, Markdown, JSON) of every saved interview. A question
+about the project you defend sends a lean request: the part of the dossier that matches, three pieces of code and
+the education, experience, projects and skills of ABOUT.md, so it fits Groq's free limit of 8000 tokens. On Windows
+the screenshot key (Ctrl+Shift+Enter, or the next free one) works in any program, the screen is captured through GDI,
+and the window keeps itself out of screen sharing (`WDA_EXCLUDEFROMCAPTURE`; *Settings → General* turns it off).
+Whisper on the computer downloads its model on the first start. The Python window described below still works and
+reads the same data folder.
 
 **Everything is set up in the window.** Open ☰ → *Settings…* (or click the dim *Context* line
 at the bottom). Changes apply at once and are saved, so the next start is already configured.

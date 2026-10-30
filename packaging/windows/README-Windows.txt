@@ -1,36 +1,32 @@
-CareerTwin Interview for Windows (portable, 64-bit)
-===================================================
+CareerTwin Interview for Windows (64-bit)
+=========================================
 
-Unzip the folder anywhere you can write to (not "Program Files"), then double-click
-"Start CareerTwin Interview.bat". "Create shortcut.bat" puts an icon on the desktop and
-"Check setup.bat" prints what works and what does not.
+Setup program: run the "-setup.exe". It installs for you only (no administrator rights), adds a Start
+menu entry and keeps your settings when you update. Portable zip: unzip the folder anywhere you can
+write to (not "Program Files") and double-click careertwin-overlay.exe.
 
-Everything you add (your CV, ABOUT, settings, transcripts) is stored in the "data" folder next
-to the program. If the window does not open, read data\last-run.log.
+Everything you add (your CV, ABOUT, settings, transcripts) is stored in the "data" folder next to the
+program. What the window did about the sound and the screenshot key is written to
+data\interview\interview.log: read it if something does not work.
 
 What it does
-  - The window, all settings, your CV and ABOUT documents, per-interview contexts.
-  - Listens to the call: it records what your default output plays (WASAPI loopback), so Zoom,
-    Teams and Meet are heard without a virtual cable, and turns it into text on your computer.
-    If the call plays on another output, pick that output in Settings -> Audio -> call audio.
-    The first start downloads the speech model (about 480 MB for "small").
-  - Speech recognition on your processor (Whisper), or in the cloud with Deepgram
-    (Settings -> Audio -> Speech recognition): quicker on a laptop without a graphics card,
-    but the voices of the call are sent to Deepgram.
-  - Questions you type or paste, answered by the provider you pick in Settings -> AI
-    (Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio or your own address).
-  - The Screenshot button, or Ctrl+Shift+Enter in any program, copies the primary screen and asks
-    about what is on it. The window hides itself for the moment of the capture. Pick a fast model
-    for it in Settings -> AI -> Model for screenshots.
+  - Listens to the call: it records what your default output plays (WASAPI loopback), so Zoom, Teams
+    and Meet are heard without a virtual cable, and turns it into text on your computer (Whisper) or
+    in the cloud (Deepgram). If the call plays on another output, pick it in Settings -> General ->
+    Listening. The first start downloads the speech model once.
+  - Answers questions it hears, questions you type, and what is on the screen. Pick the model for each
+    in Settings -> AI.
+  - The screenshot key, Ctrl+Shift+Enter, works in any program (the window says which key it got when
+    another program already owns that one).
+  - Reads a project folder so the answers can defend it (Settings -> Interview).
+  - Looks for a new version once a day and downloads the installer for you to run; it never starts it.
 
-Not on Windows yet
-  - The graphics card for speech recognition (it runs on the processor).
+Hiding from screen sharing
+  The window keeps itself out of screen captures (Zoom, Teams, Meet, OBS and screenshots do not include
+  it); you still see it. Turn it off in Settings -> General. Windows older than 10 version 2004 shows a
+  black box instead. A physical camera or a photo of the screen still sees the window. Many employers
+  forbid AI help in an interview: check the rules, and say so when you are expected to. The window only
+  suggests; you decide what to say.
 
-This build was checked under Wine only, not on a real Windows machine. Run "Check setup.bat"
-first: it opens the call audio for a moment and prints the loudest level it heard, so play
-something and run it again if it says 0.
-
-The program only suggests answers. The window keeps itself out of screen captures
-(Zoom, Teams, Meet, OBS and screenshots do not include it), but a physical camera or
-a photo of the screen still sees it. Check whether the interviewer allows AI help,
-and say so when you are expected to.
+This build was made by GitHub Actions and its parts that do not need a screen were tested there; its
+author has not tried it by hand on a Windows computer yet.

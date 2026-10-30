@@ -1,6 +1,7 @@
 name: Overlay
 
-# The Rust interview window in overlay/: formatting, lints and tests on Linux.
+# The Rust interview window in overlay/: formatting, lints and tests on Linux, Windows and macOS (the Windows
+# and macOS code is compiled and linted there, which cannot be done from Linux).
 on:
   push:
     branches: [master]
@@ -25,14 +26,23 @@ concurrency:
 
 jobs:
   test:
-    name: Format, lint, test
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
+    name: Format, lint, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
     defaults:
       run:
         working-directory: overlay
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Where bindgen finds libclang (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'LIBCLANG_PATH=C:\Program Files\LLVM\bin' >> "$GITHUB_ENV"
 
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
@@ -47,6 +57,7 @@ jobs:
           key: overlay-${{ runner.os }}-${{ hashFiles('overlay/Cargo.lock') }}
 
       - name: Format
+        if: runner.os == 'Linux'
         run: cargo fmt --check
 
       - name: Lints
