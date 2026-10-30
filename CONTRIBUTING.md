@@ -21,6 +21,20 @@ make lint      # ruff
 make docker    # backend + SearXNG in containers
 ```
 
+## CareerTwin Interview window (Rust)
+
+```bash
+cd overlay
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cargo test                          # needs cmake and libclang for whisper.cpp; --no-default-features --features gui skips it
+UI_SHOTS=/tmp/shots cargo test --test ui_shots -- --test-threads=1   # a picture of every screen (parallel renders crash the GPU driver)
+```
+
+The Windows and macOS code (`hotkey.rs`, `capture_exclude.rs`, `screenshot_windows.rs`, the sound card sources) cannot be built
+from Linux without a mingw toolchain: the `Overlay` workflow compiles and lints it on Windows and macOS runners. Window text lives in
+`overlay/src/ui/text.rs` (English, Russian) and `text_more.rs` (the other five languages); a test keeps every key in every language
+with the same `{placeholders}`. Every input in the settings gets a name for screen readers (`named()` in `settings_ui.rs`).
+
 ## CareerTwin Prep (Rust)
 
 ```bash
@@ -56,7 +70,7 @@ When there is something to release the workflow writes the version into `pyproje
 
 *Release* builds the portable Windows zip, a Windows setup program (`.exe`, Inno Setup, built on a Windows runner) and a macOS disk image (`.dmg`, built on a macOS runner), and attaches them to a GitHub release together with `SHA256SUMS.txt`. Before publishing, it installs the setup on its Windows machine, imports the packages and draws the window from the installed program, then uninstalls it; on the macOS machine it mounts the dmg, checks the signature and does the same from the app inside. Each build takes about ten minutes and the macOS minutes cost ten times as much on a private repository, so a flood of `fix:` commits is a flood of releases: batch them, or use `[skip release]`.
 
-You can still release by hand: set the version in `pyproject.toml`, merge it, then `git tag v0.2.0 && git push origin v0.2.0`. The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release and is never the base of an automatic version. To get the files without releasing, run *Release* by hand from the Actions tab and download the artifacts `windows-zip`, `windows-setup` and `macos-dmg` (kept for 14 days). A change to `packaging/` or the build scripts runs the same build on a pull request without publishing. Locally, `make windows` makes the zip and `./scripts/build_macos.sh` the Mac app and dmg (on a Mac; `SKIP_NATIVE=1` stops before the icon, signing and dmg, which only macOS can do). Neither installer is signed, which is why Windows and macOS warn on the first start.
+You can still release by hand: set the version in `pyproject.toml` and `overlay/Cargo.toml` (and `overlay/Cargo.lock`), merge it, then `git tag v0.2.0 && git push origin v0.2.0`. The build fails if the tag and the `pyproject.toml` version differ. A tag with a hyphen (`v0.2.0-rc1`) is marked as a pre-release and is never the base of an automatic version. To get the files without releasing, run *Release* by hand from the Actions tab and download the artifacts `windows`, `macos-dmg` and `linux-tarball` (kept for 14 days). A change to `packaging/` or `scripts/package_overlay.sh` runs the same build on a pull request without publishing. The Rust window (`overlay/`) takes its version from the release: the version script writes it into `overlay/Cargo.toml` and `overlay/Cargo.lock` together with `pyproject.toml`, and the build fails when the tag and `overlay/Cargo.toml` differ. Locally, `./scripts/package_overlay.sh linux` makes the tarball and `./scripts/package_overlay.sh macos` the Mac app and dmg (on a Mac; `SKIP_NATIVE=1` stops before the icon, signing and dmg, which only macOS can do); Windows is packed by the workflow. None of them is signed, which is why Windows and macOS warn on the first start.
 
 ## Project Structure
 

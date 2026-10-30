@@ -1,0 +1,196 @@
+//! Generated from the Python overlay's question lexicon (questions.py).
+
+/// (language, [(field, pattern)]): what counts as a question, and of which kind, per language.
+pub const LEXICON: &[(&str, &[(&str, &str)])] = &[
+    (
+        "en",
+        &[
+            ("salary", r#"salary|compensation|pay expectation|rate expectation|how much.*(earn|want|expect)"#),
+            ("candidate_questions", r#"any questions (for|to) (us|me)|do you have (any )?questions"#),
+            ("intro", r#"tell me about yourself|introduce yourself|walk me through your (resume|cv|background)"#),
+            (
+                "behavioral",
+                r#"tell me about a time|describe a (time|situation)|give me an example|how did you (handle|deal)|biggest (challenge|failure|mistake)|conflict"#,
+            ),
+            (
+                "motivation",
+                r#"why (do you want|are you interested|this (company|role|position)|should we)|where do you see yourself|why are you leaving"#,
+            ),
+            (
+                "definition",
+                r#"^(so,? )?(what is|what are|what's|what does .+ mean|explain|define|describe how|how does .+ work|difference between|what's the difference|why use)\b(?! your| you\b)"#,
+            ),
+            (
+                "logistics",
+                r#"notice period|when can you start|available to start|start date|availability|work permit|visa|relocat|remote|on-?site|hybrid|in the office|time ?zone|commut|full[- ]time|part[- ]time|hours (a|per) (week|day)|\d+ hours|manage .*(studies|study|university|exams?|classes)|(studies|university|exams?|classes) .*(work|internship|hours)"#,
+            ),
+            (
+                "start",
+                r#"what|why|how|when|where|who|which|can|could|would|do|does|did|are|is|have|has|will|tell|describe|explain|walk|talk|give|share|show|name|list|compare|write|implement|code|design|build|create|solve|find|fix|optimi[sz]e|reverse|convert|parse|sort|count|calculate|compute|merge|refactor|debug|determine|rewrite|identify|define|distinguish|outline|summari[sz]e|elaborate|clarify|imagine|suppose|assume|consider|picture|let'?s|let us|i'd like|i would like|i want to (?:hear|know|see)|i'?m (?:curious|interested)|i am (?:curious|interested)|help me understand|take me|say you|say we|if you|if we|think of|pretend|go ahead|i wonder|i was wondering|my next|next question"#,
+            ),
+            ("small_talk", r#"hi|hello|hey|thanks|thank you|great|sure|okay|ok|nice|good|right|yes|no"#),
+        ],
+    ),
+    (
+        "ru",
+        &[
+            ("salary", r#"зарплат|ожидани\w+ по (деньгам|оплате)|вилк"#),
+            ("candidate_questions", r#"есть (ли )?(у вас )?вопросы|ваши вопросы"#),
+            ("intro", r#"расскажите о себе|представьтесь|расскажи о себе"#),
+            ("behavioral", r#"расскажите о (случае|ситуации)|приведите пример|как вы (справились|решали)"#),
+            ("motivation", r#"почему (вы )?(хотите|выбрали|ушли|уходите)|что вас привлекает"#),
+            (
+                "definition",
+                r#"что так(ое|ая|ие|ой)|что значит|объясни|расскажи(те)? (про|о том, что)|в чём разница|чем отличается|как работает"#,
+            ),
+            (
+                "logistics",
+                r#"когда (вы )?(сможете|готовы) выйти|срок уведомления|переезд|удал[её]н|гибрид|в офисе|сколько часов|совмещать .*(учёб|универ)|график"#,
+            ),
+            (
+                "start",
+                r#"что|почему|как|когда|где|кто|какой|какая|какие|можете|расскажите|опишите|объясните|приведите|назовите|сравните|есть ли|представьте|допустим|предположим|давайте|мне интересно|хотел бы|хотела бы|скажите|поясните|а если|а что|следующий вопрос|расскажи|опиши|объясни"#,
+            ),
+            ("small_talk", r#"привет|здравствуйте|спасибо|отлично|хорошо|ясно|понятно|да|нет"#),
+        ],
+    ),
+    (
+        "pl",
+        &[
+            ("salary", r#"wynagrodzeni|oczekiwania finansowe|stawk"#),
+            ("candidate_questions", r#"masz (jakieś )?pytania"#),
+            ("intro", r#"opowiedz o sobie|przedstaw się"#),
+            ("behavioral", r#"opowiedz o sytuacji|podaj przykład|jak (poradziłeś|poradziłaś)"#),
+            ("motivation", r#"dlaczego (chcesz|wybrałeś|wybrałaś|odchodzisz)"#),
+            ("definition", r#"co to (jest|są)|czym (jest|są)|wyjaśnij|jaka jest różnica|czym się różni|jak działa"#),
+            ("logistics", r#"okres wypowiedzenia|kiedy możesz zacząć|relokacj|zdaln|w biurze|ile godzin|studi"#),
+            (
+                "start",
+                r#"co|dlaczego|jak|kiedy|gdzie|kto|który|czy|opowiedz|opisz|wyjaśnij|podaj|wyobraź|załóżmy|powiedz|chciałbym|chciałabym|następne pytanie"#,
+            ),
+            ("small_talk", r#"cześć|dzień dobry|dziękuję|dobrze"#),
+        ],
+    ),
+    (
+        "uk",
+        &[
+            (
+                "salary",
+                r#"зарплат|очікуван\w+ (щодо|по) (зарплат|оплат|грош)|вилк|оплат\w+ праці|скільки (ви )?хочете (заробляти|отримувати)"#,
+            ),
+            ("candidate_questions", r#"є (у вас )?(якісь )?запитання|ваші запитання|маєте (якісь )?запитання"#),
+            ("intro", r#"розкажіть про себе|розкажи про себе|представтеся|представся|розкажіть про свій досвід"#),
+            (
+                "behavioral",
+                r#"розкажіть про (випадок|ситуацію)|наведіть приклад|як ви (впоралися|вирішували|справлялися)|найбільш\w+ (складн|помилк|невдач)|конфлікт"#,
+            ),
+            ("motivation", r#"чому (ви )?(хочете|обрали|вибрали|пішли|йдете)|що вас приваблює|де ви бачите себе"#),
+            (
+                "definition",
+                r#"що так(е|а|і|ий)|що означає|поясніть|поясни|розкажіть (про|що таке)|у чому різниця|чим відрізняється|як працює"#,
+            ),
+            (
+                "logistics",
+                r#"коли (ви )?(зможете|готові) (вийти|почати)|термін повідомлення|переїзд|віддален|гібрид|в офісі|скільки годин|поєднувати .*(навчан|універ)|графік|робочий дозвіл|віза|повн\w+ (день|зайнятість)|часткова зайнятість"#,
+            ),
+            (
+                "start",
+                r#"що|чому|як|коли|де|хто|який|яка|яке|які|чи|можете|розкажіть|розкажи|опишіть|поясніть|поясни|наведіть|назвіть|порівняйте|скільки|навіщо|звідки|куди|чим"#,
+            ),
+            (
+                "small_talk",
+                r#"привіт|вітаю|добрий день|доброго дня|добридень|дякую|дякуємо|чудово|добре|зрозуміло|ясно|так|ні|гаразд"#,
+            ),
+        ],
+    ),
+    (
+        "de",
+        &[
+            ("salary", r#"gehalt|vergütung|gehaltsvorstellung"#),
+            ("candidate_questions", r#"haben sie (noch )?fragen|ihre fragen"#),
+            ("intro", r#"erzählen sie (mir )?(etwas )?(von|über) sich|stellen sie sich vor"#),
+            (
+                "behavioral",
+                r#"erzählen sie (mir )?von einer situation|nennen sie ein beispiel|wie sind sie .*umgegangen|größte[rn]? (herausforderung|fehler)|konflikt"#,
+            ),
+            (
+                "motivation",
+                r#"warum (möchten|wollen) sie|warum haben sie sich .*beworben|wo sehen sie sich|warum verlassen sie"#,
+            ),
+            (
+                "definition",
+                r#"was (ist|sind|bedeutet)|erklären sie|definieren sie|wie funktioniert|unterschied zwischen"#,
+            ),
+            (
+                "logistics",
+                r#"kündigungsfrist|wann können sie (anfangen|starten)|arbeitserlaubnis|visum|umzug|homeoffice|vor ort|stunden pro woche|vollzeit|teilzeit|studium"#,
+            ),
+            (
+                "start",
+                r#"was|warum|wieso|weshalb|wie|wann|wo|wer|welche[rsmn]?|können sie|könnten sie|würden sie|haben sie|sind sie|erzählen sie|beschreiben sie|erklären sie|nennen sie|vergleichen sie|gibt es|wie viele|woher|wohin|sagen sie"#,
+            ),
+            (
+                "small_talk",
+                r#"hallo|guten (tag|morgen|abend)|danke|vielen dank|gut|klar|ja|nein|genau|verstanden|super"#,
+            ),
+        ],
+    ),
+    (
+        "fr",
+        &[
+            ("salary", r#"salaire|prétentions salariales|rémunération|attentes salariales"#),
+            ("candidate_questions", r#"avez-vous des questions|vos questions"#),
+            ("intro", r#"parlez-moi de vous|présentez-vous|racontez-moi votre parcours"#),
+            (
+                "behavioral",
+                r#"racontez-moi une (situation|fois)|donnez-moi un exemple|comment avez-vous (géré|résolu|réagi)|plus grand(e)? (défi|échec|erreur)|conflit"#,
+            ),
+            ("motivation", r#"pourquoi (voulez|souhaitez|avez-vous choisi|quittez)|où vous voyez-vous"#),
+            (
+                "definition",
+                r#"qu['’]est-ce que|qu['’]est-ce qu|que signifie|expliquez|définissez|comment fonctionne|différence entre"#,
+            ),
+            (
+                "logistics",
+                r#"préavis|quand pouvez-vous (commencer|démarrer)|permis de travail|déménagement|télétravail|hybride|sur site|heures par semaine|temps plein|temps partiel|études"#,
+            ),
+            (
+                "start",
+                r#"qu['’]est-ce|que|quoi|pourquoi|comment|quand|où|qui|quel|quelle|quels|quelles|pouvez-vous|pourriez-vous|est-ce que|avez-vous|êtes-vous|parlez-moi|décrivez|expliquez|donnez|citez|comparez|combien|dites-moi|racontez"#,
+            ),
+            ("small_talk", r#"bonjour|salut|bonsoir|merci|d['’]accord|bien|oui|non|parfait|compris|super|très bien"#),
+        ],
+    ),
+    (
+        "es",
+        &[
+            ("salary", r#"salario|sueldo|expectativas salariales|remuneración|pretensiones"#),
+            (
+                "candidate_questions",
+                r#"tienes (alguna )?pregunta|tiene (alguna )?pregunta|alguna pregunta para nosotros"#,
+            ),
+            ("intro", r#"háblame de ti|cuéntame sobre ti|preséntate|hábleme de usted|cuénteme sobre usted"#),
+            (
+                "behavioral",
+                r#"cuéntame (sobre )?(una vez|una situación)|dame un ejemplo|cómo (manejaste|resolviste|afrontaste)|mayor (reto|desafío|error|fracaso)|conflicto"#,
+            ),
+            ("motivation", r#"por qué (quieres|te interesa|elegiste|dejas|te vas)|dónde te ves"#),
+            (
+                "definition",
+                r#"qué (es|son|significa)|explica|define|cómo funciona|diferencia entre|cuál es la diferencia"#,
+            ),
+            (
+                "logistics",
+                r#"preaviso|cuándo puedes (empezar|incorporarte)|permiso de trabajo|visado|reubicación|remoto|híbrido|presencial|horas (a la|por) semana|tiempo completo|media jornada|estudios"#,
+            ),
+            (
+                "start",
+                r#"qué|por qué|cómo|cuándo|dónde|quién|cuál|cuáles|puedes|puede|podría|podrías|cuéntame|cuénteme|describe|describa|explica|explique|dime|dígame|háblame|hábleme|hay|tiene|tienes|cuánto|cuántos|para qué"#,
+            ),
+            (
+                "small_talk",
+                r#"hola|buenos días|buenas tardes|gracias|muchas gracias|bien|vale|claro|sí|perfecto|entendido|genial"#,
+            ),
+        ],
+    ),
+];

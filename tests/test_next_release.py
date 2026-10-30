@@ -32,6 +32,21 @@ version = "0.28.1"
 '''
 
 
+CARGO_LOCK = '''version = 4
+
+[[package]]
+name = "anyhow"
+version = "1.0.104"
+
+[[package]]
+name = "careertwin-overlay"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+]
+'''
+
+
 def run(root, *args):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
 
@@ -164,6 +179,28 @@ def test_applying_writes_the_version_into_the_project_and_the_lock_and_nothing_e
     assert 'name = "careertwin"\nversion = "0.2.0"' in lock
     assert 'name = "anyio"\nversion = "4.15.1"' in lock and 'name = "httpx"\nversion = "0.28.1"' in lock
     assert tomllib.loads(lock)["package"][1]["version"] == "0.2.0"
+
+
+def test_the_rust_window_gets_the_same_version(repo, capsys):
+    overlay = repo / "overlay"
+    overlay.mkdir()
+    (overlay / "Cargo.toml").write_text(
+        '[package]\nname = "careertwin-overlay"\nversion = "0.1.2"\n\n[dependencies]\nanyhow = { version = "1.0.104" }\n'
+    )
+    (overlay / "Cargo.lock").write_text(CARGO_LOCK)
+    commit(repo, "feat: a thing")
+    assert next_release.main(["--root", str(repo), "--apply"]) == 0
+    manifest = tomllib.loads((overlay / "Cargo.toml").read_text())
+    assert manifest["package"]["version"] == "0.2.0" and manifest["dependencies"]["anyhow"]["version"] == "1.0.104"
+    lock = (overlay / "Cargo.lock").read_text()
+    assert 'name = "careertwin-overlay"\nversion = "0.2.0"' in lock and 'name = "anyhow"\nversion = "1.0.104"' in lock
+    assert [package["version"] for package in tomllib.loads(lock)["package"]] == ["1.0.104", "0.2.0"]
+
+
+def test_a_repository_without_the_rust_window_still_releases(repo, capsys):
+    commit(repo, "fix: a thing")
+    assert next_release.main(["--root", str(repo), "--apply"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "version=0.1.3" and not (repo / "overlay").exists()
 
 
 def test_without_apply_nothing_changes(repo, capsys):

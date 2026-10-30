@@ -1,0 +1,67 @@
+name: Overlay
+
+# The Rust interview window in overlay/: formatting, lints and tests on Linux, Windows and macOS (the Windows
+# and macOS code is compiled and linted there, which cannot be done from Linux).
+on:
+  push:
+    branches: [master]
+    paths:
+      - "overlay/**"
+      - "prep/assets/fonts/**"
+      - "packaging/careertwin-interview.png"
+      - ".github/workflows/overlay.yml"
+  pull_request:
+    paths:
+      - "overlay/**"
+      - "prep/assets/fonts/**"
+      - "packaging/careertwin-interview.png"
+      - ".github/workflows/overlay.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Format, lint, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    defaults:
+      run:
+        working-directory: overlay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Where bindgen finds libclang (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'LIBCLANG_PATH=C:\Program Files\LLVM\bin' >> "$GITHUB_ENV"
+
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
+
+      - name: Cache the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            overlay/target
+          key: overlay-${{ runner.os }}-${{ hashFiles('overlay/Cargo.lock') }}
+
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+
+      - name: Lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked

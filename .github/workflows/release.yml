@@ -1,7 +1,7 @@
 name: Release
 
-# A tag like v0.2.0 builds the portable Windows zip, a Windows setup program (.exe) and a macOS
-# disk image (.dmg), checks each one, and publishes them as a GitHub release. Run it by hand
+# A tag like v0.6.0 builds the Rust interview window for Windows (a portable zip and a setup program), macOS
+# (a disk image) and Linux (a tarball), checks each one and publishes them as a GitHub release. Run it by hand
 # (Actions -> Release -> Run workflow) to get the files as build artifacts only.
 on:
   push:
@@ -10,8 +10,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/release.yml
-      - scripts/build_windows.sh
-      - scripts/build_macos.sh
+      - scripts/package_overlay.sh
       - packaging/**
 
 concurrency:
@@ -21,71 +20,70 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: never
+
 jobs:
   windows:
-    name: Windows zip
-    runs-on: ubuntu-latest
+    name: Windows zip and setup
+    runs-on: windows-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Tag matches the version in pyproject.toml
+      - name: Tag matches the version of the window
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
-          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          version=$(grep -m1 '^version = ' overlay/Cargo.toml | cut -d'"' -f2)
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match version $version in pyproject.toml"
+            echo "::error::tag $GITHUB_REF_NAME does not match version $version in overlay/Cargo.toml"
             exit 1
           fi
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.14
-
-      - name: Cache the embeddable Python
+      - name: Cache the build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: dist/cache
-          key: windows-embed-${{ hashFiles('scripts/build_windows.sh') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            overlay/target
+          key: release-windows-${{ hashFiles('overlay/Cargo.lock') }}
 
-      - name: Build the Windows package
-        run: ./scripts/build_windows.sh
-
-      - name: Name the archive after the version
+      - name: Build the window
+        shell: pwsh
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="${GITHUB_SHA::7}"; fi
-          mkdir -p release
-          mv dist/windows/CareerTwin-Interview-windows-x64.zip "release/CareerTwin-Interview-$label-windows-x64.zip"
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo build --release --locked --manifest-path overlay/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "cargo build failed with exit code $LASTEXITCODE" }
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: windows-zip
-          path: release/*
-          if-no-files-found: error
-          retention-days: 14
-
-  windows-installer:
-    name: Windows setup
-    needs: windows
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: windows-zip
-          path: portable
-
-      - name: Unpack the portable package
+      - name: Pack the folder and the zip
         shell: pwsh
         run: |
-          $zip = Get-ChildItem portable -Filter *.zip | Select-Object -First 1
-          Expand-Archive -Path $zip.FullName -DestinationPath build
-          if (-not (Test-Path build\CareerTwin-Interview\start.pyw)) { throw "the zip has no CareerTwin-Interview folder" }
+          $label = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA.Substring(0, 7) }
+          $dir = "build\CareerTwin-Interview"
+          New-Item -ItemType Directory -Force -Path $dir, "$dir\data", release | Out-Null
+          Copy-Item overlay\target\release\careertwin-overlay.exe $dir
+          Copy-Item packaging\windows\careertwin-interview.ico $dir
+          Copy-Item packaging\windows\README-Windows.txt $dir
+          Set-Content -Path "$dir\data\README.txt" -Value "Your settings, documents and transcripts are kept here."
+          Compress-Archive -Path $dir -DestinationPath "release\CareerTwin-Interview-$label-windows-x64.zip"
+          Get-ChildItem release | Format-Table Name, Length
+
+      - name: The program reports its version
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '' }
+          $out = Join-Path $env:RUNNER_TEMP 'version.txt'
+          $run = Start-Process -FilePath build\CareerTwin-Interview\careertwin-overlay.exe -ArgumentList '--version' -Wait -PassThru -RedirectStandardOutput $out
+          $text = (Get-Content $out -Raw).Trim()
+          Write-Host $text
+          if ($run.ExitCode -ne 0) { throw "--version exited with $($run.ExitCode)" }
+          if ($text -notlike 'careertwin-overlay *') { throw "unexpected output: $text" }
+          if ($tag -and $text -ne "careertwin-overlay $tag") { throw "the program says $text but the tag is $tag" }
 
       - name: Build the setup program
         shell: pwsh
@@ -98,7 +96,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
           Get-ChildItem release | Format-Table Name, Length
 
-      - name: Install it, start it, uninstall it
+      - name: Install it, check it, uninstall it
         shell: pwsh
         run: |
           $setup = Get-ChildItem release -Filter '*-setup.exe' | Select-Object -First 1
@@ -106,48 +104,64 @@ jobs:
           $run = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$dir", "/LOG=$PWD\setup.log"
           if ($run.ExitCode -ne 0) { Get-Content setup.log -Tail 40; throw "setup exited with $($run.ExitCode)" }
 
-          foreach ($file in 'python\pythonw.exe', 'start.pyw', 'careertwin-interview.ico', 'site-packages\careertwin\interview\app.py') {
+          foreach ($file in 'careertwin-overlay.exe', 'careertwin-interview.ico', 'data') {
             if (-not (Test-Path "$dir\$file")) { throw "the installation lacks $file" }
           }
           $link = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\CareerTwin Interview.lnk"
           if (-not (Test-Path $link)) { throw "no Start menu shortcut" }
           $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
-          if ($shortcut.TargetPath -notlike '*python\pythonw.exe' -or $shortcut.Arguments -notlike '*start.pyw*') {
-            throw "the shortcut starts the wrong thing: $($shortcut.TargetPath) $($shortcut.Arguments)"
-          }
+          if ($shortcut.TargetPath -notlike '*careertwin-overlay.exe') { throw "the shortcut starts the wrong thing: $($shortcut.TargetPath)" }
 
-          # What the installed program imports, and a real window drawn without a display.
-          $env:QT_QPA_PLATFORM = 'offscreen'
-          & "$dir\python\python.exe" -c "import PySide6.QtWidgets, faster_whisper, soundcard, httpx; from careertwin.interview.overlay import Bridge, OverlayWindow, create_app; app = create_app([]); w = OverlayWindow(Bridge()); w.show(); app.processEvents(); print('window', w.grab().width(), 'px')"
-          if ($LASTEXITCODE -ne 0) { throw "the installed program does not start" }
+          $out = Join-Path $env:RUNNER_TEMP 'installed.txt'
+          $ran = Start-Process -FilePath "$dir\careertwin-overlay.exe" -ArgumentList '--help' -Wait -PassThru -RedirectStandardOutput $out
+          if ($ran.ExitCode -ne 0 -or -not ((Get-Content $out -Raw) -match 'CareerTwin Interview')) { throw "the installed program does not answer --help" }
 
           $unins = Get-ChildItem $dir -Filter 'unins*.exe' | Select-Object -First 1
           Start-Process -FilePath $unins.FullName -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
-          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\python"); $i++) { Start-Sleep -Seconds 1 }
-          if (Test-Path "$dir\python") { throw "uninstalling left the program behind" }
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\careertwin-overlay.exe"); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path "$dir\careertwin-overlay.exe") { throw "uninstalling left the program behind" }
           if (Test-Path $link) { throw "uninstalling left the Start menu shortcut" }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-setup
-          path: release/*-setup.exe
+          name: windows
+          path: |
+            release/*.zip
+            release/*-setup.exe
           if-no-files-found: error
           retention-days: 14
 
   macos:
     name: macOS dmg
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: Tag matches the version of the window
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(grep -m1 '^version = ' overlay/Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $version in overlay/Cargo.toml"
+            exit 1
+          fi
+
+      - name: Cache the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          enable-cache: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            overlay/target
+          key: release-macos-${{ hashFiles('overlay/Cargo.lock') }}
 
       - name: Build the app and the dmg
-        run: ./scripts/build_macos.sh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="${GITHUB_SHA::7}"; fi
+          ./scripts/package_overlay.sh macos "$label"
 
       - name: Open the dmg and start the app inside it
         run: |
@@ -156,33 +170,88 @@ jobs:
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
           app="$mount/CareerTwin Interview.app"
           codesign --verify --deep --strict "$app"
+          # The launcher the Finder runs must make the data folder and start the program.
           home=$(mktemp -d)
-          # The Python inside the app imports its packages and draws a window without a display. The
-          # launcher normally says where the data goes; the dmg itself is read-only.
-          CAREERTWIN_DATA_DIR="$home/data" QT_QPA_PLATFORM=offscreen \
-            PYTHONPATH="$app/Contents/Resources/site-packages" PYTHONNOUSERSITE=1 \
-            "$app/Contents/Resources/python/bin/python3" -c "import PySide6.QtWidgets, faster_whisper, httpx; from careertwin.interview.overlay import Bridge, OverlayWindow, create_app; app = create_app([]); w = OverlayWindow(Bridge()); w.show(); app.processEvents(); print('window', w.grab().width(), 'px')"
-          # The launcher the Finder runs: it must create the data folder and start the program.
-          HOME="$home" QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/careertwin-interview" --help
-          grep -q usage "$home/Library/Application Support/CareerTwin Interview/last-run.log"
+          out=$(HOME="$home" "$app/Contents/MacOS/careertwin-interview" --version)
+          echo "$out"
+          case "$out" in "careertwin-overlay "*) ;; *) echo "unexpected output: $out"; exit 1 ;; esac
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$out" != "careertwin-overlay ${GITHUB_REF_NAME#v}" ]; then
+            echo "the program says $out but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          test -d "$home/Library/Application Support/CareerTwin Interview"
           hdiutil detach "$mount"
-
-      - name: Name the dmg after the version
-        run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="${GITHUB_SHA::7}"; fi
-          mkdir -p release
-          mv dist/macos/*.dmg "release/CareerTwin-Interview-$label-macos-$(uname -m).dmg"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-dmg
-          path: release/*.dmg
+          path: dist/macos/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    name: Linux tarball
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tag matches the version of the window
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(grep -m1 '^version = ' overlay/Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $version in overlay/Cargo.toml"
+            exit 1
+          fi
+
+      - name: Cache the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            overlay/target
+          key: release-linux-${{ hashFiles('overlay/Cargo.lock') }}
+
+      - name: Build and pack
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake libclang-dev
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="${GITHUB_SHA::7}"; fi
+          ./scripts/package_overlay.sh linux "$label"
+
+      - name: Unpack it and ask it for its version
+        run: |
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf dist/linux/*.tar.gz -C "$RUNNER_TEMP/unpacked"
+          cd "$RUNNER_TEMP/unpacked/CareerTwin-Interview"
+          for file in careertwin-overlay careertwin-interview-ctl install.sh careertwin-interview.desktop careertwin-interview.png README.txt; do
+            test -e "$file" || { echo "the tarball lacks $file"; exit 1; }
+          done
+          out=$(./careertwin-overlay --version)
+          echo "$out"
+          case "$out" in "careertwin-overlay "*) ;; *) echo "unexpected output: $out"; exit 1 ;; esac
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$out" != "careertwin-overlay ${GITHUB_REF_NAME#v}" ]; then
+            echo "the program says $out but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          # the ctl command says plainly when no window runs
+          if ./careertwin-interview-ctl ping 2>"$RUNNER_TEMP/ctl.txt"; then echo "ctl answered without a window"; exit 1; fi
+          grep -q "not running" "$RUNNER_TEMP/ctl.txt"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-tarball
+          path: dist/linux/*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, windows-installer, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -198,11 +267,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           (cd release && sha256sum -- * | tee SHA256SUMS.txt)
-          notes="**Windows:** run the \`-setup.exe\` (no administrator rights needed), or unzip the \`.zip\` and start it with \`Start CareerTwin Interview.bat\`. Windows may warn that the publisher is unknown: choose More info, then Run anyway.
+          notes="**Windows:** run the \`-setup.exe\` (no administrator rights needed), or unzip the \`.zip\` and start \`careertwin-overlay.exe\`. Windows may warn that the publisher is unknown: choose More info, then Run anyway. The window can keep itself out of screen sharing (Settings, General); many employers forbid AI help in an interview, so check their rules.
 
-          **macOS (Apple silicon):** open the \`.dmg\`, drag the app to Applications, then right-click it and choose Open the first time. The app is not signed by Apple. Call audio is not on the Mac yet; typed questions, screenshots and project defense are expected to work (the build is checked by GitHub's machine, not tried by hand on a Mac).
+          **macOS (Apple silicon):** open the \`.dmg\`, drag the app to Applications, then right-click it and choose Open the first time. The app is not signed by Apple. Call audio is not on the Mac yet: type a question, use the microphone, or answer the screen.
 
-          Check a download against \`SHA256SUMS.txt\`."
+          **Linux:** unpack the \`.tar.gz\` and run \`./install.sh\`. Hearing the call needs parec and pactl; a screenshot needs grim, spectacle, gnome-screenshot, maim or scrot.
+
+          These are built and checked by GitHub's machines (the program starts and reports its version; Windows is installed and uninstalled). The parts that need a screen were tested without one. Nobody has tried the Windows and macOS builds by hand yet. Check a download against \`SHA256SUMS.txt\`."
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release/* --clobber
           else
