@@ -129,7 +129,10 @@ pub fn capture(tool: &str, output: Option<&str>) -> Result<Shot, ScreenshotError
     #[cfg(windows)]
     {
         let _ = output;
-        windows::capture(tool == "all-screens")
+        // a name that is not one of the two ways Windows captures is refused, as on the other systems: nothing is
+        // captured for it (a test that presses the screenshot key with a made-up tool relies on this)
+        let chosen = choose(tool, &available_tools())?;
+        windows::capture(chosen == "all-screens")
     }
     #[cfg(not(windows))]
     capture_with_tool(tool, output)
@@ -246,6 +249,27 @@ mod tests {
         assert_eq!(choose("maim", &installed).unwrap(), "maim");
         assert!(matches!(choose("scrot", &installed), Err(ScreenshotError::Unavailable(name)) if name == "scrot"));
         assert!(matches!(choose("auto", &[]), Err(ScreenshotError::NoTool)));
+    }
+
+    #[test]
+    fn the_two_ways_windows_captures_are_chosen_by_name_and_any_other_name_is_refused() {
+        let windows: Vec<String> = WINDOWS_TOOLS.iter().map(|name| (*name).to_owned()).collect();
+        assert_eq!(choose("auto", &windows).unwrap(), "primary-screen");
+        assert_eq!(choose("", &windows).unwrap(), "primary-screen");
+        assert_eq!(choose("all-screens", &windows).unwrap(), "all-screens");
+        assert!(
+            matches!(choose("no-such-tool", &windows), Err(ScreenshotError::Unavailable(name)) if name == "no-such-tool")
+        );
+        assert!(matches!(choose("grim", &windows), Err(ScreenshotError::Unavailable(_))));
+    }
+
+    /// Runs where the capture is in-process: a made-up tool must come back as an error and capture nothing.
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_a_made_up_tool_captures_nothing() {
+        assert!(
+            matches!(capture("no-such-tool", None), Err(ScreenshotError::Unavailable(name)) if name == "no-such-tool")
+        );
     }
 
     #[test]
