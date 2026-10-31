@@ -363,6 +363,66 @@ fn a_list_that_failed_is_not_asked_for_again_until_the_button_is() {
 }
 
 #[test]
+fn an_address_typed_a_piece_at_a_time_stays_in_the_line_and_is_taken_when_the_line_is_left() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    harness.run();
+    let base = |harness: &Harness<'_, App>| {
+        harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Base URL").value().unwrap_or_default()
+    };
+    assert_eq!(base(&harness), "https://api.groq.com/openai");
+    harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Base URL").focus();
+    harness.run_steps(2);
+    for piece in ["https://", "llm.", "example.com"] {
+        harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Base URL").type_text(piece);
+        harness.run_steps(2);
+    }
+    assert!(base(&harness).ends_with("https://llm.example.com"), "typed pieces are kept: {}", base(&harness));
+    assert_eq!(harness.state().settings.gateway(), "https://api.groq.com/openai", "not taken before the line is left");
+}
+
+#[test]
+fn other_in_the_provider_menu_leaves_the_address_to_be_typed() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    fixture.app.settings.set_gateway("https://tokenharbor.ai").unwrap();
+    fixture.app.apply_coach();
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    harness.run();
+    let provider = |harness: &Harness<'_, App>| {
+        harness.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Provider").value().unwrap_or_default()
+    };
+    assert_eq!(provider(&harness), "TokenHarbor");
+    harness.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Provider").click();
+    harness.run_steps(3);
+    shot(&mut harness, "provider-other");
+    harness.get_by_label("Other (own address)").click();
+    harness.run_steps(4);
+    // the menu says so at once, the address is still there, and the cursor is in it
+    assert_eq!(provider(&harness), "Other (own address)");
+    assert_eq!(harness.state().settings.gateway(), "https://tokenharbor.ai");
+    assert!(harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Base URL").is_focused());
+    // typing an own address and leaving the line keeps it, and it is "Other" as before
+    let base = harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Base URL");
+    base.type_text("https://llm.example.com/v1");
+    harness.run_steps(2);
+    harness.get_by_label("Paste the API key").focus();
+    harness.run_steps(3);
+    assert_eq!(harness.state().settings.gateway(), "https://llm.example.com");
+    assert_eq!(provider(&harness), "Other (own address)");
+    // a preset, chosen again, takes the place of it
+    harness.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Provider").click();
+    harness.run_steps(3);
+    harness.get_by_label("NVIDIA").click();
+    harness.run_steps(4);
+    assert_eq!(provider(&harness), "NVIDIA");
+    assert_eq!(harness.state().settings.gateway(), "https://integrate.api.nvidia.com");
+}
+
+#[test]
 fn the_model_menu_can_be_searched_and_a_click_picks_the_model() {
     let mut fixture = fixture("en");
     fixture.app.settings_open = true;

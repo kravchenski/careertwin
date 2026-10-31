@@ -13,7 +13,7 @@ use crate::coach::Request;
 use crate::export::{self, Format};
 use crate::library::{SavedDocument, read_document};
 use crate::prepare::{self, Analysis, BankQuestion};
-use crate::providers::{OTHER, PROVIDERS, provider_for};
+use crate::providers::{PROVIDERS, provider_for};
 use crate::settings::{ANSWER_LAYOUTS, ANSWER_STYLES, STT_ENGINES, WHISPER_MODELS};
 use crate::transcript::read_all;
 
@@ -35,6 +35,13 @@ pub struct State {
     pub models_loading: bool,
     /// The AI tab asks for the list itself when it has none for this address and key. The tests turn it off.
     pub auto_models: bool,
+    /// "Other" was chosen in the provider menu while the Base URL was this address: the menu says "Other" until the
+    /// address is changed, though the address may still be one of the presets.
+    pub other_for: Option<String>,
+    /// The Base URL gets the cursor, with its text selected, on the next frame.
+    pub focus_url: bool,
+    /// The Base URL as it is being typed: it is kept between frames and becomes the address when the line is left.
+    pub url_edit: Option<String>,
     pub connected: Option<Result<usize, String>>,
     pub new_key: String,
     pub checking_key: bool,
@@ -72,6 +79,9 @@ impl Default for State {
             models_for: None,
             models_loading: false,
             auto_models: true,
+            other_for: None,
+            focus_url: false,
+            url_edit: None,
             connected: None,
             new_key: String::new(),
             checking_key: false,
@@ -273,6 +283,8 @@ impl App {
         let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
         let _ = (&t, &tf);
         if !self.settings_open {
+            self.settings_ui.other_for = None;
+            self.settings_ui.url_edit = None;
             return;
         }
         let mut open = true;
@@ -890,33 +902,61 @@ impl App {
         let _ = (&t, &tf);
         let mut changed = false;
         let address = self.settings.gateway();
-        let known = provider_for(&address);
+        // "Other" in the menu means the address is the user's own, even while it still reads like a preset
+        let preset = provider_for(&address);
+        let other = self.settings_ui.other_for.as_deref() == Some(address.as_str());
+        let known = if other { None } else { preset };
         row(ui, &t("provider"), |ui| {
-            let label = known.map_or("Other (own address)".to_owned(), |provider| provider.label.to_owned());
-            // tall enough for every preset at once: the menu scrolls only past that
+            let label = known.map_or(t("provider_other"), |provider| provider.label.to_owned());
+            // tall enough for every preset and "Other" at once: the menu scrolls only past that
             let combo =
-                ComboBox::from_id_salt("provider").selected_text(label).width(260.0).height(360.0).show_ui(ui, |ui| {
+                ComboBox::from_id_salt("provider").selected_text(label).width(260.0).height(400.0).show_ui(ui, |ui| {
                     for provider in PROVIDERS {
                         if ui.selectable_label(known == Some(provider), provider.label).clicked()
                             && known != Some(provider)
                         {
-                            // a model id belongs to one provider, and so does a key
-                            self.settings.model.clear();
-                            self.settings.vision_model.clear();
+                            self.settings_ui.other_for = None;
+                            if preset != Some(provider) {
+                                // a model id belongs to one provider, and so does a key
+                                self.settings.model.clear();
+                                self.settings.vision_model.clear();
+                            }
                             if self.settings.set_gateway(provider.url).is_ok() {
                                 changed = true;
                             }
                         }
                     }
-                    let _ = OTHER;
+                    if ui.selectable_label(known.is_none(), t("provider_other")).clicked() {
+                        // the address stays as it is until a new one is typed; the cursor goes to it
+                        if known.is_some() {
+                            self.settings_ui.other_for = Some(address.clone());
+                        }
+                        self.settings_ui.focus_url = true;
+                    }
                 });
             combo.named();
         });
-        let mut url =
-            if self.settings.gateway_url.is_empty() { address.clone() } else { self.settings.gateway_url.clone() };
-        let url_changed = row(ui, &t("base_url"), |ui| {
-            ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).named().lost_focus()
+        // what is typed stays in the line between frames, and becomes the address when the line is left (or Enter)
+        let mut url = self.settings_ui.url_edit.clone().unwrap_or_else(|| {
+            if self.settings.gateway_url.is_empty() { address.clone() } else { self.settings.gateway_url.clone() }
         });
+        let focus_url = std::mem::take(&mut self.settings_ui.focus_url);
+        let (typed, url_changed) = row(ui, &t("base_url"), |ui| {
+            let edit = ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).named();
+            if focus_url {
+                edit.request_focus();
+                let mut state = TextEdit::load_state(ui.ctx(), edit.id).unwrap_or_default();
+                state.cursor.set_char_range(Some(egui::text::CCursorRange::select_all_str(&url)));
+                state.store(ui.ctx(), edit.id);
+            }
+            (edit.changed(), edit.lost_focus())
+        });
+        if typed {
+            self.settings_ui.url_edit = Some(url.clone());
+        }
+        if url_changed {
+            self.settings_ui.url_edit = None;
+        }
         if url_changed && url.trim() != self.settings.gateway_url.trim() && url.trim() != address {
             match self.settings.set_gateway(url.trim()) {
                 Ok(()) => changed = true,

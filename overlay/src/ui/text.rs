@@ -235,6 +235,7 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("questions_found", "{n} questions in {m} interviews", "Вопросов: {n}, собеседований: {m}"),
     // ai
     ("provider", "Provider", "Провайдер"),
+    ("provider_other", "Other (own address)", "Другой (свой адрес)"),
     ("base_url", "Base URL", "Базовый URL"),
     ("accounts", "Accounts", "Аккаунты"),
     ("paste_key", "Paste the API key", "Вставьте API-ключ"),
