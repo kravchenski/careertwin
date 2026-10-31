@@ -235,6 +235,7 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("questions_found", "{n} questions in {m} interviews", "Вопросов: {n}, собеседований: {m}"),
     // ai
     ("provider", "Provider", "Провайдер"),
+    ("provider_other", "Other (own address)", "Другой (свой адрес)"),
     ("base_url", "Base URL", "Базовый URL"),
     ("accounts", "Accounts", "Аккаунты"),
     ("paste_key", "Paste the API key", "Вставьте API-ключ"),
@@ -265,6 +266,10 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("fallbacks", "If it is down or limited, try", "Если недоступна или в лимите, пробовать"),
     ("fallbacks_hint", "model, model, auto", "модель, модель, auto"),
     ("load_models", "Load models", "Загрузить список"),
+    ("search_models", "Search models", "Найти модель"),
+    ("models_empty", "No list yet: press Load models below", "Списка пока нет: нажмите «Загрузить список» ниже"),
+    ("models_loading", "Loading the models…", "Загружаю список моделей…"),
+    ("models_none", "Nothing found", "Ничего не найдено"),
     ("test_connection", "Test connection", "Проверить соединение"),
     ("connected", "Connected: {n} models", "Подключено, моделей: {n}"),
     ("engine", "Engine", "Движок"),

@@ -108,8 +108,8 @@ what *you* could say, line by line, built only from your `ABOUT.md`, the CV you 
 
 - **Prepares you before the call.** A question bank for the vacancy, each question with first-person lines to say,
   and a review of your CV against the vacancy.
-- **Any model, any language.** Switchyard, Groq, OpenAI, OpenRouter, Ollama, LM Studio or your own OpenAI-style
-  address; a separate fast model for screenshots. The window speaks English, Russian, Polish, Ukrainian, German,
+- **Any model, any language.** Switchyard, Groq, OpenAI, OpenRouter, NVIDIA, TokenHarbor, Ollama, LM Studio or your own
+  OpenAI-style address; a separate fast model for screenshots. The window speaks English, Russian, Polish, Ukrainian, German,
   French and Spanish, and a new language is one JSON file ([docs/TRANSLATING.md](docs/TRANSLATING.md)).
 
 <p align="center"><img src="docs/media/interview-languages.png" alt="The window in English, Ukrainian, Polish, German, French and Spanish" width="860"></p>

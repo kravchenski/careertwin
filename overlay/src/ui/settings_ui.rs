@@ -13,7 +13,7 @@ use crate::coach::Request;
 use crate::export::{self, Format};
 use crate::library::{SavedDocument, read_document};
 use crate::prepare::{self, Analysis, BankQuestion};
-use crate::providers::{OTHER, PROVIDERS, provider_for};
+use crate::providers::{PROVIDERS, provider_for};
 use crate::settings::{ANSWER_LAYOUTS, ANSWER_STYLES, STT_ENGINES, WHISPER_MODELS};
 use crate::transcript::read_all;
 
@@ -30,6 +30,18 @@ pub struct State {
     pub tab: Tab,
     pub models: Vec<String>,
     pub models_error: Option<String>,
+    /// The address and the key the list above was asked for: a list belongs to both.
+    pub models_for: Option<(String, String)>,
+    pub models_loading: bool,
+    /// The AI tab asks for the list itself when it has none for this address and key. The tests turn it off.
+    pub auto_models: bool,
+    /// "Other" was chosen in the provider menu while the Base URL was this address: the menu says "Other" until the
+    /// address is changed, though the address may still be one of the presets.
+    pub other_for: Option<String>,
+    /// The Base URL gets the cursor, with its text selected, on the next frame.
+    pub focus_url: bool,
+    /// The Base URL as it is being typed: it is kept between frames and becomes the address when the line is left.
+    pub url_edit: Option<String>,
     pub connected: Option<Result<usize, String>>,
     pub new_key: String,
     pub checking_key: bool,
@@ -64,6 +76,12 @@ impl Default for State {
             tab: Tab::Interview,
             models: Vec::new(),
             models_error: None,
+            models_for: None,
+            models_loading: false,
+            auto_models: true,
+            other_for: None,
+            focus_url: false,
+            url_edit: None,
             connected: None,
             new_key: String::new(),
             checking_key: false,
@@ -92,6 +110,7 @@ impl Default for State {
 
 impl State {
     pub fn models_loaded(&mut self, result: Result<Vec<String>, String>) {
+        self.models_loading = false;
         match result {
             Ok(models) => {
                 self.models = models;
@@ -178,25 +197,80 @@ fn row<R>(ui: &mut Ui, label: &str, content: impl FnOnce(&mut Ui) -> R) -> R {
     .inner
 }
 
-/// A line of text with a menu of ready choices next to it.
-fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str, name: &str) -> bool {
+/// The models that have every word of the query in their id, in the order the provider listed them, whatever the
+/// case: "llama 70b" finds "meta/llama-3.3-70b-instruct". An empty query finds them all.
+fn matching<'a>(models: &'a [String], query: &str) -> Vec<&'a String> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    models
+        .iter()
+        .filter(|model| {
+            let id = model.to_lowercase();
+            words.iter().all(|word| id.contains(word.as_str()))
+        })
+        .collect()
+}
+
+/// A line of text with a menu of ready choices next to it. The menu has a search line on top: some providers list
+/// hundreds of models.
+fn model_picker(
+    ui: &mut Ui,
+    lang: &str,
+    value: &mut String,
+    (models, loading): (&[String], bool),
+    hint: &str,
+    name: &str,
+) -> bool {
     let mut changed = false;
+    let t = |key: &str| text::t(lang, key, &[]);
     ui.horizontal(|ui| {
         let edit = TextEdit::singleline(value).hint_text(hint).desired_width((ui.available_width() - 72.0).max(120.0));
         changed |= ui.add(edit).named_as(name).changed();
-        let list = ComboBox::from_id_salt(("models", hint)).selected_text("").width(24.0).show_ui(ui, |ui| {
-            if models.is_empty() {
-                ui.label(RichText::new("—").color(muted()));
-            }
-            ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
-                for model in models {
-                    if ui.selectable_label(value == model, model).clicked() {
-                        *value = model.clone();
-                        changed = true;
-                    }
+        let query_id = ui.scope_id().with(("models-search", hint));
+        let seen_id = query_id.with("seen");
+        let list = ComboBox::from_id_salt(("models", hint))
+            .selected_text("")
+            .width(24.0)
+            // a click in the search line must not close the menu: choosing a model does, below
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show_ui(ui, |ui| {
+                ui.set_min_width(320.0);
+                if models.is_empty() {
+                    ui.label(RichText::new(t(if loading { "models_loading" } else { "models_empty" })).color(muted()));
+                    return;
                 }
+                let mut query: String = ui.data_mut(|data| data.get_temp(query_id)).unwrap_or_default();
+                let first = ui.data_mut(|data| data.get_temp::<bool>(seen_id)).is_none();
+                let search = ui
+                    .add(TextEdit::singleline(&mut query).hint_text(t("search_models")).desired_width(f32::INFINITY))
+                    .named_as(&t("search_models"));
+                if first {
+                    // the cursor is already in the search line when the menu opens
+                    search.request_focus();
+                    ui.data_mut(|data| data.insert_temp(seen_id, true));
+                }
+                let found = matching(models, &query);
+                ui.label(RichText::new(format!("{} / {}", found.len(), models.len())).color(muted()).small());
+                if found.is_empty() {
+                    ui.label(RichText::new(t("models_none")).color(muted()));
+                }
+                ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                    for model in found {
+                        if ui.selectable_label(value == model, model).clicked() {
+                            *value = model.clone();
+                            changed = true;
+                            ui.close();
+                        }
+                    }
+                });
+                ui.data_mut(|data| data.insert_temp(query_id, query));
             });
-        });
+        if list.inner.is_none() {
+            // closed: the next time it opens it starts with a clear search
+            ui.data_mut(|data| {
+                data.remove::<String>(query_id);
+                data.remove::<bool>(seen_id);
+            });
+        }
         list.named_as(&format!("{name}: {}", models.len()));
     });
     changed
@@ -209,6 +283,8 @@ impl App {
         let tf = |key: &str, values: &[(&str, &str)]| text::t(&lang, key, values);
         let _ = (&t, &tf);
         if !self.settings_open {
+            self.settings_ui.other_for = None;
+            self.settings_ui.url_edit = None;
             return;
         }
         let mut open = true;
@@ -826,30 +902,61 @@ impl App {
         let _ = (&t, &tf);
         let mut changed = false;
         let address = self.settings.gateway();
-        let known = provider_for(&address);
+        // "Other" in the menu means the address is the user's own, even while it still reads like a preset
+        let preset = provider_for(&address);
+        let other = self.settings_ui.other_for.as_deref() == Some(address.as_str());
+        let known = if other { None } else { preset };
         row(ui, &t("provider"), |ui| {
-            let label = known.map_or("Other (own address)".to_owned(), |provider| provider.label.to_owned());
-            let combo = ComboBox::from_id_salt("provider").selected_text(label).width(260.0).show_ui(ui, |ui| {
-                for provider in PROVIDERS {
-                    if ui.selectable_label(known == Some(provider), provider.label).clicked() && known != Some(provider)
-                    {
-                        // a model id belongs to one provider, and so does a key
-                        self.settings.model.clear();
-                        self.settings.vision_model.clear();
-                        if self.settings.set_gateway(provider.url).is_ok() {
-                            changed = true;
+            let label = known.map_or(t("provider_other"), |provider| provider.label.to_owned());
+            // tall enough for every preset and "Other" at once: the menu scrolls only past that
+            let combo =
+                ComboBox::from_id_salt("provider").selected_text(label).width(260.0).height(400.0).show_ui(ui, |ui| {
+                    for provider in PROVIDERS {
+                        if ui.selectable_label(known == Some(provider), provider.label).clicked()
+                            && known != Some(provider)
+                        {
+                            self.settings_ui.other_for = None;
+                            if preset != Some(provider) {
+                                // a model id belongs to one provider, and so does a key
+                                self.settings.model.clear();
+                                self.settings.vision_model.clear();
+                            }
+                            if self.settings.set_gateway(provider.url).is_ok() {
+                                changed = true;
+                            }
                         }
                     }
-                }
-                let _ = OTHER;
-            });
+                    if ui.selectable_label(known.is_none(), t("provider_other")).clicked() {
+                        // the address stays as it is until a new one is typed; the cursor goes to it
+                        if known.is_some() {
+                            self.settings_ui.other_for = Some(address.clone());
+                        }
+                        self.settings_ui.focus_url = true;
+                    }
+                });
             combo.named();
         });
-        let mut url =
-            if self.settings.gateway_url.is_empty() { address.clone() } else { self.settings.gateway_url.clone() };
-        let url_changed = row(ui, &t("base_url"), |ui| {
-            ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).named().lost_focus()
+        // what is typed stays in the line between frames, and becomes the address when the line is left (or Enter)
+        let mut url = self.settings_ui.url_edit.clone().unwrap_or_else(|| {
+            if self.settings.gateway_url.is_empty() { address.clone() } else { self.settings.gateway_url.clone() }
         });
+        let focus_url = std::mem::take(&mut self.settings_ui.focus_url);
+        let (typed, url_changed) = row(ui, &t("base_url"), |ui| {
+            let edit = ui.add(TextEdit::singleline(&mut url).desired_width(f32::INFINITY)).named();
+            if focus_url {
+                edit.request_focus();
+                let mut state = TextEdit::load_state(ui.ctx(), edit.id).unwrap_or_default();
+                state.cursor.set_char_range(Some(egui::text::CCursorRange::select_all_str(&url)));
+                state.store(ui.ctx(), edit.id);
+            }
+            (edit.changed(), edit.lost_focus())
+        });
+        if typed {
+            self.settings_ui.url_edit = Some(url.clone());
+        }
+        if url_changed {
+            self.settings_ui.url_edit = None;
+        }
         if url_changed && url.trim() != self.settings.gateway_url.trim() && url.trim() != address {
             match self.settings.set_gateway(url.trim()) {
                 Ok(()) => changed = true,
@@ -965,7 +1072,8 @@ impl App {
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
         ui.label(RichText::new(t("model_ask")).font(semibold(14.0)).color(strong())).on_hover_text(t("model_ask_note"));
-        changed |= model_picker(ui, &mut self.settings.model, &models, "auto", &t("model_ask"));
+        let loading = self.settings_ui.models_loading;
+        changed |= model_picker(ui, &lang, &mut self.settings.model, (&models, loading), "auto", &t("model_ask"));
         row(ui, &t("fallbacks"), |ui| {
             changed |= ui
                 .add(
@@ -979,7 +1087,8 @@ impl App {
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_screenshot")).font(semibold(14.0)).color(strong()))
             .on_hover_text(t("model_shot_note"));
-        changed |= model_picker(ui, &mut self.settings.vision_model, &models, "", &t("model_screenshot"));
+        changed |=
+            model_picker(ui, &lang, &mut self.settings.vision_model, (&models, loading), "", &t("model_screenshot"));
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_audio")).font(semibold(14.0)).color(strong())).on_hover_text(t("audio_note"));
         row(ui, &t("engine"), |ui| {
@@ -1035,12 +1144,7 @@ impl App {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             if ui.button(t("load_models")).clicked() {
-                self.settings_ui.models_error = None;
-                let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
-                self.handle.spawn(async move {
-                    let _ = tx.send(Event::Models(coach.models().await.map_err(|error| error.message)));
-                    repaint();
-                });
+                self.load_models();
             }
             if ui.button(t("test_connection")).clicked() {
                 self.settings_ui.connected = None;
@@ -1067,6 +1171,42 @@ impl App {
         }
         if changed {
             self.settings_changed();
+        }
+        self.models_follow_the_provider();
+    }
+
+    /// Asks the provider in use for its models, for the menus next to the model fields.
+    fn load_models(&mut self) {
+        self.settings_ui.models_error = None;
+        self.settings_ui.models_loading = true;
+        self.settings_ui.models_for = Some((self.settings.gateway(), self.settings.gateway_key.clone()));
+        let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
+        self.handle.spawn(async move {
+            let _ = tx.send(Event::Models(coach.models().await.map_err(|error| error.message)));
+            repaint();
+        });
+    }
+
+    /// A list of models belongs to one address and one key: when either changes (a provider was chosen, a key was
+    /// saved or picked), the old list goes and the new one is asked for, so nobody has to press *Load models*. A cloud
+    /// provider with no key yet is not asked: it would only answer "rejected". A failed ask is not repeated by itself,
+    /// the button asks again.
+    fn models_follow_the_provider(&mut self) {
+        let state = &self.settings_ui;
+        if !state.auto_models || state.models_loading {
+            return;
+        }
+        let current = (self.settings.gateway(), self.settings.gateway_key.clone());
+        if state.models_for.as_ref() == Some(&current) {
+            return;
+        }
+        self.settings_ui.models.clear();
+        self.settings_ui.models_error = None;
+        let waits_for_a_key = current.1.trim().is_empty() && provider_for(&current.0).is_some_and(|p| p.cloud);
+        if waits_for_a_key {
+            self.settings_ui.models_for = None;
+        } else {
+            self.load_models();
         }
     }
 
@@ -1659,4 +1799,33 @@ pub fn open_path(path: &std::path::Path) {
         .stderr(std::process::Stdio::null())
         .spawn();
     let _ = json!(null);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matching;
+
+    fn ids() -> Vec<String> {
+        ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct", "nvidia/nemotron-70b", "mistralai/Mixtral-8x7B"]
+            .map(str::to_owned)
+            .to_vec()
+    }
+
+    #[test]
+    fn an_empty_search_finds_every_model_in_the_order_listed() {
+        let models = ids();
+        assert_eq!(matching(&models, "").len(), 4);
+        assert_eq!(matching(&models, "   ").len(), 4);
+        assert_eq!(matching(&models, "")[0], &models[0]);
+    }
+
+    #[test]
+    fn every_word_must_be_in_the_id_whatever_the_case() {
+        let models = ids();
+        assert_eq!(matching(&models, "LLAMA 70b"), [&models[0]]);
+        assert_eq!(matching(&models, "70b"), [&models[0], &models[2]]);
+        assert_eq!(matching(&models, "mixtral"), [&models[3]]);
+        assert!(matching(&models, "llama gemma").is_empty());
+        assert_eq!(matching(&models, "instruct meta").len(), 2);
+    }
 }
