@@ -239,6 +239,73 @@ fn the_ai_tab_has_the_three_models_and_the_keys_of_the_address() {
 }
 
 #[test]
+fn nvidia_and_tokenharbor_are_in_the_provider_menu_and_choosing_one_sets_its_address() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    harness.run();
+    harness.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Provider").click();
+    harness.run_steps(3);
+    harness.get_by_label("TokenHarbor");
+    shot(&mut harness, "provider-menu");
+    harness.get_by_label("NVIDIA").click();
+    harness.run_steps(3);
+    let app = harness.state();
+    assert_eq!(app.settings.gateway(), "https://integrate.api.nvidia.com");
+    assert!(app.settings.model.is_empty(), "a model id belongs to one provider: it is cleared");
+    harness.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Provider");
+    harness.get_by_label("NVIDIA gets your CV, your ABOUT text and each question with every request.");
+}
+
+#[test]
+fn the_model_menu_can_be_searched_and_a_click_picks_the_model() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    fixture.app.settings_ui.models =
+        ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct", "nvidia/nemotron-70b", "mistralai/mixtral-8x7b"]
+            .map(str::to_owned)
+            .to_vec();
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    harness.run();
+    harness.get_by_label("Answers (Ask): 4").click();
+    harness.run_steps(3);
+    harness.get_by_label("meta/llama-3.1-8b-instruct"); // the whole list to begin with
+    harness.get_by_label("4 / 4");
+    let search = harness.get_by_label("Search models");
+    search.focus();
+    search.type_text("LLAMA 70b");
+    harness.run_steps(3);
+    harness.get_by_label("meta/llama-3.3-70b-instruct");
+    harness.get_by_label("1 / 4");
+    shot(&mut harness, "model-search");
+    assert!(harness.query_by_label("nvidia/nemotron-70b").is_none(), "a model that does not match is hidden");
+    assert!(harness.query_by_label("meta/llama-3.1-8b-instruct").is_none());
+    harness.get_by_label("meta/llama-3.3-70b-instruct").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().settings.model, "meta/llama-3.3-70b-instruct");
+    assert!(harness.query_by_label("Search models").is_none(), "choosing a model closes the menu");
+    // opened again, the search starts clear
+    harness.get_by_label("Answers (Ask): 4").click();
+    harness.run_steps(3);
+    harness.get_by_label("4 / 4");
+}
+
+#[test]
+fn the_model_menu_says_so_when_no_list_has_been_loaded() {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    harness.run();
+    harness.get_by_label("Answers (Ask): 0").click();
+    harness.run_steps(3);
+    harness.get_by_label("No list yet: press Load models below");
+    assert!(harness.query_by_label("Search models").is_none());
+}
+
+#[test]
 fn the_practice_tab_is_a_checklist() {
     let mut fixture = fixture("en");
     fixture.app.settings_open = true;

@@ -178,25 +178,73 @@ fn row<R>(ui: &mut Ui, label: &str, content: impl FnOnce(&mut Ui) -> R) -> R {
     .inner
 }
 
-/// A line of text with a menu of ready choices next to it.
-fn model_picker(ui: &mut Ui, value: &mut String, models: &[String], hint: &str, name: &str) -> bool {
+/// The models that have every word of the query in their id, in the order the provider listed them, whatever the
+/// case: "llama 70b" finds "meta/llama-3.3-70b-instruct". An empty query finds them all.
+fn matching<'a>(models: &'a [String], query: &str) -> Vec<&'a String> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    models
+        .iter()
+        .filter(|model| {
+            let id = model.to_lowercase();
+            words.iter().all(|word| id.contains(word.as_str()))
+        })
+        .collect()
+}
+
+/// A line of text with a menu of ready choices next to it. The menu has a search line on top: some providers list
+/// hundreds of models.
+fn model_picker(ui: &mut Ui, lang: &str, value: &mut String, models: &[String], hint: &str, name: &str) -> bool {
     let mut changed = false;
+    let t = |key: &str| text::t(lang, key, &[]);
     ui.horizontal(|ui| {
         let edit = TextEdit::singleline(value).hint_text(hint).desired_width((ui.available_width() - 72.0).max(120.0));
         changed |= ui.add(edit).named_as(name).changed();
-        let list = ComboBox::from_id_salt(("models", hint)).selected_text("").width(24.0).show_ui(ui, |ui| {
-            if models.is_empty() {
-                ui.label(RichText::new("—").color(muted()));
-            }
-            ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
-                for model in models {
-                    if ui.selectable_label(value == model, model).clicked() {
-                        *value = model.clone();
-                        changed = true;
-                    }
+        let query_id = ui.scope_id().with(("models-search", hint));
+        let seen_id = query_id.with("seen");
+        let list = ComboBox::from_id_salt(("models", hint))
+            .selected_text("")
+            .width(24.0)
+            // a click in the search line must not close the menu: choosing a model does, below
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show_ui(ui, |ui| {
+                ui.set_min_width(320.0);
+                if models.is_empty() {
+                    ui.label(RichText::new(t("models_empty")).color(muted()));
+                    return;
                 }
+                let mut query: String = ui.data_mut(|data| data.get_temp(query_id)).unwrap_or_default();
+                let first = ui.data_mut(|data| data.get_temp::<bool>(seen_id)).is_none();
+                let search = ui
+                    .add(TextEdit::singleline(&mut query).hint_text(t("search_models")).desired_width(f32::INFINITY))
+                    .named_as(&t("search_models"));
+                if first {
+                    // the cursor is already in the search line when the menu opens
+                    search.request_focus();
+                    ui.data_mut(|data| data.insert_temp(seen_id, true));
+                }
+                let found = matching(models, &query);
+                ui.label(RichText::new(format!("{} / {}", found.len(), models.len())).color(muted()).small());
+                if found.is_empty() {
+                    ui.label(RichText::new(t("models_none")).color(muted()));
+                }
+                ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                    for model in found {
+                        if ui.selectable_label(value == model, model).clicked() {
+                            *value = model.clone();
+                            changed = true;
+                            ui.close();
+                        }
+                    }
+                });
+                ui.data_mut(|data| data.insert_temp(query_id, query));
             });
-        });
+        if list.inner.is_none() {
+            // closed: the next time it opens it starts with a clear search
+            ui.data_mut(|data| {
+                data.remove::<String>(query_id);
+                data.remove::<bool>(seen_id);
+            });
+        }
         list.named_as(&format!("{name}: {}", models.len()));
     });
     changed
@@ -829,20 +877,23 @@ impl App {
         let known = provider_for(&address);
         row(ui, &t("provider"), |ui| {
             let label = known.map_or("Other (own address)".to_owned(), |provider| provider.label.to_owned());
-            let combo = ComboBox::from_id_salt("provider").selected_text(label).width(260.0).show_ui(ui, |ui| {
-                for provider in PROVIDERS {
-                    if ui.selectable_label(known == Some(provider), provider.label).clicked() && known != Some(provider)
-                    {
-                        // a model id belongs to one provider, and so does a key
-                        self.settings.model.clear();
-                        self.settings.vision_model.clear();
-                        if self.settings.set_gateway(provider.url).is_ok() {
-                            changed = true;
+            // tall enough for every preset at once: the menu scrolls only past that
+            let combo =
+                ComboBox::from_id_salt("provider").selected_text(label).width(260.0).height(360.0).show_ui(ui, |ui| {
+                    for provider in PROVIDERS {
+                        if ui.selectable_label(known == Some(provider), provider.label).clicked()
+                            && known != Some(provider)
+                        {
+                            // a model id belongs to one provider, and so does a key
+                            self.settings.model.clear();
+                            self.settings.vision_model.clear();
+                            if self.settings.set_gateway(provider.url).is_ok() {
+                                changed = true;
+                            }
                         }
                     }
-                }
-                let _ = OTHER;
-            });
+                    let _ = OTHER;
+                });
             combo.named();
         });
         let mut url =
@@ -965,7 +1016,7 @@ impl App {
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
         ui.label(RichText::new(t("model_ask")).font(semibold(14.0)).color(strong())).on_hover_text(t("model_ask_note"));
-        changed |= model_picker(ui, &mut self.settings.model, &models, "auto", &t("model_ask"));
+        changed |= model_picker(ui, &lang, &mut self.settings.model, &models, "auto", &t("model_ask"));
         row(ui, &t("fallbacks"), |ui| {
             changed |= ui
                 .add(
@@ -979,7 +1030,7 @@ impl App {
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_screenshot")).font(semibold(14.0)).color(strong()))
             .on_hover_text(t("model_shot_note"));
-        changed |= model_picker(ui, &mut self.settings.vision_model, &models, "", &t("model_screenshot"));
+        changed |= model_picker(ui, &lang, &mut self.settings.vision_model, &models, "", &t("model_screenshot"));
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_audio")).font(semibold(14.0)).color(strong())).on_hover_text(t("audio_note"));
         row(ui, &t("engine"), |ui| {
@@ -1659,4 +1710,33 @@ pub fn open_path(path: &std::path::Path) {
         .stderr(std::process::Stdio::null())
         .spawn();
     let _ = json!(null);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matching;
+
+    fn ids() -> Vec<String> {
+        ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct", "nvidia/nemotron-70b", "mistralai/Mixtral-8x7B"]
+            .map(str::to_owned)
+            .to_vec()
+    }
+
+    #[test]
+    fn an_empty_search_finds_every_model_in_the_order_listed() {
+        let models = ids();
+        assert_eq!(matching(&models, "").len(), 4);
+        assert_eq!(matching(&models, "   ").len(), 4);
+        assert_eq!(matching(&models, "")[0], &models[0]);
+    }
+
+    #[test]
+    fn every_word_must_be_in_the_id_whatever_the_case() {
+        let models = ids();
+        assert_eq!(matching(&models, "LLAMA 70b"), [&models[0]]);
+        assert_eq!(matching(&models, "70b"), [&models[0], &models[2]]);
+        assert_eq!(matching(&models, "mixtral"), [&models[3]]);
+        assert!(matching(&models, "llama gemma").is_empty());
+        assert_eq!(matching(&models, "instruct meta").len(), 2);
+    }
 }

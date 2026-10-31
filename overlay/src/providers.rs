@@ -12,11 +12,13 @@ pub struct Provider {
     pub cloud: bool,
 }
 
-pub const PROVIDERS: [Provider; 6] = [
+pub const PROVIDERS: [Provider; 8] = [
     Provider { id: "switchyard", label: "Switchyard (local)", url: "http://127.0.0.1:3260", cloud: false },
     Provider { id: "groq", label: "Groq", url: "https://api.groq.com/openai", cloud: true },
     Provider { id: "openai", label: "OpenAI", url: "https://api.openai.com", cloud: true },
     Provider { id: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/api", cloud: true },
+    Provider { id: "nvidia", label: "NVIDIA", url: "https://integrate.api.nvidia.com", cloud: true },
+    Provider { id: "tokenharbor", label: "TokenHarbor", url: "https://tokenharbor.ai", cloud: true },
     Provider { id: "ollama", label: "Ollama (local)", url: "http://localhost:11434", cloud: false },
     Provider { id: "lmstudio", label: "LM Studio (local)", url: "http://localhost:1234", cloud: false },
 ];
@@ -68,5 +70,23 @@ mod tests {
         assert_eq!(provider_for("HTTPS://API.GROQ.COM/openai/v1/").map(|p| p.id), Some("groq"));
         assert_eq!(provider_for("http://localhost:11434").map(|p| p.cloud), Some(false));
         assert!(provider_for("https://llm.example.com").is_none());
+    }
+
+    #[test]
+    fn nvidia_and_tokenharbor_are_cloud_presets_found_from_what_people_paste() {
+        let nvidia = provider_for("https://integrate.api.nvidia.com/v1/").expect("NVIDIA is a preset");
+        let harbor = provider_for("HTTPS://tokenharbor.ai/v1/chat/completions").expect("TokenHarbor is a preset");
+        assert_eq!((nvidia.id, nvidia.label, nvidia.cloud), ("nvidia", "NVIDIA", true));
+        assert_eq!((harbor.id, harbor.label, harbor.cloud), ("tokenharbor", "TokenHarbor", true));
+    }
+
+    #[test]
+    fn no_two_presets_share_an_id_or_an_address() {
+        for (i, a) in PROVIDERS.iter().enumerate() {
+            for b in &PROVIDERS[i + 1..] {
+                assert_ne!(a.id, b.id);
+                assert_ne!(a.url.to_lowercase(), b.url.to_lowercase());
+            }
+        }
     }
 }
