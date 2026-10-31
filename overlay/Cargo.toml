@@ -1,6 +1,6 @@
 [package]
 name = "careertwin-overlay"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 description = "The interview window of CareerTwin: hears the call, writes what to say, answers the screen"
 publish = false
