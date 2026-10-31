@@ -81,7 +81,9 @@ fn fixture_model(language: &str, model: Option<Arc<dyn Model>>) -> Fixture {
     )
     .unwrap();
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
-    let app = App::with_model(Paths::under(data), runtime.handle().clone(), Arc::new(|| {}), model);
+    let mut app = App::with_model(Paths::under(data), runtime.handle().clone(), Arc::new(|| {}), model);
+    // the AI tab would ask Groq for its models with the demo keys: a test turns it on when it has a server of its own
+    app.settings_ui.auto_models = false;
     Fixture { app, _dir: dir, _runtime: runtime }
 }
 
@@ -256,6 +258,108 @@ fn nvidia_and_tokenharbor_are_in_the_provider_menu_and_choosing_one_sets_its_add
     assert!(app.settings.model.is_empty(), "a model id belongs to one provider: it is cleared");
     harness.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Provider");
     harness.get_by_label("NVIDIA gets your CV, your ABOUT text and each question with every request.");
+}
+
+/// A server that lists `ids` as its models, answering however `status` says, and counts what it was asked.
+fn models_server(runtime: &tokio::runtime::Runtime, status: u16, ids: &[&str]) -> wiremock::MockServer {
+    runtime.block_on(async {
+        let server = wiremock::MockServer::start().await;
+        let data: Vec<_> = ids.iter().map(|id| serde_json::json!({ "id": id })).collect();
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path("/v1/models"))
+            .respond_with(wiremock::ResponseTemplate::new(status).set_body_json(serde_json::json!({ "data": data })))
+            .mount(&server)
+            .await;
+        server
+    })
+}
+
+fn asked(runtime: &tokio::runtime::Runtime, server: &wiremock::MockServer) -> usize {
+    runtime.block_on(server.received_requests()).unwrap().len()
+}
+
+/// Frames until `done` holds, or fails after a few seconds: an answer comes from another thread.
+fn until(harness: &mut Harness<'_, App>, what: &str, done: impl Fn(&App) -> bool) {
+    for _ in 0..300 {
+        harness.run_steps(2);
+        if done(harness.state()) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("{what} did not happen");
+}
+
+fn ai_tab_asking_for_models() -> Fixture {
+    let mut fixture = fixture("en");
+    fixture.app.settings_open = true;
+    fixture.app.settings_ui.tab = Tab::Ai;
+    fixture.app.settings_ui.auto_models = true;
+    fixture
+}
+
+#[test]
+fn the_list_of_models_loads_by_itself_and_follows_the_provider() {
+    let probe = tokio::runtime::Runtime::new().unwrap();
+    let first = models_server(&probe, 200, &["alpha/one", "alpha/two"]);
+    let second = models_server(&probe, 200, &["beta/only"]);
+    let mut fixture = ai_tab_asking_for_models();
+    fixture.app.settings.set_gateway(&first.uri()).unwrap();
+    fixture.app.apply_coach();
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    until(&mut harness, "the first list", |app| app.settings_ui.models.len() == 2);
+    harness.get_by_label("Answers (Ask): 2");
+    // other frames do not ask again
+    harness.run_steps(20);
+    assert_eq!(asked(&probe, &first), 1);
+    // another address: the old list is gone and the new one comes
+    harness.state_mut().settings.set_gateway(&second.uri()).unwrap();
+    harness.state_mut().apply_coach();
+    until(&mut harness, "the second list", |app| app.settings_ui.models == ["beta/only"]);
+    harness.get_by_label("Answers (Ask): 1");
+    assert_eq!((asked(&probe, &first), asked(&probe, &second)), (1, 1));
+}
+
+#[test]
+fn a_cloud_provider_without_a_key_is_not_asked_and_the_old_list_is_dropped() {
+    let probe = tokio::runtime::Runtime::new().unwrap();
+    let server = models_server(&probe, 200, &["alpha/one"]);
+    let mut fixture = ai_tab_asking_for_models();
+    fixture.app.settings.set_gateway(&server.uri()).unwrap();
+    fixture.app.apply_coach();
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    until(&mut harness, "the list", |app| app.settings_ui.models.len() == 1);
+    harness.state_mut().settings.set_gateway("https://integrate.api.nvidia.com").unwrap();
+    harness.state_mut().apply_coach();
+    harness.run_steps(20);
+    let state = &harness.state().settings_ui;
+    assert!(state.models.is_empty(), "a list from another provider is not offered");
+    assert!(state.models_error.is_none() && !state.models_loading && state.models_for.is_none());
+    // the key is saved: the list comes
+    harness.state_mut().settings.set_gateway(&server.uri()).unwrap();
+    harness.state_mut().apply_coach();
+    until(&mut harness, "the list again", |app| app.settings_ui.models.len() == 1);
+}
+
+#[test]
+fn a_list_that_failed_is_not_asked_for_again_until_the_button_is() {
+    let probe = tokio::runtime::Runtime::new().unwrap();
+    let broken = models_server(&probe, 500, &[]);
+    let mut fixture = ai_tab_asking_for_models();
+    fixture.app.settings.set_gateway(&broken.uri()).unwrap();
+    fixture.app.apply_coach();
+    let (mut harness, _dir, _runtime) = harness(fixture, 1000.0, 900.0);
+    until(&mut harness, "the error", |app| app.settings_ui.models_error.is_some());
+    harness.run_steps(40);
+    assert_eq!(asked(&probe, &broken), 1, "no loop of requests");
+    // the button is at the bottom of a tab that scrolls: bring it into view first
+    harness.get_by_label("Load models").scroll_to_me();
+    harness.run_steps(3);
+    harness.get_by_label("Load models").click();
+    until(&mut harness, "the second ask", |app| {
+        !app.settings_ui.models_loading && app.settings_ui.models_error.is_some()
+    });
+    assert_eq!(asked(&probe, &broken), 2);
 }
 
 #[test]

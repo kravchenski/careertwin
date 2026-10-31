@@ -267,6 +267,7 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("load_models", "Load models", "Загрузить список"),
     ("search_models", "Search models", "Найти модель"),
     ("models_empty", "No list yet: press Load models below", "Списка пока нет: нажмите «Загрузить список» ниже"),
+    ("models_loading", "Loading the models…", "Загружаю список моделей…"),
     ("models_none", "Nothing found", "Ничего не найдено"),
     ("test_connection", "Test connection", "Проверить соединение"),
     ("connected", "Connected: {n} models", "Подключено, моделей: {n}"),

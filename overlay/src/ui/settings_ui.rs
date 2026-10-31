@@ -30,6 +30,11 @@ pub struct State {
     pub tab: Tab,
     pub models: Vec<String>,
     pub models_error: Option<String>,
+    /// The address and the key the list above was asked for: a list belongs to both.
+    pub models_for: Option<(String, String)>,
+    pub models_loading: bool,
+    /// The AI tab asks for the list itself when it has none for this address and key. The tests turn it off.
+    pub auto_models: bool,
     pub connected: Option<Result<usize, String>>,
     pub new_key: String,
     pub checking_key: bool,
@@ -64,6 +69,9 @@ impl Default for State {
             tab: Tab::Interview,
             models: Vec::new(),
             models_error: None,
+            models_for: None,
+            models_loading: false,
+            auto_models: true,
             connected: None,
             new_key: String::new(),
             checking_key: false,
@@ -92,6 +100,7 @@ impl Default for State {
 
 impl State {
     pub fn models_loaded(&mut self, result: Result<Vec<String>, String>) {
+        self.models_loading = false;
         match result {
             Ok(models) => {
                 self.models = models;
@@ -193,7 +202,14 @@ fn matching<'a>(models: &'a [String], query: &str) -> Vec<&'a String> {
 
 /// A line of text with a menu of ready choices next to it. The menu has a search line on top: some providers list
 /// hundreds of models.
-fn model_picker(ui: &mut Ui, lang: &str, value: &mut String, models: &[String], hint: &str, name: &str) -> bool {
+fn model_picker(
+    ui: &mut Ui,
+    lang: &str,
+    value: &mut String,
+    (models, loading): (&[String], bool),
+    hint: &str,
+    name: &str,
+) -> bool {
     let mut changed = false;
     let t = |key: &str| text::t(lang, key, &[]);
     ui.horizontal(|ui| {
@@ -209,7 +225,7 @@ fn model_picker(ui: &mut Ui, lang: &str, value: &mut String, models: &[String], 
             .show_ui(ui, |ui| {
                 ui.set_min_width(320.0);
                 if models.is_empty() {
-                    ui.label(RichText::new(t("models_empty")).color(muted()));
+                    ui.label(RichText::new(t(if loading { "models_loading" } else { "models_empty" })).color(muted()));
                     return;
                 }
                 let mut query: String = ui.data_mut(|data| data.get_temp(query_id)).unwrap_or_default();
@@ -1016,7 +1032,8 @@ impl App {
         section(ui, &t("models_title"));
         let models = self.settings_ui.models.clone();
         ui.label(RichText::new(t("model_ask")).font(semibold(14.0)).color(strong())).on_hover_text(t("model_ask_note"));
-        changed |= model_picker(ui, &lang, &mut self.settings.model, &models, "auto", &t("model_ask"));
+        let loading = self.settings_ui.models_loading;
+        changed |= model_picker(ui, &lang, &mut self.settings.model, (&models, loading), "auto", &t("model_ask"));
         row(ui, &t("fallbacks"), |ui| {
             changed |= ui
                 .add(
@@ -1030,7 +1047,8 @@ impl App {
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_screenshot")).font(semibold(14.0)).color(strong()))
             .on_hover_text(t("model_shot_note"));
-        changed |= model_picker(ui, &lang, &mut self.settings.vision_model, &models, "", &t("model_screenshot"));
+        changed |=
+            model_picker(ui, &lang, &mut self.settings.vision_model, (&models, loading), "", &t("model_screenshot"));
         ui.add_space(10.0);
         ui.label(RichText::new(t("model_audio")).font(semibold(14.0)).color(strong())).on_hover_text(t("audio_note"));
         row(ui, &t("engine"), |ui| {
@@ -1086,12 +1104,7 @@ impl App {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             if ui.button(t("load_models")).clicked() {
-                self.settings_ui.models_error = None;
-                let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
-                self.handle.spawn(async move {
-                    let _ = tx.send(Event::Models(coach.models().await.map_err(|error| error.message)));
-                    repaint();
-                });
+                self.load_models();
             }
             if ui.button(t("test_connection")).clicked() {
                 self.settings_ui.connected = None;
@@ -1118,6 +1131,42 @@ impl App {
         }
         if changed {
             self.settings_changed();
+        }
+        self.models_follow_the_provider();
+    }
+
+    /// Asks the provider in use for its models, for the menus next to the model fields.
+    fn load_models(&mut self) {
+        self.settings_ui.models_error = None;
+        self.settings_ui.models_loading = true;
+        self.settings_ui.models_for = Some((self.settings.gateway(), self.settings.gateway_key.clone()));
+        let (coach, tx, repaint) = (self.coach.clone(), self.tx.clone(), self.repaint.clone());
+        self.handle.spawn(async move {
+            let _ = tx.send(Event::Models(coach.models().await.map_err(|error| error.message)));
+            repaint();
+        });
+    }
+
+    /// A list of models belongs to one address and one key: when either changes (a provider was chosen, a key was
+    /// saved or picked), the old list goes and the new one is asked for, so nobody has to press *Load models*. A cloud
+    /// provider with no key yet is not asked: it would only answer "rejected". A failed ask is not repeated by itself,
+    /// the button asks again.
+    fn models_follow_the_provider(&mut self) {
+        let state = &self.settings_ui;
+        if !state.auto_models || state.models_loading {
+            return;
+        }
+        let current = (self.settings.gateway(), self.settings.gateway_key.clone());
+        if state.models_for.as_ref() == Some(&current) {
+            return;
+        }
+        self.settings_ui.models.clear();
+        self.settings_ui.models_error = None;
+        let waits_for_a_key = current.1.trim().is_empty() && provider_for(&current.0).is_some_and(|p| p.cloud);
+        if waits_for_a_key {
+            self.settings_ui.models_for = None;
+        } else {
+            self.load_models();
         }
     }
 
